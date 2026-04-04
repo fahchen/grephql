@@ -8,19 +8,6 @@ defmodule Grephql.Validator.Rules.FieldsTest do
   alias Grephql.Validator.Context
   alias Grephql.Validator.Rules.Fields
 
-  defp parse!(query) do
-    {:ok, doc} = Grephql.Parser.parse(query)
-    doc
-  end
-
-  defp validate(query, schema_opts \\ []) do
-    schema = SchemaHelper.build_schema(schema_opts)
-    ctx = %Context{schema: schema}
-    Fields.validate(parse!(query), ctx)
-  end
-
-  defp errors(ctx), do: Context.errors_by_severity(ctx, :error)
-
   describe "field existence" do
     test "valid fields pass" do
       ctx = validate("query { user { name email } }")
@@ -179,4 +166,17 @@ defmodule Grephql.Validator.Rules.FieldsTest do
       assert errors(ctx) == []
     end
   end
+
+  defp parse!(query) do
+    {:ok, doc} = Grephql.Parser.parse(query)
+    doc
+  end
+
+  defp validate(query, schema_opts \\ []) do
+    schema = SchemaHelper.build_schema(schema_opts)
+    ctx = %Context{schema: schema}
+    Fields.validate(parse!(query), ctx)
+  end
+
+  defp errors(ctx), do: Context.errors_by_severity(ctx, :error)
 end

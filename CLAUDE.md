@@ -22,6 +22,7 @@ Do not commit if `mix precommit` fails. Fix all issues first.
 - Use `Ecto.Type` for custom scalar and enum serialization
 - Use `mimic` for mocking in tests
 - Never use `any()` or `term()` in typespecs unless the value is genuinely unconstrained
+- Function ordering: public functions above private. If a private function is only used by one public function, place it directly below that public function. In test files, private helpers go below test cases.
 - Semantic commit messages: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`
 - Submit changes as PRs, not direct commits to main
 

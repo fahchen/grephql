@@ -5,19 +5,6 @@ defmodule Grephql.Validator.Rules.OperationsTest do
   alias Grephql.Validator.Context
   alias Grephql.Validator.Rules.Operations
 
-  defp parse!(query) do
-    {:ok, doc} = Grephql.Parser.parse(query)
-    doc
-  end
-
-  defp validate(query, schema_opts \\ []) do
-    schema = SchemaHelper.build_schema(schema_opts)
-    ctx = %Context{schema: schema}
-    Operations.validate(parse!(query), ctx)
-  end
-
-  defp errors(ctx), do: Context.errors_by_severity(ctx, :error)
-
   describe "root type validation" do
     test "valid query passes" do
       ctx = validate("query { user { name } }")
@@ -75,4 +62,17 @@ defmodule Grephql.Validator.Rules.OperationsTest do
       assert error.message =~ "duplicate operation name \"GetUser\""
     end
   end
+
+  defp parse!(query) do
+    {:ok, doc} = Grephql.Parser.parse(query)
+    doc
+  end
+
+  defp validate(query, schema_opts \\ []) do
+    schema = SchemaHelper.build_schema(schema_opts)
+    ctx = %Context{schema: schema}
+    Operations.validate(parse!(query), ctx)
+  end
+
+  defp errors(ctx), do: Context.errors_by_severity(ctx, :error)
 end

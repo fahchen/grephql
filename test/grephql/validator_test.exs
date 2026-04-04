@@ -4,11 +4,6 @@ defmodule Grephql.ValidatorTest do
   alias Grephql.Test.SchemaHelper
   alias Grephql.Validator
 
-  defp parse!(query) do
-    {:ok, doc} = Grephql.Parser.parse(query)
-    doc
-  end
-
   describe "validate/2" do
     test "returns :ok for a valid query" do
       schema = SchemaHelper.build_schema()
@@ -29,5 +24,10 @@ defmodule Grephql.ValidatorTest do
       assert {:error, errors} = Validator.validate(doc, schema)
       assert errors != []
     end
+  end
+
+  defp parse!(query) do
+    {:ok, doc} = Grephql.Parser.parse(query)
+    doc
   end
 end
