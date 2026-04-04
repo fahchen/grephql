@@ -8,6 +8,8 @@ defmodule Grephql.Types.DateTime do
 
   use Ecto.Type
 
+  @type t :: DateTime.t()
+
   @impl Ecto.Type
   def type, do: :utc_datetime_usec
 
