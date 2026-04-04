@@ -62,7 +62,7 @@ defmodule Grephql.Language.ListValue do
   use TypedStructor
 
   typed_structor do
-    field :values, [any()], default: []
+    field :values, [Grephql.Language.value_t()], default: []
     field :loc, map()
   end
 end
@@ -83,7 +83,7 @@ defmodule Grephql.Language.ObjectField do
 
   typed_structor do
     field :name, String.t()
-    field :value, any()
+    field :value, Grephql.Language.value_t()
     field :loc, map(), default: %{line: nil}
   end
 end

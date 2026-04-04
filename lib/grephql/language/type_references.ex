@@ -13,7 +13,7 @@ defmodule Grephql.Language.ListType do
   use TypedStructor
 
   typed_structor do
-    field :type, any()
+    field :type, Grephql.Language.type_reference_t()
     field :loc, map(), default: %{line: nil}
   end
 end
@@ -23,7 +23,7 @@ defmodule Grephql.Language.NonNullType do
   use TypedStructor
 
   typed_structor do
-    field :type, any()
+    field :type, Grephql.Language.type_reference_t()
     field :loc, map(), default: %{line: nil}
   end
 end

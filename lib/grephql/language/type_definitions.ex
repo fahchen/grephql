@@ -74,7 +74,6 @@ defmodule Grephql.Language.InputObjectTypeDefinition do
     field :fields, [Grephql.Language.InputValueDefinition.t()], default: []
     field :directives, [Grephql.Language.Directive.t()], default: []
     field :loc, map(), default: %{line: nil}
-    field :errors, [any()], default: []
   end
 end
 
@@ -87,8 +86,8 @@ defmodule Grephql.Language.FieldDefinition do
     field :description, String.t()
     field :arguments, [Grephql.Language.InputValueDefinition.t()], default: []
     field :directives, [Grephql.Language.Directive.t()], default: []
-    field :type, any()
-    field :complexity, any()
+    field :type, Grephql.Language.type_reference_t()
+    field :complexity, non_neg_integer()
     field :loc, map(), default: %{line: nil}
   end
 end
@@ -99,9 +98,9 @@ defmodule Grephql.Language.InputValueDefinition do
 
   typed_structor do
     field :name, String.t()
-    field :type, any()
+    field :type, Grephql.Language.type_reference_t()
     field :description, String.t()
-    field :default_value, any()
+    field :default_value, Grephql.Language.value_t()
     field :directives, [Grephql.Language.Directive.t()], default: []
     field :loc, map(), default: %{line: nil}
   end

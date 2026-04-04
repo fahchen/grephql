@@ -19,7 +19,7 @@ defmodule Grephql.Language.SelectionSet do
   use TypedStructor
 
   typed_structor do
-    field :selections, [any()], default: []
+    field :selections, [Grephql.Language.selection_t()], default: []
     field :loc, map(), default: %{line: nil}
   end
 end
@@ -44,7 +44,7 @@ defmodule Grephql.Language.Argument do
 
   typed_structor do
     field :name, String.t()
-    field :value, any()
+    field :value, Grephql.Language.value_t()
     field :loc, map() | tuple(), default: {}
   end
 end
@@ -65,9 +65,9 @@ defmodule Grephql.Language.VariableDefinition do
 
   typed_structor do
     field :variable, Grephql.Language.Variable.t()
-    field :type, any()
+    field :type, Grephql.Language.type_reference_t()
     field :directives, [Grephql.Language.Directive.t()], default: []
-    field :default_value, any()
+    field :default_value, Grephql.Language.value_t()
     field :loc, map(), default: %{line: nil}
   end
 end
