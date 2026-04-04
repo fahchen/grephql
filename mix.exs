@@ -8,6 +8,7 @@ defmodule Grephql.MixProject do
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       compilers: [:yecc] ++ Mix.compilers(),
+      elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       aliases: aliases(),
       dialyzer: dialyzer()
@@ -26,6 +27,9 @@ defmodule Grephql.MixProject do
       extra_applications: [:logger]
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
