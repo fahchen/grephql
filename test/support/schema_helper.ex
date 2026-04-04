@@ -30,7 +30,15 @@ defmodule Grephql.Test.SchemaHelper do
               kind: :non_null,
               of_type: %TypeRef{kind: :object, name: "User"}
             },
-            args: %{}
+            args: %{
+              "id" => %Grephql.Schema.InputValue{
+                name: "id",
+                type: %TypeRef{
+                  kind: :non_null,
+                  of_type: %TypeRef{kind: :scalar, name: "ID"}
+                }
+              }
+            }
           },
           "users" => %Field{
             name: "users",

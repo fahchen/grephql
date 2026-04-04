@@ -7,7 +7,7 @@ defmodule Grephql.ValidatorTest do
   describe "validate/2" do
     test "returns :ok for a valid query" do
       schema = SchemaHelper.build_schema()
-      doc = parse!("query { user { name } }")
+      doc = parse!(~s|query { user(id: "1") { name } }|)
       assert :ok = Validator.validate(doc, schema)
     end
 
