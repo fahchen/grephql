@@ -14,7 +14,7 @@ defmodule Grephql.Validator.Rules.Fields do
   end
 
   # nil type_name means upstream type couldn't be resolved — already reported
-  defp validate_field(_, nil, ctx), do: ctx
+  defp validate_field(_field, nil, ctx), do: ctx
 
   defp validate_field(field, type_name, ctx) when is_binary(type_name) do
     if introspection_field?(field.name) do
@@ -63,7 +63,7 @@ defmodule Grephql.Validator.Rules.Fields do
     )
   end
 
-  defp check_kind(ctx, _, :scalar, false), do: ctx
+  defp check_kind(ctx, _field, :scalar, false), do: ctx
 
   defp check_kind(ctx, field, :enum, true) do
     Context.add_error(
@@ -73,7 +73,7 @@ defmodule Grephql.Validator.Rules.Fields do
     )
   end
 
-  defp check_kind(ctx, _, :enum, false), do: ctx
+  defp check_kind(ctx, _field, :enum, false), do: ctx
 
   defp check_kind(ctx, field, composite, false)
        when composite in [:object, :interface, :union] do
@@ -84,12 +84,12 @@ defmodule Grephql.Validator.Rules.Fields do
     )
   end
 
-  defp check_kind(ctx, _, composite, true)
+  defp check_kind(ctx, _field, composite, true)
        when composite in [:object, :interface, :union] do
     ctx
   end
 
-  defp check_kind(ctx, field, :input_object, _) do
+  defp check_kind(ctx, field, :input_object, _has_selections) do
     Context.add_error(
       ctx,
       "input type cannot be used as an output field type for \"#{field.name}\"",
@@ -104,11 +104,11 @@ defmodule Grephql.Validator.Rules.Fields do
     end
   end
 
-  defp has_selections?(%Grephql.Language.SelectionSet{selections: [_ | _]}), do: true
-  defp has_selections?(_), do: false
+  defp has_selections?(%Grephql.Language.SelectionSet{selections: [_head | _tail]}), do: true
+  defp has_selections?(_selection_set), do: false
 
   defp introspection_field?("__typename"), do: true
   defp introspection_field?("__type"), do: true
   defp introspection_field?("__schema"), do: true
-  defp introspection_field?(_), do: false
+  defp introspection_field?(_name), do: false
 end

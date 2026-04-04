@@ -35,7 +35,7 @@ defmodule Grephql.Validator.Rules.FieldsTest do
   describe "scalar sub-selection" do
     test "sub-selection on scalar fails" do
       ctx = validate("query { user { name { length } } }")
-      assert [error | _] = errors(ctx)
+      assert [error | _rest] = errors(ctx)
       assert error.message =~ "\"name\" is a scalar and cannot have sub-selections"
     end
 
@@ -80,7 +80,7 @@ defmodule Grephql.Validator.Rules.FieldsTest do
         })
 
       ctx = validate("query { user { role { value } } }", types: types)
-      assert [error | _] = errors(ctx)
+      assert [error | _rest] = errors(ctx)
       assert error.message =~ "\"role\" is an enum and cannot have sub-selections"
     end
   end

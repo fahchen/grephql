@@ -14,7 +14,7 @@ defmodule Grephql.Validator.Rules.Arguments do
   end
 
   # nil type_name means upstream type couldn't be resolved — already reported
-  defp validate_field_args(_, nil, ctx), do: ctx
+  defp validate_field_args(_field, nil, ctx), do: ctx
 
   defp validate_field_args(field, type_name, ctx) when is_binary(type_name) do
     case Schema.get_field(ctx.schema, type_name, field.name) do
@@ -64,10 +64,10 @@ defmodule Grephql.Validator.Rules.Arguments do
     field.arguments
     |> Enum.group_by(& &1.name)
     |> Enum.reduce(ctx, fn
-      {_, [_]}, acc ->
+      {_name, [_single]}, acc ->
         acc
 
-      {name, [_ | _]}, acc ->
+      {name, [_first | _rest]}, acc ->
         Context.add_error(
           acc,
           "duplicate argument \"#{name}\" on field \"#{field.name}\"",
@@ -108,7 +108,7 @@ defmodule Grephql.Validator.Rules.Arguments do
   end
 
   defp variable?(%Grephql.Language.Variable{}), do: true
-  defp variable?(_), do: false
+  defp variable?(_value), do: false
 
   defp compatible_value?(%Grephql.Language.IntValue{}, name),
     do: name in ["Int", "Float", "ID"]
@@ -120,12 +120,12 @@ defmodule Grephql.Validator.Rules.Arguments do
     do: name in ["String", "ID"]
 
   defp compatible_value?(%Grephql.Language.BooleanValue{}, "Boolean"), do: true
-  defp compatible_value?(%Grephql.Language.NullValue{}, _), do: true
-  defp compatible_value?(%Grephql.Language.EnumValue{}, _), do: true
-  defp compatible_value?(%Grephql.Language.ListValue{}, _), do: true
-  defp compatible_value?(%Grephql.Language.ObjectValue{}, _), do: true
-  defp compatible_value?(_, _), do: false
+  defp compatible_value?(%Grephql.Language.NullValue{}, _name), do: true
+  defp compatible_value?(%Grephql.Language.EnumValue{}, _name), do: true
+  defp compatible_value?(%Grephql.Language.ListValue{}, _name), do: true
+  defp compatible_value?(%Grephql.Language.ObjectValue{}, _name), do: true
+  defp compatible_value?(_value, _name), do: false
 
   defp required?(%{type: %TypeRef{kind: :non_null}, default_value: nil}), do: true
-  defp required?(_), do: false
+  defp required?(_input_value), do: false
 end

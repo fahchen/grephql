@@ -62,10 +62,10 @@ defmodule Grephql.Validator.Rules.Operations do
     |> Enum.reject(&is_nil(&1.name))
     |> Enum.group_by(& &1.name)
     |> Enum.reduce(ctx, fn
-      {_, [_]}, acc ->
+      {_name, [_single]}, acc ->
         acc
 
-      {name, [_ | _]}, acc ->
+      {name, [_first | _rest]}, acc ->
         Context.add_error(acc, "duplicate operation name \"#{name}\"")
     end)
   end

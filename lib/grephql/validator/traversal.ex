@@ -22,8 +22,10 @@ defmodule Grephql.Validator.Traversal do
   end
 
   # nil type_name is valid — Operations rule already reported the missing root type
-  defp traverse_selection_set(nil, _, _, ctx, _), do: ctx
-  defp traverse_selection_set(%SelectionSet{selections: []}, _, _, ctx, _), do: ctx
+  defp traverse_selection_set(nil, _type_name, _schema, ctx, _cb), do: ctx
+
+  defp traverse_selection_set(%SelectionSet{selections: []}, _type_name, _schema, ctx, _cb),
+    do: ctx
 
   defp traverse_selection_set(%SelectionSet{selections: selections}, type_name, schema, ctx, cb) do
     Enum.reduce(selections, ctx, fn selection, acc ->
@@ -37,7 +39,7 @@ defmodule Grephql.Validator.Traversal do
     traverse_selection_set(field.selection_set, child_type_name, schema, ctx, cb)
   end
 
-  defp traverse_selection(%InlineFragment{} = fragment, _, schema, ctx, cb) do
+  defp traverse_selection(%InlineFragment{} = fragment, _type_name, schema, ctx, cb) do
     fragment_type_name =
       if fragment.type_condition, do: fragment.type_condition.name, else: nil
 
@@ -45,5 +47,5 @@ defmodule Grephql.Validator.Traversal do
   end
 
   # FragmentSpread is handled by a future fragment validation rule
-  defp traverse_selection(%FragmentSpread{}, _, _, ctx, _), do: ctx
+  defp traverse_selection(%FragmentSpread{}, _type_name, _schema, ctx, _cb), do: ctx
 end
