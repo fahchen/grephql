@@ -39,69 +39,61 @@ defmodule Grephql.TypeGenerator do
     scalar_types = Keyword.get(opts, :scalar_types, %{})
 
     # Module names derived from schema at compile time
-    # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
-    base_module =
-      Module.concat([client_module, camelize(function_name)])
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    base_module = Module.concat([client_module, camelize(function_name)])
 
     root_type_name = Helpers.root_type_name(schema, operation.operation)
+    context = {schema, scalar_types}
 
-    generate_selections(
-      operation.selection_set.selections,
-      root_type_name,
-      base_module,
-      schema,
-      scalar_types
-    )
+    generate_selections(operation.selection_set.selections, root_type_name, base_module, context)
   end
 
-  defp generate_selections(selections, parent_type_name, parent_module, schema, scalar_types) do
+  defp generate_selections(
+         selections,
+         parent_type_name,
+         parent_module,
+         {schema, scalar_types} = context
+       ) do
     {field_defs, nested_modules} =
-      selections
-      |> Enum.filter(&match?(%QueryField{}, &1))
-      |> Enum.map_reduce([], fn field, acc ->
-        field_name = field_name(field)
+      Enum.reduce(selections, {[], []}, fn
+        %QueryField{} = field, {defs_acc, mods_acc} ->
+          field_name = field_name(field)
 
-        # Field names from GraphQL schema, bounded set
-        # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
-        atom_name =
-          field_name |> Macro.underscore() |> String.to_atom()
+          # Field names from GraphQL schema, bounded set
+          # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
+          atom_name =
+            field_name |> Macro.underscore() |> String.to_atom()
 
-        {:ok, schema_field} = Schema.get_field(schema, parent_type_name, field.name)
-        resolved = TypeMapper.resolve(schema_field.type, scalar_types)
+          {:ok, schema_field} = Schema.get_field(schema, parent_type_name, field.name)
+          resolved = TypeMapper.resolve(schema_field.type, scalar_types)
 
-        {field_def, new_modules} =
-          build_field_def(
-            field,
-            atom_name,
-            field_name,
-            resolved,
-            parent_module,
-            schema,
-            scalar_types
-          )
+          {field_def, new_modules} =
+            build_field_def(field, atom_name, field_name, resolved, parent_module, context)
 
-        {field_def, [new_modules | acc]}
+          {[field_def | defs_acc], [new_modules | mods_acc]}
+
+        _non_field, acc ->
+          acc
       end)
 
+    field_defs = :lists.reverse(field_defs)
     create_embedded_schema(parent_module, field_defs)
 
     [parent_module | List.flatten(:lists.reverse(nested_modules))]
   end
 
-  defp build_field_def(
-         field,
-         atom_name,
-         field_name,
-         resolved,
-         parent_module,
-         schema,
-         scalar_types
-       ) do
+  defp build_field_def(field, atom_name, field_name, resolved, parent_module, context) do
     case resolved.ecto_type do
       {:object, type_name} ->
-        build_embed(:embeds_one, field, atom_name, field_name, type_name, resolved, parent_module,
-          schema: schema,
-          scalar_types: scalar_types
+        build_embed(
+          :embeds_one,
+          field,
+          atom_name,
+          field_name,
+          type_name,
+          resolved,
+          parent_module,
+          context
         )
 
       {:array, {:object, type_name}} ->
@@ -113,8 +105,7 @@ defmodule Grephql.TypeGenerator do
           type_name,
           resolved,
           parent_module,
-          schema: schema,
-          scalar_types: scalar_types
+          context
         )
 
       ecto_type ->
@@ -123,23 +114,22 @@ defmodule Grephql.TypeGenerator do
     end
   end
 
-  defp build_embed(kind, field, atom_name, field_name, type_name, resolved, parent_module, opts) do
-    schema = Keyword.fetch!(opts, :schema)
-    scalar_types = Keyword.fetch!(opts, :scalar_types)
-
+  defp build_embed(
+         kind,
+         field,
+         atom_name,
+         field_name,
+         type_name,
+         resolved,
+         parent_module,
+         context
+       ) do
     # Nested module names from schema field paths
-    # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
-    nested_module =
-      Module.concat(parent_module, camelize(field_name))
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    nested_module = Module.concat(parent_module, camelize(field_name))
 
     nested_modules =
-      generate_selections(
-        field.selection_set.selections,
-        type_name,
-        nested_module,
-        schema,
-        scalar_types
-      )
+      generate_selections(field.selection_set.selections, type_name, nested_module, context)
 
     typed_opts = embed_typed_opts(kind, resolved)
     {{kind, atom_name, nested_module, [typed: typed_opts]}, nested_modules}
@@ -164,27 +154,13 @@ defmodule Grephql.TypeGenerator do
     )
   end
 
-  defp field_def_to_ast({:field, name, type, opts}) do
-    quote do: field(unquote(name), unquote(type), unquote(opts))
-  end
-
-  defp field_def_to_ast({:embeds_one, name, schema, opts}) do
-    quote do: embeds_one(unquote(name), unquote(schema), unquote(opts))
-  end
-
-  defp field_def_to_ast({:embeds_many, name, schema, opts}) do
-    quote do: embeds_many(unquote(name), unquote(schema), unquote(opts))
+  defp field_def_to_ast({kind, name, type_or_schema, opts}) do
+    quote do: unquote(kind)(unquote(name), unquote(type_or_schema), unquote(opts))
   end
 
   defp field_name(%QueryField{alias: alias_name}) when is_binary(alias_name), do: alias_name
   defp field_name(%QueryField{name: name}), do: name
 
-  defp camelize(name) when is_atom(name), do: name |> Atom.to_string() |> camelize()
-
-  # Module path segments from schema types
-  defp camelize(name) when is_binary(name) do
-    camelized = Macro.camelize(name)
-    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    String.to_atom(camelized)
-  end
+  defp camelize(name) when is_atom(name), do: name |> Atom.to_string() |> Macro.camelize()
+  defp camelize(name) when is_binary(name), do: Macro.camelize(name)
 end
