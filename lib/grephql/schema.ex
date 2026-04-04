@@ -25,4 +25,12 @@ defmodule Grephql.Schema do
       Type.get_field(type, field_name)
     end
   end
+
+  @spec get_directive(t(), String.t()) :: {:ok, Directive.t()} | :error
+  def get_directive(%__MODULE__{directives: directives}, name) do
+    case Enum.find(directives, &(&1.name == name)) do
+      nil -> :error
+      directive -> {:ok, directive}
+    end
+  end
 end

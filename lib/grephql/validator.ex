@@ -11,7 +11,12 @@ defmodule Grephql.Validator do
     Rules.Operations,
     Rules.Fields,
     Rules.Arguments,
-    Rules.Variables
+    Rules.Variables,
+    Rules.Directives,
+    Rules.Fragments,
+    Rules.InputObjects,
+    Rules.Values,
+    Rules.Deprecation
   ]
 
   @spec validate(Document.t(), Schema.t()) :: :ok | {:error, [Error.t()]}
