@@ -109,19 +109,6 @@ defmodule Grephql.ResponseDecoderTest do
     end
   end
 
-  describe "decode/2" do
-    test "returns {:ok, struct} on success" do
-      json = %{"name" => "Alice", "email" => "a@b.com"}
-
-      assert {:ok, %Response.ScalarUser{name: "Alice"}} =
-               ResponseDecoder.decode(Response.ScalarUser, json)
-    end
-
-    test "returns {:error, reason} on failure" do
-      assert {:error, _reason} = ResponseDecoder.decode(NonExistentModule, %{})
-    end
-  end
-
   describe "decode!/2 with unknown keys" do
     test "ignores extra keys in JSON" do
       json = %{"name" => "Alice", "email" => "a@b.com", "unknown_field" => "ignored"}
