@@ -19,17 +19,6 @@ Feature: Compile-time GraphQL validation
       When the module is compiled
       Then the schema is available for validation
 
-    Scenario: Schema loaded via MFA tuple
-      Given a client module configured with source {MyDep.Loader, :load, ["service"]}
-      And the target module is already compiled
-      When the module is compiled
-      Then the schema is available for validation
-
-    Scenario: Schema loaded from a URL
-      Given a client module configured with source "https://api.example.com/graphql"
-      When the module is compiled
-      Then the introspection query is sent and the schema is available for validation
-
     Scenario: Schema fetch failure blocks compilation
       Given a client module configured with source "priv/schemas/missing.json"
       And the file does not exist

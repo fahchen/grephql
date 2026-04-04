@@ -7,7 +7,7 @@
 | Union dispatch | GraphQL union/interface type mapping: in `:struct` mode, direct struct matching (`%User{} \| %Post{}`); in `:map` mode, `__typename` key matching (`%{__typename: :user} \| %{__typename: :post}`) |
 | Custom scalar mapping | User-defined configuration (in `use` options) that maps GraphQL custom scalar names to either a `Grephql.Scalar` behaviour module or a shorthand `{type, serialize_fn, deserialize_fn}` tuple. Built-in scalars are used as fallback when no explicit mapping is provided |
 | Grephql.Scalar | Behaviour defining callbacks for custom scalar type mapping: `type/0` (Elixir typespec), `serialize/1` (Elixir → JSON), `deserialize/1` (JSON → Elixir) |
-| source | Compile-time option specifying where to load the GraphQL introspection schema from: a file path, inline JSON string, MFA tuple, or URL |
+| source | Compile-time option specifying where to load the GraphQL introspection schema from: a file path or inline JSON string. Use `mix grephql.download_schema` to fetch from a remote endpoint |
 | Introspection schema | The GraphQL schema metadata obtained via the standard introspection query, in JSON format (`{"data": {"__schema": {...}}}`) |
 | Field path naming | Struct naming convention for output types where module names are derived from the query's field path: `ClientModule.FunctionName.FieldName.NestedFieldName` — provides per-query isolation so different queries selecting different fields on the same GraphQL type get independent structs. Input types use schema-level naming instead: `ClientModule.InputTypeName` |
 | Grephql.Error | Fixed struct representing a GraphQL error, with fields: `message` (string), `path` (list or nil), `locations` (list or nil), `extensions` (map or nil) — follows the GraphQL spec error format |
