@@ -16,7 +16,7 @@ defmodule Grephql.TypeMapper do
     - `ID` → `:string`
 
   Custom scalars map to user-provided Ecto Type modules via the `scalar_types` config.
-  If no mapping is found, falls back to built-in types (e.g., `DateTime` → `Grephql.Types.DateTime`).
+  Custom scalars override built-in defaults. Unknown scalars raise `ArgumentError`.
   """
 
   alias Grephql.Schema.TypeRef
@@ -26,10 +26,7 @@ defmodule Grephql.TypeMapper do
     "Int" => :integer,
     "Float" => :float,
     "Boolean" => :boolean,
-    "ID" => :string
-  }
-
-  @builtin_custom_scalars %{
+    "ID" => :string,
     "DateTime" => Grephql.Types.DateTime
   }
 
@@ -86,9 +83,9 @@ defmodule Grephql.TypeMapper do
 
   defp resolve_scalar(name, scalar_types) do
     with :error <- Map.fetch(scalar_types, name),
-         :error <- Map.fetch(@builtin_scalars, name),
-         :error <- Map.fetch(@builtin_custom_scalars, name) do
-      :string
+         :error <- Map.fetch(@builtin_scalars, name) do
+      raise ArgumentError,
+            "unknown scalar type #{inspect(name)}, configure it via scalar_types"
     else
       {:ok, type} -> type
     end

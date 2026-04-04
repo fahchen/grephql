@@ -60,9 +60,12 @@ defmodule Grephql.TypeMapperTest do
                TypeMapper.resolve(type_ref, scalar_types)
     end
 
-    test "unknown scalar defaults to :string" do
+    test "unknown scalar raises ArgumentError" do
       type_ref = non_null(scalar("JSON"))
-      assert %{ecto_type: :string, nullable: false} = TypeMapper.resolve(type_ref, %{})
+
+      assert_raise ArgumentError, ~r/unknown scalar type "JSON"/, fn ->
+        TypeMapper.resolve(type_ref, %{})
+      end
     end
   end
 
