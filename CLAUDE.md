@@ -22,6 +22,7 @@ Do not commit if `mix precommit` fails. Fix all issues first.
 - Use `Ecto.Type` for custom scalar and enum serialization
 - Use `mimic` for mocking in tests
 - Never use `any()` or `term()` in typespecs unless the value is genuinely unconstrained
+- Always use parentheses in `@type` definitions: `@type foo() :: bar()`, not `@type foo :: bar`
 - Function ordering: public functions above private. If a private function is only used by one public function, place it directly below that public function. In test files, private helpers go below test cases.
 - Credo disables: never disable credo at file level or for an entire rule. Only use inline disables (`credo:disable-for-next-line` or `credo:disable-for-lines:N`) with a reason comment on the line above explaining why
 - Run `/simplify` before every commit to review code for reuse, quality, and efficiency

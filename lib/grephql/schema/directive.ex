@@ -4,7 +4,7 @@ defmodule Grephql.Schema.Directive do
 
   alias Grephql.Schema.InputValue
 
-  @type location ::
+  @type location() ::
           :query
           | :mutation
           | :subscription

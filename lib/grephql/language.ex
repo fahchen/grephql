@@ -1,12 +1,12 @@
 defmodule Grephql.Language do
   @moduledoc false
 
-  @type selection_t ::
+  @type selection_t() ::
           Grephql.Language.Field.t()
           | Grephql.Language.FragmentSpread.t()
           | Grephql.Language.InlineFragment.t()
 
-  @type value_t ::
+  @type value_t() ::
           Grephql.Language.IntValue.t()
           | Grephql.Language.FloatValue.t()
           | Grephql.Language.StringValue.t()
@@ -17,12 +17,12 @@ defmodule Grephql.Language do
           | Grephql.Language.ObjectValue.t()
           | Grephql.Language.Variable.t()
 
-  @type type_reference_t ::
+  @type type_reference_t() ::
           Grephql.Language.NamedType.t()
           | Grephql.Language.ListType.t()
           | Grephql.Language.NonNullType.t()
 
-  @type definition_t ::
+  @type definition_t() ::
           Grephql.Language.OperationDefinition.t()
           | Grephql.Language.Fragment.t()
           | Grephql.Language.SchemaDefinition.t()
