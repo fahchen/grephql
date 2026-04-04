@@ -40,7 +40,7 @@ defmodule Grephql.Types.Enum do
     quote do
       use Ecto.Type
 
-      @type t :: atom()
+      @type t() :: atom()
 
       @atom_to_string unquote(Macro.escape(atom_to_string))
       @string_to_atom unquote(Macro.escape(string_to_atom))

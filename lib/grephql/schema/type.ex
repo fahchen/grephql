@@ -6,7 +6,7 @@ defmodule Grephql.Schema.Type do
   alias Grephql.Schema.Field
   alias Grephql.Schema.InputValue
 
-  @type kind ::
+  @type kind() ::
           :scalar
           | :object
           | :interface

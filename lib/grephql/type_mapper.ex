@@ -30,9 +30,9 @@ defmodule Grephql.TypeMapper do
     "DateTime" => Grephql.Types.DateTime
   }
 
-  @type scalar_types :: %{String.t() => module()}
+  @type scalar_types() :: %{String.t() => module()}
 
-  @type ecto_type ::
+  @type ecto_type() ::
           :string
           | :integer
           | :float
@@ -41,7 +41,7 @@ defmodule Grephql.TypeMapper do
           | {:object, String.t()}
           | module()
 
-  @type resolve_result :: %{
+  @type resolve_result() :: %{
           ecto_type: ecto_type(),
           nullable: boolean()
         }

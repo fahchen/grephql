@@ -2,7 +2,7 @@ defmodule Grephql.Schema.TypeRef do
   @moduledoc false
   use TypedStructor
 
-  @type kind ::
+  @type kind() ::
           :scalar
           | :object
           | :interface

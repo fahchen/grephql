@@ -19,7 +19,7 @@ defmodule Grephql.TypeGenerator do
   alias Grephql.TypeMapper
   alias Grephql.Validator.Helpers
 
-  @type option :: {:client_module, module()} | {:function_name, atom()} | {:scalar_types, map()}
+  @type option() :: {:client_module, module()} | {:function_name, atom()} | {:scalar_types, map()}
 
   @doc """
   Generates embedded schema modules for an operation's output types.

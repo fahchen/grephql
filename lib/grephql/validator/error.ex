@@ -2,7 +2,7 @@ defmodule Grephql.Validator.Error do
   @moduledoc false
   use TypedStructor
 
-  @type severity :: :error | :warning
+  @type severity() :: :error | :warning
 
   typed_structor do
     field :message, String.t(), enforce: true
