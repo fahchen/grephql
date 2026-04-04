@@ -10,7 +10,8 @@ defmodule Grephql.Validator do
   @rules [
     Rules.Operations,
     Rules.Fields,
-    Rules.Arguments
+    Rules.Arguments,
+    Rules.Variables
   ]
 
   @spec validate(Document.t(), Schema.t()) :: :ok | {:error, [Error.t()]}
