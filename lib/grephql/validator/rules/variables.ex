@@ -34,10 +34,10 @@ defmodule Grephql.Validator.Rules.Variables do
     var_defs
     |> Enum.group_by(& &1.variable.name)
     |> Enum.reduce(ctx, fn
-      {_, [_]}, acc ->
+      {_name, [_single]}, acc ->
         acc
 
-      {name, [_ | _]}, acc ->
+      {name, [_first | _rest]}, acc ->
         Context.add_error(acc, "duplicate variable \"$#{name}\"")
     end)
   end
@@ -77,8 +77,16 @@ defmodule Grephql.Validator.Rules.Variables do
     check_variable_types_in_selections(ctx, op.selection_set, root_type_name, defined, schema)
   end
 
-  defp check_variable_types_in_selections(ctx, nil, _, _, _), do: ctx
-  defp check_variable_types_in_selections(ctx, %SelectionSet{selections: []}, _, _, _), do: ctx
+  defp check_variable_types_in_selections(ctx, nil, _type_name, _defined, _schema), do: ctx
+
+  defp check_variable_types_in_selections(
+         ctx,
+         %SelectionSet{selections: []},
+         _type_name,
+         _defined,
+         _schema
+       ),
+       do: ctx
 
   defp check_variable_types_in_selections(
          ctx,
@@ -104,12 +112,12 @@ defmodule Grephql.Validator.Rules.Variables do
     check_variable_types_in_selections(ctx, field.selection_set, nil, defined, schema)
   end
 
-  defp check_selection_var_types(ctx, %InlineFragment{} = frag, _, defined, schema) do
+  defp check_selection_var_types(ctx, %InlineFragment{} = frag, _type_name, defined, schema) do
     frag_type = if frag.type_condition, do: frag.type_condition.name, else: nil
     check_variable_types_in_selections(ctx, frag.selection_set, frag_type, defined, schema)
   end
 
-  defp check_selection_var_types(ctx, _, _, _, _), do: ctx
+  defp check_selection_var_types(ctx, _selection, _type_name, _defined, _schema), do: ctx
 
   defp check_field_arg_var_types(ctx, field, type_name, defined, schema) do
     case Schema.get_field(schema, type_name, field.name) do
@@ -128,12 +136,12 @@ defmodule Grephql.Validator.Rules.Variables do
       {%Variable{name: var_name}, {:ok, input_value}} ->
         check_var_type_match(ctx, arg, var_name, input_value, defined)
 
-      _ ->
+      _other ->
         ctx
     end
   end
 
-  defp check_var_type_match(ctx, _, var_name, _, defined)
+  defp check_var_type_match(ctx, _arg, var_name, _input_value, defined)
        when not is_map_key(defined, var_name) do
     # Undefined variable — already reported by check_undefined_variables
     ctx
@@ -178,7 +186,7 @@ defmodule Grephql.Validator.Rules.Variables do
   defp compare_types(%Grephql.Language.NamedType{name: name}, %Grephql.Schema.TypeRef{name: name}),
        do: true
 
-  defp compare_types(_, _), do: false
+  defp compare_types(_query_type, _schema_type), do: false
 
   defp collect_defined(var_defs) do
     Map.new(var_defs, fn %VariableDefinition{variable: var} = vd -> {var.name, vd} end)
@@ -203,12 +211,12 @@ defmodule Grephql.Validator.Rules.Variables do
     collect_used_vars(frag.selection_set, acc)
   end
 
-  defp collect_selection_vars(_, acc), do: acc
+  defp collect_selection_vars(_selection, acc), do: acc
 
   defp collect_arg_vars(arg, acc) do
     case arg.value do
       %Variable{} = var -> [var | acc]
-      _ -> acc
+      _other -> acc
     end
   end
 

@@ -15,7 +15,7 @@ defmodule Grephql.Validator.Helpers do
 
   @spec loc_line(map()) :: non_neg_integer() | nil
   def loc_line(%{loc: %{line: line}}) when is_integer(line), do: line
-  def loc_line(_), do: nil
+  def loc_line(_node), do: nil
 
   @spec root_type_name(Schema.t(), :query | :mutation | :subscription) :: String.t() | nil
   def root_type_name(%Schema{} = schema, :query), do: schema.query_type
@@ -23,7 +23,7 @@ defmodule Grephql.Validator.Helpers do
   def root_type_name(%Schema{} = schema, :subscription), do: schema.subscription_type
 
   @spec resolve_field_type(Schema.t(), String.t() | nil, String.t()) :: String.t() | nil
-  def resolve_field_type(_, nil, _), do: nil
+  def resolve_field_type(_schema, nil, _field_name), do: nil
 
   def resolve_field_type(schema, type_name, field_name) when is_binary(type_name) do
     case Schema.get_field(schema, type_name, field_name) do
