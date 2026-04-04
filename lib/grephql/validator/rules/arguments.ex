@@ -13,6 +13,9 @@ defmodule Grephql.Validator.Rules.Arguments do
     Traversal.traverse_operations(definitions, ctx.schema, ctx, &validate_field_args/3)
   end
 
+  # nil type_name means upstream type couldn't be resolved — already reported
+  defp validate_field_args(_, nil, ctx), do: ctx
+
   defp validate_field_args(field, type_name, ctx) when is_binary(type_name) do
     case Schema.get_field(ctx.schema, type_name, field.name) do
       {:ok, schema_field} ->
@@ -26,8 +29,6 @@ defmodule Grephql.Validator.Rules.Arguments do
         ctx
     end
   end
-
-  defp validate_field_args(_, _, ctx), do: ctx
 
   defp check_arg_existence(ctx, field, schema_field) do
     Enum.reduce(field.arguments, ctx, fn arg, acc ->
@@ -81,6 +82,7 @@ defmodule Grephql.Validator.Rules.Arguments do
         {:ok, input_value} ->
           check_value_type(acc, arg, input_value.type, field.name)
 
+        # Already reported by check_arg_existence
         :error ->
           acc
       end

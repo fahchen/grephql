@@ -46,8 +46,6 @@ defmodule Grephql.Validator.Rules.Operations do
     end
   end
 
-  defp validate_root_type(ctx, _), do: ctx
-
   defp validate_anonymous_operations(ctx, operations) do
     anonymous_count =
       Enum.count(operations, &is_nil(&1.name))

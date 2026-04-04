@@ -1,6 +1,7 @@
 defmodule Grephql.Validator.Traversal do
   @moduledoc false
 
+  alias Grephql.Language.FragmentSpread
   alias Grephql.Language.InlineFragment
   alias Grephql.Language.OperationDefinition
   alias Grephql.Language.SelectionSet
@@ -23,8 +24,8 @@ defmodule Grephql.Validator.Traversal do
   defp root_type_name(%Schema{} = schema, :query), do: schema.query_type
   defp root_type_name(%Schema{} = schema, :mutation), do: schema.mutation_type
   defp root_type_name(%Schema{} = schema, :subscription), do: schema.subscription_type
-  defp root_type_name(_, _), do: nil
 
+  # nil type_name is valid — Operations rule already reported the missing root type
   defp traverse_selection_set(nil, _, _, ctx, _), do: ctx
   defp traverse_selection_set(%SelectionSet{selections: []}, _, _, ctx, _), do: ctx
 
@@ -47,7 +48,11 @@ defmodule Grephql.Validator.Traversal do
     traverse_selection_set(fragment.selection_set, fragment_type_name, schema, ctx, cb)
   end
 
-  defp traverse_selection(_, _, _, ctx, _), do: ctx
+  # FragmentSpread is handled by a future fragment validation rule
+  defp traverse_selection(%FragmentSpread{}, _, _, ctx, _), do: ctx
+
+  # nil type_name means upstream field wasn't found — Fields rule already reported
+  defp resolve_field_type(_, nil, _), do: nil
 
   defp resolve_field_type(schema, type_name, field_name) when is_binary(type_name) do
     case Schema.get_field(schema, type_name, field_name) do
@@ -59,6 +64,4 @@ defmodule Grephql.Validator.Traversal do
         nil
     end
   end
-
-  defp resolve_field_type(_, _, _), do: nil
 end

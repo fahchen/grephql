@@ -13,7 +13,10 @@ defmodule Grephql.Validator.Rules.Fields do
     Traversal.traverse_operations(definitions, ctx.schema, ctx, &validate_field/3)
   end
 
-  defp validate_field(field, type_name, ctx) do
+  # nil type_name means upstream type couldn't be resolved — already reported
+  defp validate_field(_, nil, ctx), do: ctx
+
+  defp validate_field(field, type_name, ctx) when is_binary(type_name) do
     if introspection_field?(field.name) do
       ctx
     else
@@ -21,7 +24,7 @@ defmodule Grephql.Validator.Rules.Fields do
     end
   end
 
-  defp check_field(ctx, field, type_name) when is_binary(type_name) do
+  defp check_field(ctx, field, type_name) do
     case Schema.get_type(ctx.schema, type_name) do
       {:ok, schema_type} ->
         case Map.fetch(schema_type.fields, field.name) do
@@ -37,18 +40,19 @@ defmodule Grephql.Validator.Rules.Fields do
         end
 
       :error ->
-        ctx
+        Context.add_error(
+          ctx,
+          "type \"#{type_name}\" is not defined in the schema",
+          line: Helpers.loc_line(field)
+        )
     end
   end
-
-  defp check_field(ctx, _, _), do: ctx
 
   defp check_sub_selections(ctx, field, type_ref) do
     named_type = Helpers.unwrap_type(type_ref)
     kind = resolve_type_kind(ctx.schema, named_type)
-    has_sels = has_selections?(field.selection_set)
 
-    check_kind(ctx, field, kind, has_sels)
+    check_kind(ctx, field, kind, has_selections?(field.selection_set))
   end
 
   defp check_kind(ctx, field, :scalar, true) do
@@ -85,7 +89,13 @@ defmodule Grephql.Validator.Rules.Fields do
     ctx
   end
 
-  defp check_kind(ctx, _, _, _), do: ctx
+  defp check_kind(ctx, field, :input_object, _) do
+    Context.add_error(
+      ctx,
+      "input type cannot be used as an output field type for \"#{field.name}\"",
+      line: Helpers.loc_line(field)
+    )
+  end
 
   defp resolve_type_kind(%Schema{} = schema, %TypeRef{name: name}) when is_binary(name) do
     case Schema.get_type(schema, name) do
@@ -93,8 +103,6 @@ defmodule Grephql.Validator.Rules.Fields do
       :error -> nil
     end
   end
-
-  defp resolve_type_kind(_, _), do: nil
 
   defp has_selections?(%Grephql.Language.SelectionSet{selections: [_ | _]}), do: true
   defp has_selections?(_), do: false
