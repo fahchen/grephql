@@ -26,6 +26,7 @@ defmodule Grephql.MixProject do
       {:jason, "~> 1.4"},
       {:ecto, "~> 3.12"},
       {:ecto_typed_schema, "~> 0.1.0"},
+      {:typed_structor, "~> 0.6"},
       {:mimic, "~> 2.3", only: :test}
     ]
   end
