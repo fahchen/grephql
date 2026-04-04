@@ -10,7 +10,7 @@ exclude_test_files = {:files, %{excluded: ["test/"]}}
           "src/",
           "test/"
         ],
-        excluded: [~r"/_build/", ~r"/deps/", ~r"/lexer"]
+        excluded: [~r"/_build/", ~r"/deps/", ~r"/lexer", ~r"/parser"]
       },
       plugins: [],
       requires: [],
