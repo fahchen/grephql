@@ -5,7 +5,7 @@ defmodule Grephql.Validator.Traversal do
   alias Grephql.Language.OperationDefinition
   alias Grephql.Language.SelectionSet
   alias Grephql.Schema
-  alias Grephql.Schema.TypeRef
+  alias Grephql.Validator.Helpers
 
   @spec traverse_operations([Grephql.Language.definition_t()], Schema.t(), acc, field_callback) ::
           acc
@@ -52,7 +52,7 @@ defmodule Grephql.Validator.Traversal do
   defp resolve_field_type(schema, type_name, field_name) when is_binary(type_name) do
     case Schema.get_field(schema, type_name, field_name) do
       {:ok, schema_field} ->
-        named = unwrap_type(schema_field.type)
+        named = Helpers.unwrap_type(schema_field.type)
         if named, do: named.name, else: nil
 
       :error ->
@@ -61,12 +61,4 @@ defmodule Grephql.Validator.Traversal do
   end
 
   defp resolve_field_type(_, _, _), do: nil
-
-  defp unwrap_type(%TypeRef{kind: kind, of_type: of_type})
-       when kind in [:non_null, :list] and not is_nil(of_type) do
-    unwrap_type(of_type)
-  end
-
-  defp unwrap_type(%TypeRef{} = ref), do: ref
-  defp unwrap_type(nil), do: nil
 end

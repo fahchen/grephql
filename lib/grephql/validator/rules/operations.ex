@@ -4,6 +4,7 @@ defmodule Grephql.Validator.Rules.Operations do
   alias Grephql.Language.Document
   alias Grephql.Language.OperationDefinition
   alias Grephql.Validator.Context
+  alias Grephql.Validator.Helpers
 
   @spec validate(Document.t(), Context.t()) :: Context.t()
   def validate(%Document{definitions: definitions}, %Context{} = ctx) do
@@ -25,7 +26,7 @@ defmodule Grephql.Validator.Rules.Operations do
     if ctx.schema.query_type do
       ctx
     else
-      Context.add_error(ctx, "schema does not support queries", line: loc_line(op))
+      Context.add_error(ctx, "schema does not support queries", line: Helpers.loc_line(op))
     end
   end
 
@@ -33,7 +34,7 @@ defmodule Grephql.Validator.Rules.Operations do
     if ctx.schema.mutation_type do
       ctx
     else
-      Context.add_error(ctx, "schema does not support mutations", line: loc_line(op))
+      Context.add_error(ctx, "schema does not support mutations", line: Helpers.loc_line(op))
     end
   end
 
@@ -41,7 +42,7 @@ defmodule Grephql.Validator.Rules.Operations do
     if ctx.schema.subscription_type do
       ctx
     else
-      Context.add_error(ctx, "schema does not support subscriptions", line: loc_line(op))
+      Context.add_error(ctx, "schema does not support subscriptions", line: Helpers.loc_line(op))
     end
   end
 
@@ -70,7 +71,4 @@ defmodule Grephql.Validator.Rules.Operations do
         Context.add_error(acc, "duplicate operation name \"#{name}\"")
     end)
   end
-
-  defp loc_line(%{loc: %{line: line}}) when is_integer(line), do: line
-  defp loc_line(_), do: nil
 end

@@ -5,6 +5,7 @@ defmodule Grephql.Validator.Rules.Fields do
   alias Grephql.Schema
   alias Grephql.Schema.TypeRef
   alias Grephql.Validator.Context
+  alias Grephql.Validator.Helpers
   alias Grephql.Validator.Traversal
 
   @spec validate(Document.t(), Context.t()) :: Context.t()
@@ -31,7 +32,7 @@ defmodule Grephql.Validator.Rules.Fields do
             Context.add_error(
               ctx,
               "field \"#{field.name}\" does not exist on type \"#{type_name}\"",
-              line: loc_line(field)
+              line: Helpers.loc_line(field)
             )
         end
 
@@ -43,7 +44,7 @@ defmodule Grephql.Validator.Rules.Fields do
   defp check_field(ctx, _, _), do: ctx
 
   defp check_sub_selections(ctx, field, type_ref) do
-    named_type = unwrap_type(type_ref)
+    named_type = Helpers.unwrap_type(type_ref)
     kind = resolve_type_kind(ctx.schema, named_type)
     has_sels = has_selections?(field.selection_set)
 
@@ -54,7 +55,7 @@ defmodule Grephql.Validator.Rules.Fields do
     Context.add_error(
       ctx,
       "field \"#{field.name}\" is a scalar and cannot have sub-selections",
-      line: loc_line(field)
+      line: Helpers.loc_line(field)
     )
   end
 
@@ -64,7 +65,7 @@ defmodule Grephql.Validator.Rules.Fields do
     Context.add_error(
       ctx,
       "field \"#{field.name}\" is an enum and cannot have sub-selections",
-      line: loc_line(field)
+      line: Helpers.loc_line(field)
     )
   end
 
@@ -75,7 +76,7 @@ defmodule Grephql.Validator.Rules.Fields do
     Context.add_error(
       ctx,
       "field \"#{field.name}\" is an object type and requires a sub-selection",
-      line: loc_line(field)
+      line: Helpers.loc_line(field)
     )
   end
 
@@ -85,14 +86,6 @@ defmodule Grephql.Validator.Rules.Fields do
   end
 
   defp check_kind(ctx, _, _, _), do: ctx
-
-  defp unwrap_type(%TypeRef{kind: kind, of_type: of_type})
-       when kind in [:non_null, :list] and not is_nil(of_type) do
-    unwrap_type(of_type)
-  end
-
-  defp unwrap_type(%TypeRef{} = ref), do: ref
-  defp unwrap_type(nil), do: nil
 
   defp resolve_type_kind(%Schema{} = schema, %TypeRef{name: name}) when is_binary(name) do
     case Schema.get_type(schema, name) do
@@ -110,7 +103,4 @@ defmodule Grephql.Validator.Rules.Fields do
   defp introspection_field?("__type"), do: true
   defp introspection_field?("__schema"), do: true
   defp introspection_field?(_), do: false
-
-  defp loc_line(%{loc: %{line: line}}) when is_integer(line), do: line
-  defp loc_line(_), do: nil
 end

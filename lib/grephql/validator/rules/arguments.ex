@@ -5,6 +5,7 @@ defmodule Grephql.Validator.Rules.Arguments do
   alias Grephql.Schema
   alias Grephql.Schema.TypeRef
   alias Grephql.Validator.Context
+  alias Grephql.Validator.Helpers
   alias Grephql.Validator.Traversal
 
   @spec validate(Document.t(), Context.t()) :: Context.t()
@@ -36,7 +37,7 @@ defmodule Grephql.Validator.Rules.Arguments do
         Context.add_error(
           acc,
           "argument \"#{arg.name}\" is not defined on field \"#{field.name}\"",
-          line: loc_line(arg)
+          line: Helpers.loc_line(arg)
         )
       end
     end)
@@ -50,7 +51,7 @@ defmodule Grephql.Validator.Rules.Arguments do
         Context.add_error(
           acc,
           "required argument \"#{name}\" is missing on field \"#{field.name}\"",
-          line: loc_line(field)
+          line: Helpers.loc_line(field)
         )
       else
         acc
@@ -69,7 +70,7 @@ defmodule Grephql.Validator.Rules.Arguments do
         Context.add_error(
           acc,
           "duplicate argument \"#{name}\" on field \"#{field.name}\"",
-          line: loc_line(field)
+          line: Helpers.loc_line(field)
         )
     end)
   end
@@ -90,13 +91,13 @@ defmodule Grephql.Validator.Rules.Arguments do
     if variable?(arg.value) do
       ctx
     else
-      named_type = unwrap_type(expected_type)
+      named_type = Helpers.unwrap_type(expected_type)
 
       if named_type && !compatible_value?(arg.value, named_type.name) do
         Context.add_error(
           ctx,
           "type mismatch for argument \"#{arg.name}\" on field \"#{field_name}\"",
-          line: loc_line(arg)
+          line: Helpers.loc_line(arg)
         )
       else
         ctx
@@ -125,15 +126,4 @@ defmodule Grephql.Validator.Rules.Arguments do
 
   defp required?(%{type: %TypeRef{kind: :non_null}, default_value: nil}), do: true
   defp required?(_), do: false
-
-  defp unwrap_type(%TypeRef{kind: kind, of_type: of_type})
-       when kind in [:non_null, :list] and not is_nil(of_type) do
-    unwrap_type(of_type)
-  end
-
-  defp unwrap_type(%TypeRef{} = ref), do: ref
-  defp unwrap_type(nil), do: nil
-
-  defp loc_line(%{loc: %{line: line}}) when is_integer(line), do: line
-  defp loc_line(_), do: nil
 end
