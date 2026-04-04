@@ -3,7 +3,6 @@ defmodule Grephql.Validator.Rules.Arguments do
 
   alias Grephql.Language.Document
   alias Grephql.Schema
-  alias Grephql.Schema.TypeRef
   alias Grephql.Validator.Context
   alias Grephql.Validator.Helpers
   alias Grephql.Validator.Traversal
@@ -48,7 +47,7 @@ defmodule Grephql.Validator.Rules.Arguments do
     provided = MapSet.new(field.arguments, & &1.name)
 
     Enum.reduce(schema_field.args, ctx, fn {name, input_value}, acc ->
-      if required?(input_value) and not MapSet.member?(provided, name) do
+      if Helpers.required?(input_value) and not MapSet.member?(provided, name) do
         Context.add_error(
           acc,
           "required argument \"#{name}\" is missing on field \"#{field.name}\"",
@@ -125,7 +124,4 @@ defmodule Grephql.Validator.Rules.Arguments do
   defp compatible_value?(%Grephql.Language.ListValue{}, _name), do: true
   defp compatible_value?(%Grephql.Language.ObjectValue{}, _name), do: true
   defp compatible_value?(_value, _name), do: false
-
-  defp required?(%{type: %TypeRef{kind: :non_null}, default_value: nil}), do: true
-  defp required?(_input_value), do: false
 end

@@ -35,4 +35,46 @@ defmodule Grephql.Validator.Helpers do
         nil
     end
   end
+
+  @doc """
+  Iterates over a field's arguments, resolving each against the schema field's args.
+  Calls `callback.(acc, arg_value, arg_type_ref)` for each known argument.
+  Skips unknown args (already reported by Arguments rule).
+  Returns the accumulated context.
+  """
+  @spec reduce_field_arg_types(
+          Grephql.Language.Field.t(),
+          String.t(),
+          Schema.t(),
+          Grephql.Validator.Context.t(),
+          (Grephql.Validator.Context.t(), Grephql.Language.value_t(), TypeRef.t() ->
+             Grephql.Validator.Context.t())
+        ) :: Grephql.Validator.Context.t()
+  def reduce_field_arg_types(field, type_name, schema, ctx, callback) do
+    case Schema.get_field(schema, type_name, field.name) do
+      {:ok, schema_field} ->
+        reduce_known_args(field.arguments, schema_field.args, ctx, callback)
+
+      :error ->
+        ctx
+    end
+  end
+
+  defp reduce_known_args(arguments, schema_args, ctx, callback) do
+    Enum.reduce(arguments, ctx, fn arg, acc ->
+      case Map.fetch(schema_args, arg.name) do
+        {:ok, input_value} -> callback.(acc, arg.value, input_value.type)
+        :error -> acc
+      end
+    end)
+  end
+
+  @spec required?(Schema.InputValue.t()) :: boolean()
+  def required?(%{type: %TypeRef{kind: :non_null}, default_value: nil}), do: true
+  def required?(_input_value), do: false
+
+  @spec unwrap_list_type(TypeRef.t()) :: TypeRef.t() | nil
+  def unwrap_list_type(%TypeRef{kind: :list, of_type: inner}), do: inner
+  def unwrap_list_type(%TypeRef{kind: :non_null, of_type: inner}), do: unwrap_list_type(inner)
+  def unwrap_list_type(_type_ref), do: nil
 end
