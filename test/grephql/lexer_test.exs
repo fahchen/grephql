@@ -19,7 +19,7 @@ defmodule Grephql.LexerTest do
                :":",
                :=,
                :!,
-               :"|",
+               :|,
                :"$",
                :@
              ]
