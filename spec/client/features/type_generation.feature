@@ -1,48 +1,28 @@
 @type-generation
 Feature: GraphQL to Elixir type generation
   As an Elixir developer
-  I want GraphQL types mapped to Elixir types automatically
+  I want GraphQL types mapped to Elixir embedded schemas automatically
   So that I get type safety without manually defining structs and typespecs
 
-  Rule: Type generation style is configurable via use options
+  Rule: Output types are generated as embedded schemas using EctoTypedSchema
 
-    Scenario: Struct type style generates nested structs
-      Given a client module MyApp.UserService configured with type_style :struct
-      And a schema with type "User" having fields "name: String!" and "posts: [Post!]!"
-      When the developer defines defgql :get_user with "query { user { name posts { title } } }"
-      Then the result type includes nested structs named by field path
-      And the structs are MyApp.UserService.GetUser.User and MyApp.UserService.GetUser.User.Posts
-
-    Scenario: Map type style generates typed maps
-      Given a client module configured with type_style :map
+    Scenario: Generated output type uses EctoTypedSchema embedded schema
+      Given a client module MyApp.UserService
       And a schema with type "User" having fields "name: String!" and "email: String"
-      When the developer writes ~GQL with "query { user { name email } }"
-      Then the result type is a map with typed keys
+      When the developer defines defgql :get_user with "query { user { name email } }"
+      Then the generated MyApp.UserService.GetUser.User is an embedded schema
+      And non-null fields are enforced, nullable fields default to nil
+      And automatic @type t() spec is generated
 
-    Scenario: Query shape type style generates struct shaped by selected fields
-      Given a client module MyApp.UserService configured with type_style :query_shape
-      And a schema with type "User" having fields "name: String!", "email: String", and "age: Int"
-      When the developer defines defgql :get_user selecting only "name" and "email" on User
-      Then the generated struct MyApp.UserService.GetUser.User has only "name" and "email" fields
-      And the struct follows field path naming like :struct mode
-
-  Rule: Structs are defined using TypedStructor for automatic typespecs
-
-    Scenario: Generated struct uses TypedStructor DSL
-      Given a client module configured with type_style :struct
-      And a schema with type "User" having fields "name: String!" and "email: String"
-      When the struct is generated
-      Then it uses TypedStructor with enforced fields for non-null types and nullable fields for optional types
-
-  Rule: Struct names are derived from the query field path (per-query isolation)
+  Rule: Output struct names are derived from the query field path (per-query isolation)
 
     Scenario: Top-level field becomes ClientModule.FunctionName.FieldName
-      Given a client module MyApp.UserService configured with type_style :struct
+      Given a client module MyApp.UserService
       When the developer defines defgql :get_user with "query($id: ID!) { user(id: $id) { name email } }"
       Then the generated struct is MyApp.UserService.GetUser.User
 
     Scenario: Nested fields extend the path
-      Given a client module MyApp.UserService configured with type_style :struct
+      Given a client module MyApp.UserService
       When the developer defines defgql :get_user with "query($id: ID!) { user(id: $id) { name posts { title author { name } } } }"
       Then the generated structs are:
         | struct name                                          |
@@ -51,20 +31,32 @@ Feature: GraphQL to Elixir type generation
         | MyApp.UserService.GetUser.User.Posts.Author          |
 
     Scenario: Different queries for same type get independent structs
-      Given a client module MyApp.UserService configured with type_style :struct
+      Given a client module MyApp.UserService
       And defgql :get_user selects "name email" on User
       And defgql :list_users selects only "name" on User
       Then MyApp.UserService.GetUser.User has fields name and email
       And MyApp.UserService.ListUsers.User has only field name
 
-  Rule: In struct mode nested object types are also structs (fully recursive)
+  Rule: Nested object types are also embedded schemas (fully recursive)
 
-    Scenario: All nesting levels are structs
-      Given a client module configured with type_style :struct
+    Scenario: All nesting levels are embedded schemas
+      Given a client module MyApp.UserService
       And a query selecting user { name posts { title author { name } } }
       When the types are generated
-      Then user, posts, and author are all structs
+      Then user, posts, and author are all embedded schemas
       And the result is %User{name: "Alice", posts: [%Posts{title: "Hello", author: %Author{name: "Bob"}}]}
+
+  Rule: Response JSON is deserialized into embedded schemas via Ecto.Changeset
+
+    Scenario: Successful response is cast into typed structs
+      Given a defgql :get_user returning type MyApp.UserService.GetUser.User
+      When the GraphQL server returns {"data": {"user": {"name": "Alice", "email": "a@b.com"}}}
+      Then the response data is cast via Ecto.Changeset into %MyApp.UserService.GetUser.User{name: "Alice", email: "a@b.com"}
+
+    Scenario: Nested response is recursively cast
+      Given a defgql :get_user with nested selection "user { name posts { title } }"
+      When the server returns nested JSON data
+      Then all nesting levels are cast into their respective embedded schema structs
 
   Rule: Nullable GraphQL fields map to type | nil
 
@@ -99,70 +91,67 @@ Feature: GraphQL to Elixir type generation
       When the type is generated
       Then the Elixir type is :active | :inactive
 
-  Rule: GraphQL unions and interfaces map to direct type union
+  Rule: GraphQL unions and interfaces map to direct struct union
 
-    Scenario: Union type in struct mode uses struct matching
-      Given a client module configured with type_style :struct
-      And a schema union "SearchResult" of types "User" and "Post"
+    Scenario: Union type uses struct matching
+      Given a schema union "SearchResult" of types "User" and "Post"
       When the type is generated
       Then the Elixir type is User.t() | Post.t()
       And pattern matching uses %User{} or %Post{}
 
-    Scenario: Union type in map mode uses __typename key
-      Given a client module configured with type_style :map
-      And a schema union "SearchResult" of types "User" and "Post"
-      When the type is generated
-      Then the Elixir type is %{__typename: :user, ...} | %{__typename: :post, ...}
-      And pattern matching uses %{__typename: :user} or %{__typename: :post}
+  Rule: Input types are generated as schema-level embedded schemas with build/1
 
-  Rule: GraphQL input types generate Elixir types controlled by type_style
-
-    Scenario: Input type generates struct when type_style is :struct
-      Given a client module MyApp.UserService configured with type_style :struct
+    Scenario: Input type generates embedded schema struct
+      Given a client module MyApp.UserService
       And a schema input "CreateUserInput" with fields "name: String!" and "email: String"
       When the type is generated
-      Then a struct MyApp.UserService.CreateUserInput is generated with the corresponding fields
+      Then an embedded schema MyApp.UserService.CreateUserInput is generated with the corresponding fields
 
-    Scenario: Input type generates typed map when type_style is :map
-      Given a client module configured with type_style :map
-      And a schema input "CreateUserInput" with fields "name: String!" and "email: String"
-      When the type is generated
-      Then a typed map is generated with the corresponding keys and types
+    Scenario: Input type provides build/1 to construct from plain map
+      Given a generated input type MyApp.UserService.CreateUserInput
+      When the developer calls MyApp.UserService.CreateUserInput.build(%{name: "Alice", email: "a@b.com"})
+      Then it returns {:ok, %MyApp.UserService.CreateUserInput{name: "Alice", email: "a@b.com"}}
+
+    Scenario: build/1 validates required fields via changeset
+      Given a generated input type MyApp.UserService.CreateUserInput with required field "name: String!"
+      When the developer calls MyApp.UserService.CreateUserInput.build(%{email: "a@b.com"})
+      Then it returns {:error, changeset} with validation error for missing "name"
 
   Rule: Input type structs are named at schema level (ClientModule.InputTypeName)
 
     Scenario: Input type struct is shared across queries
-      Given a client module MyApp.UserService configured with type_style :struct
+      Given a client module MyApp.UserService
       And a schema input "CreateUserInput" used by multiple mutations
       Then only one struct MyApp.UserService.CreateUserInput is generated
       And it is reusable across all queries that reference CreateUserInput
 
     Scenario: Input type naming differs from output type naming
-      Given a client module MyApp.UserService configured with type_style :struct
+      Given a client module MyApp.UserService
       And defgql :create_user with "mutation($input: CreateUserInput!) { createUser(input: $input) { id name } }"
       Then the input struct is MyApp.UserService.CreateUserInput (schema-level)
       And the output struct is MyApp.UserService.CreateUser.CreateUser (per-query, field path)
 
-  Rule: Custom scalar types use user-configured mappings with serialize/deserialize
+  Rule: Custom scalar types use Ecto Type for casting, serialization, and deserialization
 
-    Scenario: Custom scalar via behaviour module
+    Scenario: Custom scalar via Ecto Type module
       Given a schema field "createdAt: DateTime!"
-      And the scalar mapping includes "DateTime" => MyApp.Scalars.DateTime
-      And MyApp.Scalars.DateTime implements the Grephql.Scalar behaviour
+      And the scalar mapping includes "DateTime" => MyApp.Types.DateTime
+      And MyApp.Types.DateTime implements the Ecto.Type behaviour (type/0, cast/1, dump/1, load/1)
       When the type is generated
-      Then the Elixir type is DateTime.t()
-      And values are serialized/deserialized using the behaviour callbacks
+      Then the Elixir type is derived from the Ecto Type's type/0 callback
+      And values are serialized via dump/1 and deserialized via load/1
 
-    Scenario: Custom scalar via shorthand tuple
-      Given a schema field "createdAt: DateTime!"
-      And the scalar mapping includes "DateTime" => {DateTime, &DateTime.to_iso8601/1, &DateTime.from_iso8601!/1}
-      When the type is generated
-      Then the Elixir type is DateTime.t()
-      And the tuple functions are used for serialization and deserialization
-
-    Scenario: Built-in scalar provided by Grephql
+    Scenario: Built-in Ecto Type scalar provided by Grephql
       Given a schema field "createdAt: DateTime!"
       And no custom scalar mapping is configured for "DateTime"
-      But Grephql provides a built-in Grephql.Scalar.DateTime
+      But Grephql provides a built-in Grephql.Types.DateTime implementing Ecto.Type
       When the type is generated
-      Then the built-in scalar is used automatically
+      Then the built-in type is used automatically
+
+  Rule: GraphQL enums use Ecto.Type for serialization and deserialization
+
+    Scenario: Enum values are cast and serialized via Ecto Type
+      Given a schema enum "Status" with values "ACTIVE" and "INACTIVE"
+      When an enum value is serialized for a request
+      Then the atom :active is dumped as the string "ACTIVE"
+      And the string "ACTIVE" from a response is loaded as the atom :active

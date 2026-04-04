@@ -254,23 +254,18 @@ Feature: Compile-time GraphQL validation
 
   # --- Custom Scalar Validation ---
 
-  Rule: Custom scalars must have a configured mapping or built-in
+  Rule: Custom scalars must have a configured Ecto Type mapping or built-in
 
-    Scenario: Custom scalar with behaviour module compiles successfully
+    Scenario: Custom scalar with Ecto Type module compiles successfully
       Given a schema with custom scalar "DateTime"
-      And the client module is configured with scalars %{"DateTime" => MyApp.Scalars.DateTime}
+      And the client module is configured with scalars %{"DateTime" => MyApp.Types.DateTime}
+      And MyApp.Types.DateTime implements Ecto.Type
       When the developer writes ~GQL referencing a "DateTime" field
       Then the module compiles successfully
 
-    Scenario: Custom scalar with shorthand tuple compiles successfully
+    Scenario: Built-in Ecto Type scalar compiles without explicit mapping
       Given a schema with custom scalar "DateTime"
-      And the client module is configured with scalars %{"DateTime" => {DateTime, &DateTime.to_iso8601/1, &DateTime.from_iso8601!/1}}
-      When the developer writes ~GQL referencing a "DateTime" field
-      Then the module compiles successfully
-
-    Scenario: Built-in scalar compiles without explicit mapping
-      Given a schema with custom scalar "DateTime"
-      And Grephql provides a built-in scalar for "DateTime"
+      And Grephql provides a built-in Ecto Type for "DateTime"
       And no explicit scalar mapping is configured
       When the developer writes ~GQL referencing a "DateTime" field
       Then the module compiles successfully using the built-in
@@ -278,7 +273,7 @@ Feature: Compile-time GraphQL validation
     Scenario: Unknown custom scalar without mapping or built-in raises compile error
       Given a schema with custom scalar "CustomFoo"
       And no scalar mapping is configured for "CustomFoo"
-      And no built-in scalar exists for "CustomFoo"
+      And no built-in Ecto Type exists for "CustomFoo"
       When the developer writes ~GQL referencing a "CustomFoo" field
       Then a compile error is raised indicating "CustomFoo" has no configured mapping
 

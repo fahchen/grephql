@@ -13,9 +13,9 @@ Feature: Client module configuration
       And runtime config is read from config :my_app, MyModule
 
     Scenario: Client module with all compile-time options
-      Given a module that calls use Grephql with otp_app, source, type_style :struct, and scalars mapping
+      Given a module that calls use Grephql with otp_app, source, and scalars mapping
       When the module is compiled
-      Then compile-time options (type_style, scalars) are used for type generation
+      Then compile-time options (scalars) are used for type generation
 
   Rule: Multiple client modules support multiple schemas
 
@@ -40,9 +40,9 @@ Feature: Client module configuration
 
   Rule: Compile-time config stays in use options, runtime config stays in otp_app config
 
-    Scenario: type_style is a compile-time option
-      Given a client module configured with type_style :struct
-      Then the type_style is applied during compilation and cannot be changed at runtime
+    Scenario: scalars mapping is a compile-time option
+      Given a client module configured with scalars %{"DateTime" => MyApp.Types.DateTime}
+      Then the scalars mapping is applied during compilation and cannot be changed at runtime
 
     Scenario: endpoint is a runtime option
       Given runtime config sets endpoint to "https://api.example.com/graphql"
