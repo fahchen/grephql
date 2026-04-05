@@ -207,6 +207,8 @@ defmodule Grephql.InputTypeGenerator do
   defp build_input_field(atom_name, input_value, resolved, context, {defs, embeds, reqs, nested}) do
     req = if Helpers.required?(input_value), do: [atom_name], else: []
 
+    source_opt = GeneratorHelpers.source_opt(atom_name, input_value.name)
+
     case resolved.ecto_type do
       {:object, nested_type_name} ->
         {field_def, new_modules} =
@@ -222,7 +224,7 @@ defmodule Grephql.InputTypeGenerator do
 
       ecto_type ->
         typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
-        field_def = {:field, atom_name, ecto_type, [typed: typed_opts]}
+        field_def = {:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}
         {[field_def | defs], embeds, req ++ reqs, nested}
     end
   end

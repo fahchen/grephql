@@ -1,6 +1,21 @@
 defmodule Grephql.GeneratorHelpers do
   @moduledoc false
 
+  @doc """
+  Builds `source:` option for Ecto field/embed when the snake_case atom name
+  differs from the original GraphQL field name (camelCase).
+  """
+  @spec source_opt(atom(), String.t()) :: keyword()
+  def source_opt(atom_name, original_name) when is_atom(atom_name) and is_binary(original_name) do
+    if Atom.to_string(atom_name) != original_name do
+      # GraphQL field names from schema, bounded set
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      [source: String.to_atom(original_name)]
+    else
+      []
+    end
+  end
+
   @doc false
   @spec field_def_to_ast({atom(), atom(), term(), keyword()}) :: Macro.t()
   def field_def_to_ast({kind, name, type_or_schema, opts}) do
