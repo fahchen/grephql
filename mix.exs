@@ -68,9 +68,36 @@ defmodule Grephql.MixProject do
 
   defp docs do
     [
-      main: "Grephql",
+      main: "readme",
       source_ref: "v#{@version}",
-      source_url: @source_url
+      source_url: @source_url,
+      extras: [
+        {"README.md", [title: "Introduction"]},
+        {"CHANGELOG.md", [title: "Changelog"]},
+        {"LICENSE", [title: "License"]}
+      ],
+      groups_for_modules: [
+        "Core API": [
+          Grephql,
+          Grephql.Query,
+          Grephql.Result,
+          Grephql.Error
+        ],
+        "Type System": [
+          Grephql.EmbeddedSchema,
+          Grephql.ResponseDecoder,
+          Grephql.Types.DateTime,
+          Grephql.Types.Enum,
+          Grephql.Types.Union,
+          Grephql.Types.PathSegment
+        ],
+        Formatting: [
+          Grephql.Formatter
+        ],
+        "Mix Tasks": [
+          Mix.Tasks.Grephql.DownloadSchema
+        ]
+      ]
     ]
   end
 
