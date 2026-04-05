@@ -77,6 +77,48 @@ defmodule Grephql.Validator.Rules.ArgumentsTest do
       type_errors = Enum.filter(errors(ctx), &(&1.message =~ "type mismatch"))
       assert type_errors == []
     end
+
+    test "string for Int fails" do
+      ctx = validate(~s|query { countUsers(limit: "ten") { name } }|, types: types_with_int_arg())
+      type_errors = Enum.filter(errors(ctx), &(&1.message =~ "type mismatch"))
+      assert [error] = type_errors
+      assert error.message =~ "type mismatch for argument \"limit\" on field \"countUsers\""
+    end
+
+    test "int for Int passes" do
+      ctx = validate("query { countUsers(limit: 10) { name } }", types: types_with_int_arg())
+      type_errors = Enum.filter(errors(ctx), &(&1.message =~ "type mismatch"))
+      assert type_errors == []
+    end
+
+    test "string for Boolean fails" do
+      ctx =
+        validate(
+          ~s|query { activeUsers(active: "yes") { name } }|,
+          types: types_with_boolean_arg()
+        )
+
+      type_errors = Enum.filter(errors(ctx), &(&1.message =~ "type mismatch"))
+      assert [error] = type_errors
+      assert error.message =~ "type mismatch for argument \"active\" on field \"activeUsers\""
+    end
+
+    test "boolean for Boolean passes" do
+      ctx =
+        validate("query { activeUsers(active: true) { name } }",
+          types: types_with_boolean_arg()
+        )
+
+      type_errors = Enum.filter(errors(ctx), &(&1.message =~ "type mismatch"))
+      assert type_errors == []
+    end
+
+    test "float for String fails" do
+      ctx = validate("query { user(id: 1.5) { name } }")
+      type_errors = Enum.filter(errors(ctx), &(&1.message =~ "type mismatch"))
+      assert [error] = type_errors
+      assert error.message =~ "type mismatch for argument \"id\" on field \"user\""
+    end
   end
 
   describe "nested field argument validation" do
@@ -98,4 +140,50 @@ defmodule Grephql.Validator.Rules.ArgumentsTest do
   end
 
   defp errors(ctx), do: Context.errors_by_severity(ctx, :error)
+
+  defp types_with_int_arg do
+    types = SchemaHelper.default_types()
+
+    count_users_field = %Grephql.Schema.Field{
+      name: "countUsers",
+      type: %Grephql.Schema.TypeRef{
+        kind: :list,
+        of_type: %Grephql.Schema.TypeRef{kind: :object, name: "User"}
+      },
+      args: %{
+        "limit" => %Grephql.Schema.InputValue{
+          name: "limit",
+          type: %Grephql.Schema.TypeRef{
+            kind: :non_null,
+            of_type: %Grephql.Schema.TypeRef{kind: :scalar, name: "Int"}
+          }
+        }
+      }
+    }
+
+    put_in(types, ["Query", Access.key(:fields), "countUsers"], count_users_field)
+  end
+
+  defp types_with_boolean_arg do
+    types = SchemaHelper.default_types()
+
+    active_users_field = %Grephql.Schema.Field{
+      name: "activeUsers",
+      type: %Grephql.Schema.TypeRef{
+        kind: :list,
+        of_type: %Grephql.Schema.TypeRef{kind: :object, name: "User"}
+      },
+      args: %{
+        "active" => %Grephql.Schema.InputValue{
+          name: "active",
+          type: %Grephql.Schema.TypeRef{
+            kind: :non_null,
+            of_type: %Grephql.Schema.TypeRef{kind: :scalar, name: "Boolean"}
+          }
+        }
+      }
+    }
+
+    put_in(types, ["Query", Access.key(:fields), "activeUsers"], active_users_field)
+  end
 end
