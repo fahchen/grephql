@@ -6,6 +6,9 @@ defmodule Grephql.TypeGeneratorTest do
   @compile {:no_warn_undefined,
             [
               Grephql.Test.Alias.GetUser.Result.User,
+              Grephql.Test.AliasMulti.GetUsers.Result,
+              Grephql.Test.AliasMulti.GetUsers.Result.Author,
+              Grephql.Test.AliasMulti.GetUsers.Result.SimpleUser,
               Grephql.Test.AutoTypename.GetNode.Result.Node.User,
               Grephql.Test.Isolation.GetUser.Result.User,
               Grephql.Test.Isolation.ListUsers.Result.User,
@@ -135,6 +138,39 @@ defmodule Grephql.TypeGeneratorTest do
       fields = Grephql.Test.Alias.GetUser.Result.User.__schema__(:fields)
       assert :display_name in fields
       refute :name in fields
+    end
+
+    test "multiple aliases of the same field generate independent structs" do
+      schema = SchemaHelper.build_schema()
+
+      operation =
+        parse!(
+          ~s|query { author: user(id: "1") { name email } simpleUser: user(id: "1") { name } }|
+        )
+
+      modules =
+        TypeGenerator.generate(operation, schema,
+          client_module: Grephql.Test.AliasMulti,
+          function_name: :get_users
+        )
+
+      assert Grephql.Test.AliasMulti.GetUsers.Result in modules
+      assert Grephql.Test.AliasMulti.GetUsers.Result.Author in modules
+      assert Grephql.Test.AliasMulti.GetUsers.Result.SimpleUser in modules
+
+      # Each alias gets its own struct with its own selected fields
+      author_fields = Grephql.Test.AliasMulti.GetUsers.Result.Author.__schema__(:fields)
+      assert :name in author_fields
+      assert :email in author_fields
+
+      simple_fields = Grephql.Test.AliasMulti.GetUsers.Result.SimpleUser.__schema__(:fields)
+      assert :name in simple_fields
+      refute :email in simple_fields
+
+      # Result has both alias fields
+      result_fields = Grephql.Test.AliasMulti.GetUsers.Result.__schema__(:fields)
+      assert :author in result_fields
+      assert :simple_user in result_fields
     end
 
     test "alias affects nested module name" do
