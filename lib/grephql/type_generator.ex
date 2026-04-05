@@ -1,25 +1,5 @@
 defmodule Grephql.TypeGenerator do
-  @moduledoc """
-  Generates EctoTypedSchema embedded schema modules from GraphQL query AST.
-
-  Given an operation definition and a schema, generates per-query output type
-  modules with proper nesting, nullability, and field alias support.
-
-  ## Naming convention
-
-  Output types follow per-query path naming under a `Result` namespace:
-
-      ClientModule.FunctionName.Result.FieldName.NestedField...
-
-  Field aliases override both struct field names and module path segments.
-
-  ## Union/Interface support
-
-  When a field's type is a union or interface, inline fragments determine
-  which concrete types to generate. Shared fields (outside fragments) are
-  merged into each concrete type's struct. A parameterized `Grephql.Types.Union`
-  Ecto Type handles `__typename`-based dispatch during deserialization.
-  """
+  @moduledoc false
 
   alias Grephql.GeneratorHelpers
   alias Grephql.Language.Field, as: QueryField

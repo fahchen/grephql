@@ -4,7 +4,7 @@ defmodule Grephql.ResponseDecoder do
 
   Uses `Ecto.embedded_load/3` to recursively convert plain maps (from
   `Jason.decode!/1`) into the generated embedded schema structs, automatically
-  invoking custom `Ecto.Type.cast/1` for scalars and enums.
+  invoking custom Ecto Type `cast/1` callbacks for scalars and enums.
 
   ## Example
 
