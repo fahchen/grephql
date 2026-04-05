@@ -64,7 +64,7 @@ defmodule Grephql.MixProject do
     [
       plt_local_path: "priv/plts/grephql.plt",
       plt_core_path: "priv/plts/core.plt",
-      plt_add_apps: [:ex_unit]
+      plt_add_apps: [:ex_unit, :mix]
     ]
   end
 end
