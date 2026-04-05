@@ -21,14 +21,13 @@ defmodule Grephql do
     * `:source` (required) — path to a schema JSON file, or an inline JSON string
     * `:scalars` — custom scalar type mappings (default: `%{}`)
     * `:endpoint` — default GraphQL endpoint URL
-    * `:headers` — default HTTP headers (keyword list)
-    * `:req_options` — default Req options, supports middleware/plugins (keyword list)
+    * `:req_options` — default Req options, supports middleware/plugins including headers (keyword list)
   """
 
   alias Grephql.Query
   alias Grephql.Schema.Loader
 
-  @use_config_keys [:endpoint, :headers, :req_options]
+  @use_config_keys [:endpoint, :req_options]
 
   defmacro __using__(opts) do
     otp_app = Keyword.fetch!(opts, :otp_app)
@@ -41,7 +40,7 @@ defmodule Grephql do
     external_resource_ast =
       if file_source? do
         quote do
-          @external_resource Path.expand(unquote(source))
+          @external_resource Path.expand(unquote(source), Path.dirname(__ENV__.file))
         end
       end
 
@@ -53,7 +52,7 @@ defmodule Grephql do
       @grephql_otp_app unquote(otp_app)
       @grephql_scalars unquote(Macro.escape(scalars))
       @grephql_use_config unquote(use_config)
-      @grephql_schema Grephql.__load_schema__(unquote(source))
+      @grephql_schema Grephql.__load_schema__(unquote(source), __ENV__.file)
 
       @doc false
       @spec __grephql_config__() :: {atom(), keyword()}
@@ -62,13 +61,14 @@ defmodule Grephql do
   end
 
   @doc false
-  @spec __load_schema__(String.t()) :: Grephql.Schema.t()
-  def __load_schema__(source) do
-    cache_key = schema_cache_key(source)
+  @spec __load_schema__(String.t(), String.t()) :: Grephql.Schema.t()
+  def __load_schema__(source, caller_file) do
+    resolved = resolve_source(source, caller_file)
+    cache_key = schema_cache_key(resolved)
 
     case :persistent_term.get(cache_key, :not_cached) do
       :not_cached ->
-        schema = Loader.load!(source)
+        schema = Loader.load!(resolved)
         :persistent_term.put(cache_key, schema)
         schema
 
@@ -105,14 +105,22 @@ defmodule Grephql do
   end
 
   defp defaults do
-    [endpoint: nil, headers: [], req_options: []]
+    [endpoint: nil, req_options: []]
   end
 
-  defp schema_cache_key(source) do
+  defp resolve_source(source, caller_file) do
     if Loader.json_content?(source) do
-      {__MODULE__, :schema, :erlang.phash2(source)}
+      source
     else
-      {__MODULE__, :schema, Path.expand(source)}
+      Path.expand(source, Path.dirname(caller_file))
+    end
+  end
+
+  defp schema_cache_key(resolved_source) do
+    if Loader.json_content?(resolved_source) do
+      {__MODULE__, :schema, :erlang.phash2(resolved_source)}
+    else
+      {__MODULE__, :schema, resolved_source}
     end
   end
 end

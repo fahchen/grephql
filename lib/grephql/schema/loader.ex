@@ -27,11 +27,9 @@ defmodule Grephql.Schema.Loader do
   end
 
   defp load_file(path) do
-    expanded = Path.expand(path)
-
-    case File.read(expanded) do
+    case File.read(path) do
       {:ok, contents} -> Schema.Parser.parse(contents)
-      {:error, reason} -> {:error, "failed to read #{expanded}: #{:file.format_error(reason)}"}
+      {:error, reason} -> {:error, "failed to read #{path}: #{:file.format_error(reason)}"}
     end
   end
 end
