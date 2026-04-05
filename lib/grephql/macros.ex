@@ -24,25 +24,28 @@ defmodule Grephql.Macros do
         query_str,
         @grephql_schema,
         __MODULE__,
-        @grephql_scalars
+        @grephql_scalars,
+        __ENV__
       )
     end
   end
 
   # Dialyzer cannot trace callers because this is only invoked inside
   # `quote` blocks at macro expansion time, not at runtime.
-  @dialyzer [{:no_return, __compile_sigil__: 4}, {:no_contracts, __compile_sigil__: 4}]
+  @dialyzer [{:no_return, __compile_sigil__: 5}, {:no_contracts, __compile_sigil__: 5}]
 
   @doc false
-  @spec __compile_sigil__(String.t(), Grephql.Schema.t(), module(), map()) :: Grephql.Query.t()
-  def __compile_sigil__(query_str, schema, client_module, scalar_types) do
+  @spec __compile_sigil__(String.t(), Grephql.Schema.t(), module(), map(), Macro.Env.t()) ::
+          Grephql.Query.t()
+  def __compile_sigil__(query_str, schema, client_module, scalar_types, caller_env) do
     document = parse_sigil!(query_str)
     function_name = derive_function_name!(document)
 
     Grephql.Compiler.compile_document!(document, query_str, schema,
       client_module: client_module,
       function_name: function_name,
-      scalar_types: scalar_types
+      scalar_types: scalar_types,
+      caller_env: caller_env
     )
   end
 
@@ -115,7 +118,8 @@ defmodule Grephql.Macros do
                        @grephql_schema,
                        client_module: __MODULE__,
                        function_name: func_name,
-                       scalar_types: @grephql_scalars
+                       scalar_types: @grephql_scalars,
+                       caller_env: __ENV__
                      )
 
       unquote(function_ast)

@@ -90,7 +90,9 @@ defmodule Grephql.Schema.Parser do
       name: iv["name"],
       description: iv["description"],
       type: build_type_ref(iv["type"]),
-      default_value: iv["defaultValue"]
+      default_value: iv["defaultValue"],
+      is_deprecated: iv["isDeprecated"] || false,
+      deprecation_reason: iv["deprecationReason"]
     }
   end
 

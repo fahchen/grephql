@@ -13,6 +13,7 @@ defmodule Grephql.Compiler do
           {:client_module, module()}
           | {:function_name, atom()}
           | {:scalar_types, map()}
+          | {:caller_env, Macro.Env.t()}
 
   # Dialyzer cannot trace callers of compile!/3 because it is only invoked
   # inside `quote` blocks at macro expansion time, not at runtime.
@@ -43,7 +44,8 @@ defmodule Grephql.Compiler do
           Query.t()
   def compile_document!(document, query_string, schema, opts) do
     operation = extract_operation!(document)
-    validate!(document, schema)
+    caller_env = Keyword.get(opts, :caller_env)
+    validate!(document, schema, caller_env)
 
     client_module = Keyword.fetch!(opts, :client_module)
 
@@ -93,8 +95,8 @@ defmodule Grephql.Compiler do
     end
   end
 
-  defp validate!(document, schema) do
-    case Validator.validate(document, schema) do
+  defp validate!(document, schema, caller_env) do
+    case Validator.validate(document, schema, caller_env) do
       :ok ->
         :ok
 

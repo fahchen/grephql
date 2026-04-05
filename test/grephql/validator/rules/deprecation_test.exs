@@ -48,6 +48,75 @@ defmodule Grephql.Validator.Rules.DeprecationTest do
     end
   end
 
+  describe "deprecated argument detection" do
+    test "non-deprecated argument produces no warning" do
+      types = types_with_deprecated_arg()
+      ctx = validate(~s|query { user(id: "1") { name } }|, types: types)
+      assert warnings(ctx) == []
+    end
+
+    test "deprecated argument produces warning" do
+      types = types_with_deprecated_arg()
+      ctx = validate(~s|query { user(id: "1", legacyId: "old") { name } }|, types: types)
+      assert [warning] = warnings(ctx)
+      assert warning.message =~ "argument \"legacyId\" is deprecated: use id instead"
+    end
+
+    test "deprecated argument without reason" do
+      types = types_with_deprecated_arg_no_reason()
+      ctx = validate(~s|query { user(id: "1", legacyId: "old") { name } }|, types: types)
+      assert [warning] = warnings(ctx)
+      assert warning.message == "argument \"legacyId\" is deprecated"
+    end
+  end
+
+  describe "deprecated input object field detection" do
+    test "non-deprecated input field produces no warning" do
+      types = types_with_deprecated_input_field()
+
+      ctx =
+        validate(
+          ~s|mutation { createUser(input: {name: "Alice"}) { id } }|,
+          types: types,
+          mutation_type: "Mutation"
+        )
+
+      assert warnings(ctx) == []
+    end
+
+    test "deprecated input field produces warning" do
+      types = types_with_deprecated_input_field()
+
+      ctx =
+        validate(
+          ~s|mutation { createUser(input: {name: "Alice", nickname: "Ali"}) { id } }|,
+          types: types,
+          mutation_type: "Mutation"
+        )
+
+      assert [warning] = warnings(ctx)
+
+      assert warning.message =~
+               "input field \"nickname\" on \"CreateUserInput\" is deprecated: use displayName"
+    end
+
+    test "deprecated nested input field produces warning" do
+      types = types_with_deprecated_nested_input_field()
+
+      ctx =
+        validate(
+          ~s|mutation { createUser(input: {name: "Alice", profile: {bio: "hi", oldAvatar: "url"}}) { id } }|,
+          types: types,
+          mutation_type: "Mutation"
+        )
+
+      assert [warning] = warnings(ctx)
+
+      assert warning.message =~
+               "input field \"oldAvatar\" on \"ProfileInput\" is deprecated: use avatarUrl"
+    end
+  end
+
   defp parse!(query) do
     {:ok, doc} = Grephql.Parser.parse(query)
     doc
@@ -104,6 +173,143 @@ defmodule Grephql.Validator.Rules.DeprecationTest do
             name: "email",
             type: %TypeRef{kind: :scalar, name: "String"},
             is_deprecated: true
+          }
+        }
+      }
+    })
+  end
+
+  defp types_with_deprecated_arg do
+    Map.merge(SchemaHelper.default_types(), %{
+      "Query" => %Type{
+        kind: :object,
+        name: "Query",
+        fields: %{
+          "user" => %SchemaField{
+            name: "user",
+            type: %TypeRef{kind: :object, name: "User"},
+            args: %{
+              "id" => %InputValue{
+                name: "id",
+                type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+              },
+              "legacyId" => %InputValue{
+                name: "legacyId",
+                type: %TypeRef{kind: :scalar, name: "String"},
+                is_deprecated: true,
+                deprecation_reason: "use id instead"
+              }
+            }
+          }
+        }
+      }
+    })
+  end
+
+  defp types_with_deprecated_arg_no_reason do
+    Map.merge(SchemaHelper.default_types(), %{
+      "Query" => %Type{
+        kind: :object,
+        name: "Query",
+        fields: %{
+          "user" => %SchemaField{
+            name: "user",
+            type: %TypeRef{kind: :object, name: "User"},
+            args: %{
+              "id" => %InputValue{
+                name: "id",
+                type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+              },
+              "legacyId" => %InputValue{
+                name: "legacyId",
+                type: %TypeRef{kind: :scalar, name: "String"},
+                is_deprecated: true
+              }
+            }
+          }
+        }
+      }
+    })
+  end
+
+  defp types_with_deprecated_input_field do
+    Map.merge(SchemaHelper.default_types(), %{
+      "Query" => %Type{
+        kind: :object,
+        name: "Query",
+        fields: %{
+          "user" => SchemaHelper.default_types()["Query"].fields["user"]
+        }
+      },
+      "Mutation" => %Type{
+        kind: :object,
+        name: "Mutation",
+        fields: %{
+          "createUser" => %SchemaField{
+            name: "createUser",
+            type: %TypeRef{kind: :object, name: "User"},
+            args: %{
+              "input" => %InputValue{
+                name: "input",
+                type: %TypeRef{
+                  kind: :non_null,
+                  of_type: %TypeRef{kind: :input_object, name: "CreateUserInput"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "CreateUserInput" => %Type{
+        kind: :input_object,
+        name: "CreateUserInput",
+        input_fields: %{
+          "name" => %InputValue{
+            name: "name",
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "String"}}
+          },
+          "nickname" => %InputValue{
+            name: "nickname",
+            type: %TypeRef{kind: :scalar, name: "String"},
+            is_deprecated: true,
+            deprecation_reason: "use displayName"
+          }
+        }
+      }
+    })
+  end
+
+  defp types_with_deprecated_nested_input_field do
+    base = types_with_deprecated_input_field()
+
+    Map.merge(base, %{
+      "CreateUserInput" => %Type{
+        kind: :input_object,
+        name: "CreateUserInput",
+        input_fields: %{
+          "name" => %InputValue{
+            name: "name",
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "String"}}
+          },
+          "profile" => %InputValue{
+            name: "profile",
+            type: %TypeRef{kind: :input_object, name: "ProfileInput"}
+          }
+        }
+      },
+      "ProfileInput" => %Type{
+        kind: :input_object,
+        name: "ProfileInput",
+        input_fields: %{
+          "bio" => %InputValue{
+            name: "bio",
+            type: %TypeRef{kind: :scalar, name: "String"}
+          },
+          "oldAvatar" => %InputValue{
+            name: "oldAvatar",
+            type: %TypeRef{kind: :scalar, name: "String"},
+            is_deprecated: true,
+            deprecation_reason: "use avatarUrl"
           }
         }
       }

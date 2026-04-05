@@ -19,8 +19,8 @@ defmodule Grephql.Validator do
     Rules.Deprecation
   ]
 
-  @spec validate(Document.t(), Schema.t()) :: :ok | {:error, [Error.t()]}
-  def validate(%Document{} = document, %Schema{} = schema) do
+  @spec validate(Document.t(), Schema.t(), Macro.Env.t() | nil) :: :ok | {:error, [Error.t()]}
+  def validate(%Document{} = document, %Schema{} = schema, caller_env \\ nil) do
     ctx = %Context{schema: schema}
 
     ctx =
@@ -32,7 +32,7 @@ defmodule Grephql.Validator do
     warnings = Context.errors_by_severity(ctx, :warning)
 
     for warning <- warnings do
-      IO.warn(warning.message)
+      emit_warning(warning.message, caller_env)
     end
 
     case errors do
@@ -40,4 +40,7 @@ defmodule Grephql.Validator do
       errors -> {:error, errors}
     end
   end
+
+  defp emit_warning(message, %Macro.Env{} = env), do: IO.warn(message, env)
+  defp emit_warning(message, _env), do: IO.warn(message)
 end
