@@ -10,51 +10,60 @@ defmodule Grephql.FormatterTest do
   end
 
   describe "format/2" do
-    test "formats a simple query" do
+    test "inline sigil preserves original content" do
       input = "query GetUser($id: ID!) { user(id: $id) { name email } }"
+      assert Formatter.format(input, sigil: :GQL) == input
+    end
 
-      assert Formatter.format(input, sigil: :GQLQL) == """
+    test "returns original content on parse error" do
+      invalid = "not valid graphql {"
+      assert Formatter.format(invalid, sigil: :GQL) == invalid
+    end
+
+    test "returns original content for empty string" do
+      assert Formatter.format("", sigil: :GQL) == ""
+    end
+
+    test "formats heredoc query" do
+      input = "query GetUser($id: ID!) { user(id: $id) { name email } }"
+      opts = [sigil: :GQL, opening_delimiter: ~S(""")]
+
+      assert Formatter.format(input, opts) == """
              query GetUser($id: ID!) {
                user(id: $id) {
                  name
                  email
                }
-             }\
+             }
              """
     end
 
-    test "returns original content on parse error" do
-      invalid = "not valid graphql {"
-      assert Formatter.format(invalid, sigil: :GQLQL) == invalid
-    end
-
-    test "returns original content for empty string" do
-      assert Formatter.format("", sigil: :GQLQL) == ""
-    end
-
-    test "formats messy whitespace" do
+    test "formats heredoc with messy whitespace" do
       input = "  {   user(  id:  \"1\"  )  {  name  }  }  "
+      opts = [sigil: :GQL, opening_delimiter: ~S(""")]
 
-      assert Formatter.format(input, sigil: :GQLQL) == """
+      assert Formatter.format(input, opts) == """
              {
                user(id: "1") {
                  name
                }
-             }\
+             }
              """
     end
 
-    test "is idempotent" do
+    test "heredoc is idempotent" do
       input = "query GetUser($id: ID!) { user(id: $id) { name posts { title } } }"
-      first = Formatter.format(input, sigil: :GQLQL)
-      second = Formatter.format(first, sigil: :GQLQL)
+      opts = [sigil: :GQL, opening_delimiter: ~S(""")]
+      first = Formatter.format(input, opts)
+      second = Formatter.format(first, opts)
       assert first == second
     end
 
-    test "formats query with inline fragments" do
+    test "formats heredoc with inline fragments" do
       input = "{ search { ... on User { name } ... on Repo { fullName } } }"
+      opts = [sigil: :GQL, opening_delimiter: ~S(""")]
 
-      assert Formatter.format(input, sigil: :GQLQL) == """
+      assert Formatter.format(input, opts) == """
              {
                search {
                  ... on User {
@@ -64,20 +73,21 @@ defmodule Grephql.FormatterTest do
                    fullName
                  }
                }
-             }\
+             }
              """
     end
 
-    test "formats query with directives" do
+    test "formats heredoc with directives" do
       input = "query($show: Boolean!) { user { name @skip(if: $show) email } }"
+      opts = [sigil: :GQL, opening_delimiter: ~S(""")]
 
-      assert Formatter.format(input, sigil: :GQLQL) == """
+      assert Formatter.format(input, opts) == """
              query($show: Boolean!) {
                user {
                  name @skip(if: $show)
                  email
                }
-             }\
+             }
              """
     end
 
@@ -97,21 +107,12 @@ defmodule Grephql.FormatterTest do
       assert String.ends_with?(result, "}\n")
     end
 
-    test "no trailing newline for inline delimiter" do
+    test "inline delimiter returns content unchanged" do
       input = "query GetUser($id: ID!) { user(id: $id) { name } }"
 
       result = Formatter.format(input, sigil: :GQL, opening_delimiter: ~S("))
 
-      refute String.ends_with?(result, "}\n")
-    end
-
-    test "heredoc format is idempotent" do
-      input = "query GetUser($id: ID!) { user(id: $id) { name } }"
-      opts = [sigil: :GQL, opening_delimiter: ~S(""")]
-
-      first = Formatter.format(input, opts)
-      second = Formatter.format(first, opts)
-      assert first == second
+      assert result == input
     end
   end
 end

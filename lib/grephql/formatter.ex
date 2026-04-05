@@ -32,12 +32,11 @@ defmodule Grephql.Formatter do
   def format(contents, opts) do
     case Grephql.Parser.parse(contents) do
       {:ok, document} ->
-        formatted = Grephql.Printer.print(document)
-
         if opts[:opening_delimiter] in ["\"\"\"", "'''"] do
-          formatted <> "\n"
+          Grephql.Printer.print(document) <> "\n"
         else
-          formatted
+          # Inline sigils have no indentation context — keep original content
+          contents
         end
 
       {:error, _reason} ->
