@@ -2,7 +2,7 @@ defmodule Grephql.InputTypeGenerator do
   @moduledoc """
   Generates Ecto embedded schema modules for GraphQL input types.
 
-  Unlike `TypeGenerator` (per-query output types), input types are
+  Unlike `Grephql.TypeGenerator` (per-query output types), input types are
   schema-level and shared across queries. Each input object type
   generates one module under `ClientModule.Inputs.InputTypeName`.
 

@@ -15,7 +15,7 @@ defmodule Grephql.TypeMapper do
     - `Boolean` → `:boolean`
     - `ID` → `:string`
 
-  Custom scalars map to user-provided Ecto Type modules via the `scalar_types` config.
+  Custom scalars map to user-provided `Ecto.Type` modules via the `scalar_types` config.
   Custom scalars override built-in defaults. Unknown scalars raise `ArgumentError`.
   """
 
