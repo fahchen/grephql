@@ -2,83 +2,28 @@ defmodule Grephql.Macros do
   @moduledoc false
 
   @doc """
-  Compiles a GraphQL query string into a `%Grephql.Query{}` struct.
+  A sigil for writing GraphQL query strings that can be formatted by `mix format`.
 
-  Unlike `defgql`, this does not generate a function — it returns
-  the compiled query struct for manual use. The operation must be named,
-  as the name is used to derive the type module namespace.
+  Returns the query as a plain string — use it with `defgql`/`defgqlp`.
+  Does not support interpolation (uppercase sigil convention).
 
-  Supports string interpolation (lowercase sigil).
-
-  ## Examples
-
-      @query ~g"query GetUser($id: ID!) { user(id: $id) { name } }"
-
-      # With interpolation (module attributes only):
-      @user_fields "name email"
-      @query ~g"query GetUser($id: ID!) { user(id: $id) { \#{@user_fields} } }"
-  """
-  defmacro sigil_g(query_string, modifiers), do: compile_sigil_ast(query_string, modifiers)
-
-  @doc """
-  Non-interpolating version of `~g`. Formatted by `mix format`
-  when `Grephql.Formatter` plugin is enabled.
+  To enable formatting, add `Grephql.Formatter` to your `.formatter.exs` plugins.
 
   ## Examples
 
-      @query ~G"query GetUser($id: ID!) { user(id: $id) { name } }"
+      defgql :get_user, ~GQL\"\"\"
+        query GetUser($id: ID!) {
+          user(id: $id) {
+            name
+            email
+          }
+        }
+      \"\"\"
   """
-  defmacro sigil_G(query_string, modifiers), do: compile_sigil_ast(query_string, modifiers)
-
-  defp compile_sigil_ast(query_string, _modifiers) do
-    quote bind_quoted: [query_str: query_string] do
-      Grephql.Macros.__compile_sigil__(
-        query_str,
-        @grephql_schema,
-        __MODULE__,
-        @grephql_scalars,
-        __ENV__
-      )
-    end
-  end
-
-  # Dialyzer cannot trace callers because this is only invoked inside
-  # `quote` blocks at macro expansion time, not at runtime.
-  @dialyzer [{:no_return, __compile_sigil__: 5}, {:no_contracts, __compile_sigil__: 5}]
-
-  @doc false
-  @spec __compile_sigil__(String.t(), Grephql.Schema.t(), module(), map(), Macro.Env.t()) ::
-          Grephql.Query.t()
-  def __compile_sigil__(query_str, schema, client_module, scalar_types, caller_env) do
-    document = parse_sigil!(query_str)
-    function_name = derive_function_name!(document)
-
-    Grephql.Compiler.compile_document!(document, query_str, schema,
-      client_module: client_module,
-      function_name: function_name,
-      scalar_types: scalar_types,
-      caller_env: caller_env
-    )
-  end
-
-  defp parse_sigil!(query_str) do
-    case Grephql.Parser.parse(query_str) do
-      {:ok, document} -> document
-      {:error, reason} -> raise CompileError, description: "GraphQL parse error: #{reason}"
-    end
-  end
-
-  defp derive_function_name!(document) do
-    operation =
-      Enum.find(document.definitions, &match?(%Grephql.Language.OperationDefinition{}, &1))
-
-    unless operation && operation.name do
-      raise CompileError,
-        description: "~g sigil requires a named operation (e.g. query GetUser { ... })"
-    end
-
-    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    operation.name |> Macro.underscore() |> String.to_atom()
+  defmacro sigil_GQL(query_string, _modifiers) do
+    # Uppercase sigils receive an already-interpolated binary in Elixir,
+    # so we simply return it as-is. The value is the formatter hook.
+    query_string
   end
 
   @doc false
@@ -115,6 +60,17 @@ defmodule Grephql.Macros do
   """
   defmacro defgqlp(name, query_string) do
     define_query_function(:defp, name, query_string)
+  end
+
+  # Handle ~GQL sigil AST — the sigil doesn't expand before defgql receives it,
+  # so we pattern-match the AST node and extract the binary string.
+  defp define_query_function(
+         kind,
+         func_name,
+         {:sigil_GQL, _meta, [{:<<>>, _bin_meta, [query_str]}, _modifiers]}
+       )
+       when is_atom(func_name) and is_binary(query_str) do
+    define_query_function(kind, func_name, query_str)
   end
 
   defp define_query_function(kind, func_name, query_str)

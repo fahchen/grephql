@@ -109,9 +109,9 @@ MyApp.GitHub.get_user(%{login: "octocat"},
 )
 ```
 
-## The `~g` Sigil
+## The `~GQL` Sigil
 
-For cases where you need the compiled query struct without a generated function, use the `~g` sigil:
+Use the `~GQL` sigil with `defgql` to get GraphQL formatting support via `mix format`:
 
 ```elixir
 defmodule MyApp.GitHub do
@@ -119,15 +119,26 @@ defmodule MyApp.GitHub do
     otp_app: :my_app,
     source: "priv/schemas/github.json"
 
-  @query ~g"query GetUser($login: String!) { user(login: $login) { name } }"
-
-  def run do
-    Grephql.execute(@query, %{login: "octocat"})
-  end
+  defgql :get_user, ~GQL"""
+  query GetUser($login: String!) {
+    user(login: $login) {
+      name
+    }
+  }
+  """
 end
 ```
 
-The operation must be named (`query GetUser`, not just `query`).
+To enable formatting, add `Grephql.Formatter` to your `.formatter.exs` plugins:
+
+```elixir
+[
+  plugins: [Grephql.Formatter],
+  inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"]
+]
+```
+
+Plain strings still work with `defgql` — `~GQL` is optional and only needed for formatter support.
 
 ## Formatter Plugin
 

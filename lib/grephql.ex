@@ -12,7 +12,7 @@ defmodule Grephql do
           otp_app: :my_app,
           source: "priv/schemas/github.json"
 
-        defgql :get_user, "query($login: String!) { user(login: $login) { name } }"
+        defgql :get_user, ~GQL"query($login: String!) { user(login: $login) { name } }"
       end
 
   ## Options
@@ -111,7 +111,7 @@ defmodule Grephql do
   @doc """
   Executes a compiled GraphQL query.
 
-  Takes a `%Grephql.Query{}` struct (produced by `defgql` or `~GQL`),
+  Takes a `%Grephql.Query{}` struct (produced by `defgql`/`defgqlp`),
   a variables struct (built by `Variables.build/1`), and optional keyword options.
 
   Options override runtime config which overrides compile-time defaults.

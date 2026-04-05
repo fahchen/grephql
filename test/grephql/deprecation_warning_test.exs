@@ -41,7 +41,7 @@ defmodule Grephql.DeprecationWarningTest do
     end
   end
 
-  describe "~g sigil deprecation warning location" do
+  describe "~GQL sigil deprecation warning location" do
     test "warning includes caller file path" do
       warnings =
         capture_io(:stderr, fn ->
@@ -51,13 +51,13 @@ defmodule Grephql.DeprecationWarningTest do
               otp_app: :grephql,
               source: #{inspect(Path.expand("test/support/schemas/deprecation.json"))}
 
-            @query ~g"query GetUser($id: ID!) { user(id: $id) { name email } }"
+            defgql :get_user_sigil, ~GQL"query GetUser($id: ID!) { user(id: $id) { name email } }"
           end
           """)
         end)
 
       assert warnings =~ "field \"email\" on \"User\" is deprecated: use contactEmail instead"
-      # Line 6 is where @query is assigned in the compiled string
+      # Line 6 is where defgql is called in the compiled string
       assert warnings =~ "nofile:6"
     end
   end

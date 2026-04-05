@@ -1,120 +1,74 @@
 defmodule Grephql.SigilTest do
   use ExUnit.Case, async: true
 
-  alias Grephql.Query
-
-  describe "~g sigil" do
-    defmodule BasicQuery do
+  describe "~GQL sigil returns plain string" do
+    defmodule StringCheck do
       use Grephql,
         otp_app: :grephql,
         source: "../support/schemas/minimal.json"
 
-      @query ~g"query GetUser($id: ID!) { user(id: $id) { name email } }"
+      @gql_string ~GQL"query GetUser($id: ID!) { user(id: $id) { name } }"
 
-      def query_struct, do: @query
+      def gql_string, do: @gql_string
     end
 
-    test "returns a Query struct" do
-      assert %Query{} = BasicQuery.query_struct()
+    test "~GQL returns a binary string" do
+      assert is_binary(StringCheck.gql_string())
+      assert StringCheck.gql_string() =~ "query GetUser"
+    end
+  end
+
+  describe "defgql with ~GQL heredoc" do
+    defmodule HeredocClient do
+      use Grephql,
+        otp_app: :grephql,
+        source: "../support/schemas/minimal.json"
+
+      defgql(:get_user, ~GQL"""
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          name
+          email
+        }
+      }
+      """)
+
+      defgql(:current_user, ~GQL"""
+      query CurrentUser {
+        user(id: "1") {
+          name
+        }
+      }
+      """)
     end
 
-    test "derives function_name from operation name" do
-      query = BasicQuery.query_struct()
-      assert query.operation_name == "GetUser"
-      assert query.result_module == BasicQuery.GetUser.Result
+    test "generates function with variables" do
+      assert function_exported?(HeredocClient, :get_user, 2)
     end
 
-    test "detects variables" do
-      assert BasicQuery.query_struct().has_variables? == true
+    test "generates function without variables" do
+      assert function_exported?(HeredocClient, :current_user, 1)
     end
 
-    test "generates output type modules" do
-      user = struct(BasicQuery.GetUser.Result.User, name: "Alice", email: "a@b.com")
+    test "compiles query struct with correct metadata" do
+      # Verify the module compiled successfully with proper type generation
+      user = struct(HeredocClient.GetUser.Result.User, name: "Alice", email: "a@b.com")
       assert user.name == "Alice"
       assert user.email == "a@b.com"
     end
-
-    test "stores client_module" do
-      assert BasicQuery.query_struct().client_module == BasicQuery
-    end
   end
 
-  describe "~g without variables" do
-    defmodule NoVarsQuery do
+  describe "defgql with plain string still works" do
+    defmodule PlainStringClient do
       use Grephql,
         otp_app: :grephql,
         source: "../support/schemas/minimal.json"
 
-      @query ~g"query CurrentUser { user(id: \"1\") { name } }"
-
-      def query_struct, do: @query
+      defgql(:get_user, "query GetUser($id: ID!) { user(id: $id) { name email } }")
     end
 
-    test "has_variables? is false" do
-      assert NoVarsQuery.query_struct().has_variables? == false
-    end
-  end
-
-  describe "compile-time validation" do
-    test "raises CompileError for anonymous operation" do
-      assert_raise CompileError, ~r/requires a named operation/, fn ->
-        defmodule AnonOp do
-          use Grephql,
-            otp_app: :grephql,
-            source: "../support/schemas/minimal.json"
-
-          @query ~g"query { user(id: \"1\") { name } }"
-        end
-      end
-    end
-
-    test "raises CompileError on invalid query syntax" do
-      assert_raise CompileError, ~r/parse error/, fn ->
-        defmodule InvalidSyntax do
-          use Grephql,
-            otp_app: :grephql,
-            source: "../support/schemas/minimal.json"
-
-          @query ~g"query Bad { ??? }"
-        end
-      end
-    end
-
-    test "raises CompileError on validation error" do
-      assert_raise CompileError, ~r/validation errors/, fn ->
-        defmodule InvalidField do
-          use Grephql,
-            otp_app: :grephql,
-            source: "../support/schemas/minimal.json"
-
-          @query ~g"query Bad { nonExistentField { name } }"
-        end
-      end
-    end
-  end
-
-  describe "interpolation" do
-    defmodule InterpolatedQuery do
-      use Grephql,
-        otp_app: :grephql,
-        source: "../support/schemas/minimal.json"
-
-      @fields "name email"
-      @query ~g"query GetUser($id: ID!) { user(id: $id) { #{@fields} } }"
-
-      def query_struct, do: @query
-    end
-
-    test "supports module attribute interpolation" do
-      query = InterpolatedQuery.query_struct()
-      assert query.operation_name == "GetUser"
-      assert query.result_module == InterpolatedQuery.GetUser.Result
-    end
-
-    test "generates types from interpolated fields" do
-      user = struct(InterpolatedQuery.GetUser.Result.User, name: "Alice", email: "a@b.com")
-      assert user.name == "Alice"
-      assert user.email == "a@b.com"
+    test "plain string defgql generates function" do
+      assert function_exported?(PlainStringClient, :get_user, 2)
     end
   end
 end

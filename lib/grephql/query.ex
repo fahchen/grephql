@@ -2,7 +2,7 @@ defmodule Grephql.Query do
   @moduledoc """
   Represents a compiled GraphQL operation ready for execution.
 
-  Created at compile time by `defgql`/`defgqlp` or the `~GQL` sigil.
+  Created at compile time by `defgql`/`defgqlp`.
   Contains the query string, operation metadata, and references to
   generated type modules.
   """
