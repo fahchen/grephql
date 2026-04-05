@@ -2,6 +2,71 @@ defmodule Grephql.Macros do
   @moduledoc false
 
   @doc """
+  Compiles a GraphQL query string into a `%Grephql.Query{}` struct.
+
+  Unlike `defgql`, this does not generate a function — it returns
+  the compiled query struct for manual use. The operation must be named,
+  as the name is used to derive the type module namespace.
+
+  Supports string interpolation (lowercase sigil).
+
+  ## Examples
+
+      @query ~g"query GetUser($id: ID!) { user(id: $id) { name } }"
+
+      # With interpolation (module attributes only):
+      @user_fields "name email"
+      @query ~g"query GetUser($id: ID!) { user(id: $id) { \#{@user_fields} } }"
+  """
+  defmacro sigil_g(query_string, _modifiers) do
+    quote bind_quoted: [query_str: query_string] do
+      Grephql.Macros.__compile_sigil__(
+        query_str,
+        @grephql_schema,
+        __MODULE__,
+        @grephql_scalars
+      )
+    end
+  end
+
+  # Dialyzer cannot trace callers because this is only invoked inside
+  # `quote` blocks at macro expansion time, not at runtime.
+  @dialyzer [{:no_return, __compile_sigil__: 4}, {:no_contracts, __compile_sigil__: 4}]
+
+  @doc false
+  @spec __compile_sigil__(String.t(), Grephql.Schema.t(), module(), map()) :: Grephql.Query.t()
+  def __compile_sigil__(query_str, schema, client_module, scalar_types) do
+    document = parse_sigil!(query_str)
+    function_name = derive_function_name!(document)
+
+    Grephql.Compiler.compile_document!(document, query_str, schema,
+      client_module: client_module,
+      function_name: function_name,
+      scalar_types: scalar_types
+    )
+  end
+
+  defp parse_sigil!(query_str) do
+    case Grephql.Parser.parse(query_str) do
+      {:ok, document} -> document
+      {:error, reason} -> raise CompileError, description: "GraphQL parse error: #{reason}"
+    end
+  end
+
+  defp derive_function_name!(document) do
+    operation =
+      Enum.find(document.definitions, &match?(%Grephql.Language.OperationDefinition{}, &1))
+
+    unless operation && operation.name do
+      raise CompileError,
+        description: "~g sigil requires a named operation (e.g. query GetUser { ... })"
+    end
+
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    operation.name |> Macro.underscore() |> String.to_atom()
+  end
+
+  @doc """
   Defines a public GraphQL query function.
 
   At compile time, parses and validates the query, generates typed
