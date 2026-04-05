@@ -1,8 +1,8 @@
 | Term | Definition |
 |------|------------|
-| GQL sigil (~GQL) | Elixir sigil containing a GraphQL operation string; triggers compile-time validation against the introspection schema and returns a typed query struct |
+| GQL sigil (~GQL) | Uppercase Elixir sigil that returns a plain GraphQL string. Used with `defgql`/`defgqlp` to enable `mix format` formatting via `Grephql.Formatter` plugin. Does not support interpolation |
 | Client module | User-defined Elixir module that calls `use Grephql` to bind a schema source, compile-time options, and query definitions |
-| Query struct | The compiled representation of a ~GQL sigil, containing the GraphQL document string, result type information, and schema context |
+| Query struct | The compiled representation of a `defgql`/`defgqlp` definition, containing the GraphQL document string, result type information, and schema context |
 | Union dispatch | GraphQL union/interface type mapping via direct struct matching (`%User{} \| %Post{}`). Response JSON is deserialized into the matching embedded schema based on `__typename` |
 | Custom scalar mapping | User-defined configuration (in `use` options) that maps GraphQL custom scalar names to Ecto Type modules implementing `Ecto.Type` behaviour (`type/0`, `cast/1`, `dump/1`, `load/1`). Built-in Ecto Types under `Grephql.Types.*` are used as fallback when no explicit mapping is provided. Enum types also use Ecto Type for atom-string serialization |
 | source | Compile-time option specifying where to load the GraphQL introspection schema from: a file path or inline JSON string. Use `mix grephql.download_schema` to fetch from a remote endpoint |

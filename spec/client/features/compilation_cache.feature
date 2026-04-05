@@ -4,7 +4,7 @@ Feature: Compilation caching
   I want unchanged schemas and queries to be cached between compilations
   So that recompilation is fast when nothing has changed
 
-  Rule: Only types referenced by defgql or ~GQL are generated (on-demand)
+  Rule: Only types referenced by defgql/defgqlp are generated (on-demand)
 
     Scenario: Unreferenced schema types are not generated
       Given a schema with types "User", "Post", "Comment", and "Admin"

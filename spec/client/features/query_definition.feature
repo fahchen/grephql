@@ -26,37 +26,31 @@ Feature: GraphQL query definition and execution
       Then a private function internal_lookup is generated
       And the function is not callable from outside the module
 
-  Rule: ~GQL sigil returns a typed query struct for manual execution
+  Rule: ~GQL sigil returns a plain string for use with defgql
 
-    Scenario: Use sigil with Grephql.execute for custom control flow
+    Scenario: Use ~GQL heredoc with defgql for formatted queries
       Given a client module with a valid schema
-      And a module attribute @query assigned to ~GQL with "mutation($input: CreateUserInput!) { createUser(input: $input) { id } }"
-      When the developer calls Grephql.execute(@query, %{input: %{name: "Alice"}})
-      Then the mutation is sent via Req and a typed response is returned
-
-    Scenario: Use sigil for conditional query selection
-      Given two module attributes @brief and @detailed assigned to different ~GQL queries
-      When the developer selects one based on a runtime condition
-      And calls Grephql.execute with the selected query and variables
-      Then the chosen query is executed and a typed response is returned
+      When the developer defines defgql :create_user with ~GQL heredoc containing a mutation
+      Then the query is compiled and a function create_user/2 is generated
+      And the ~GQL sigil content can be formatted by mix format
 
   Rule: Grephql.execute takes query, variables, and optional opts (opts defaults to [])
 
     Scenario: Execute with variables and no options
-      Given a query struct from ~GQL
-      When the developer calls Grephql.execute(query, %{id: "123"})
+      Given a defgql function get_user defined with a valid query
+      When the developer calls get_user(%{id: "123"})
       Then the query is executed with default options from the runtime config
 
     Scenario: Execute with empty variables and custom options
-      Given a query struct from ~GQL for a no-variable query
-      When the developer calls Grephql.execute(query, %{}, endpoint: "https://staging.example.com/graphql")
+      Given a defgql function current_user defined with a no-variable query
+      When the developer calls current_user(endpoint: "https://staging.example.com/graphql")
       Then the query is executed against the overridden endpoint
 
-  Rule: Fragments are reused via string interpolation
+  Rule: Fragments are reused via string interpolation in plain strings
 
-    Scenario: Interpolate a fragment string into a query
-      Given a variable user_fields containing "name email"
-      When the developer writes ~GQL with "query { user { #{user_fields} } }"
+    Scenario: Interpolate a fragment string into a defgql query
+      Given a module attribute @user_fields containing "name email"
+      When the developer defines defgql :get_user with "query { user { #{@user_fields} } }"
       Then the interpolated query is validated and compiled
 
   Rule: Response distinguishes GraphQL-level results from transport errors
@@ -93,7 +87,7 @@ Feature: GraphQL query definition and execution
       When the developer calls get_user(%{id: "123"}, endpoint: "https://staging.example.com/graphql")
       Then the query is sent to the staging endpoint
 
-    Scenario: Grephql.execute overrides endpoint via opts
-      Given a query struct from ~GQL
-      When the developer calls Grephql.execute(query, %{}, endpoint: "https://staging.example.com/graphql")
+    Scenario: defgql function overrides endpoint via opts (execute path)
+      Given a defgql function get_user defined with a valid query
+      When the developer calls get_user(%{id: "123"}, endpoint: "https://staging.example.com/graphql")
       Then the query is sent to the staging endpoint

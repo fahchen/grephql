@@ -46,9 +46,23 @@ defmodule MyApp.GitHub do
     source: "priv/schemas/github.json",
     endpoint: "https://api.github.com/graphql"
 
-  defgql :get_user, "query GetUser($login: String!) { user(login: $login) { name bio } }"
+  defgql :get_user, ~GQL"""
+  query GetUser($login: String!) {
+    user(login: $login) {
+      name
+      bio
+    }
+  }
+  """
 
-  defgql :get_viewer, "query { viewer { login email } }"
+  defgql :get_viewer, ~GQL"""
+  query {
+    viewer {
+      login
+      email
+    }
+  }
+  """
 end
 ```
 
@@ -109,33 +123,11 @@ MyApp.GitHub.get_user(%{login: "octocat"},
 )
 ```
 
-## The `~g` Sigil
+## The `~GQL` Sigil and Formatter
 
-For cases where you need the compiled query struct without a generated function, use the `~g` sigil:
+The `~GQL` sigil marks GraphQL strings for automatic formatting by `mix format`. Plain strings still work with `defgql` — `~GQL` is optional.
 
-```elixir
-defmodule MyApp.GitHub do
-  use Grephql,
-    otp_app: :my_app,
-    source: "priv/schemas/github.json"
-
-  @query ~g"query GetUser($login: String!) { user(login: $login) { name } }"
-
-  def run do
-    Grephql.execute(@query, %{login: "octocat"})
-  end
-end
-```
-
-The operation must be named (`query GetUser`, not just `query`).
-
-## Formatter Plugin
-
-Grephql includes a formatter plugin that automatically formats GraphQL code inside `~G` sigils when you run `mix format`. Use `~G` (uppercase, non-interpolating) for formatter support, or `~g` (lowercase) when you need string interpolation.
-
-### Setup
-
-Add the plugin to your `.formatter.exs`:
+Add the formatter plugin to your `.formatter.exs`:
 
 ```elixir
 [
@@ -144,7 +136,7 @@ Add the plugin to your `.formatter.exs`:
 ]
 ```
 
-Or if using Grephql as a dependency:
+Or via dependency import:
 
 ```elixir
 [
@@ -157,10 +149,10 @@ Or if using Grephql as a dependency:
 
 ```elixir
 # Before
-@query ~G"query GetUser($id: ID!) { user(id: $id) { name email posts { title } } }"
+defgql :get_user, ~GQL"query GetUser($id: ID!) { user(id: $id) { name email posts { title } } }"
 
 # After mix format
-@query ~G"query GetUser($id: ID!) {
+defgql :get_user, ~GQL"query GetUser($id: ID!) {
   user(id: $id) {
     name
     email
@@ -170,8 +162,6 @@ Or if using Grephql as a dependency:
   }
 }"
 ```
-
-> **Note:** The Elixir formatter plugin system only supports uppercase sigils (`~G`). Lowercase `~g` sigils (which support interpolation) are not formatted by `mix format`.
 
 ## Custom Scalars
 
@@ -194,7 +184,7 @@ use Grephql,
 Union and interface types are resolved at decode time using the `__typename` field:
 
 ```elixir
-defgql :search, """
+defgql :search, ~GQL"""
 query Search($q: String!) {
   search(query: $q) {
     ... on User { name }
