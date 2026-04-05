@@ -1,0 +1,41 @@
+defmodule Grephql.Formatter do
+  @moduledoc """
+  Formatter plugin for the `~G` sigil.
+
+  Formats GraphQL code inside `~G` sigils when running `mix format`.
+
+  ## Setup
+
+  Add to your `.formatter.exs`:
+
+      [
+        plugins: [Grephql.Formatter],
+        # ...
+      ]
+
+  Or if using Grephql as a dependency:
+
+      [
+        import_deps: [:grephql],
+        # ...
+      ]
+  """
+
+  @behaviour Mix.Tasks.Format
+
+  @impl Mix.Tasks.Format
+  def features(_opts) do
+    [sigils: [:G]]
+  end
+
+  @impl Mix.Tasks.Format
+  def format(contents, _opts) do
+    case Grephql.Parser.parse(contents) do
+      {:ok, document} -> Grephql.Printer.print(document)
+      {:error, _reason} -> contents
+    end
+  rescue
+    # Parser.parse/1 raises FunctionClauseError on edge cases like empty strings
+    FunctionClauseError -> contents
+  end
+end

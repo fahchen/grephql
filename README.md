@@ -129,6 +129,50 @@ end
 
 The operation must be named (`query GetUser`, not just `query`).
 
+## Formatter Plugin
+
+Grephql includes a formatter plugin that automatically formats GraphQL code inside `~G` sigils when you run `mix format`. Use `~G` (uppercase, non-interpolating) for formatter support, or `~g` (lowercase) when you need string interpolation.
+
+### Setup
+
+Add the plugin to your `.formatter.exs`:
+
+```elixir
+[
+  plugins: [Grephql.Formatter],
+  # ...
+]
+```
+
+Or if using Grephql as a dependency:
+
+```elixir
+[
+  import_deps: [:grephql],
+  # ...
+]
+```
+
+### Before / After
+
+```elixir
+# Before
+@query ~G"query GetUser($id: ID!) { user(id: $id) { name email posts { title } } }"
+
+# After mix format
+@query ~G"query GetUser($id: ID!) {
+  user(id: $id) {
+    name
+    email
+    posts {
+      title
+    }
+  }
+}"
+```
+
+> **Note:** The Elixir formatter plugin system only supports uppercase sigils (`~G`). Lowercase `~g` sigils (which support interpolation) are not formatted by `mix format`.
+
 ## Custom Scalars
 
 Map GraphQL custom scalars to Ecto types via the `:scalars` option:

@@ -18,7 +18,19 @@ defmodule Grephql.Macros do
       @user_fields "name email"
       @query ~g"query GetUser($id: ID!) { user(id: $id) { \#{@user_fields} } }"
   """
-  defmacro sigil_g(query_string, _modifiers) do
+  defmacro sigil_g(query_string, modifiers), do: compile_sigil_ast(query_string, modifiers)
+
+  @doc """
+  Non-interpolating version of `~g`. Formatted by `mix format`
+  when `Grephql.Formatter` plugin is enabled.
+
+  ## Examples
+
+      @query ~G"query GetUser($id: ID!) { user(id: $id) { name } }"
+  """
+  defmacro sigil_G(query_string, modifiers), do: compile_sigil_ast(query_string, modifiers)
+
+  defp compile_sigil_ast(query_string, _modifiers) do
     quote bind_quoted: [query_str: query_string] do
       Grephql.Macros.__compile_sigil__(
         query_str,
