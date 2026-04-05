@@ -178,6 +178,103 @@ defmodule Grephql.TypeGeneratorTest do
     end
   end
 
+  describe "union/interface with inline fragments" do
+    test "generates per-fragment structs with shared fields merged" do
+      schema = schema_with_union()
+
+      operation =
+        parse!("query { search { __typename id ... on User { email } ... on Post { title } } }")
+
+      modules =
+        TypeGenerator.generate(operation, schema,
+          client_module: Grephql.Test.Union,
+          function_name: :search
+        )
+
+      assert Grephql.Test.Union.Search in modules
+      assert Grephql.Test.Union.Search.Search.User in modules
+      assert Grephql.Test.Union.Search.Search.Post in modules
+
+      # User struct has shared fields + own fields
+      user_fields = Grephql.Test.Union.Search.Search.User.__schema__(:fields)
+      assert :__typename in user_fields
+      assert :id in user_fields
+      assert :email in user_fields
+
+      # Post struct has shared fields + own fields
+      post_fields = Grephql.Test.Union.Search.Search.Post.__schema__(:fields)
+      assert :__typename in post_fields
+      assert :id in post_fields
+      assert :title in post_fields
+    end
+
+    test "union field uses parameterized type, not embed" do
+      schema = schema_with_union()
+
+      operation =
+        parse!("query { search { __typename ... on User { email } ... on Post { title } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.UnionField,
+        function_name: :search
+      )
+
+      # search field should be a regular field (parameterized type), not an embed
+      embeds = Grephql.Test.UnionField.Search.__schema__(:embeds)
+      refute :search in embeds
+
+      fields = Grephql.Test.UnionField.Search.__schema__(:fields)
+      assert :search in fields
+    end
+
+    test "end-to-end decode with union field" do
+      schema = schema_with_union()
+
+      operation =
+        parse!("query { search { __typename id ... on User { email } ... on Post { title } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.UnionE2E,
+        function_name: :search
+      )
+
+      json = %{
+        "search" => [
+          %{"__typename" => "User", "id" => "1", "email" => "a@b.com"},
+          %{"__typename" => "Post", "id" => "2", "title" => "Hello"}
+        ]
+      }
+
+      result = Grephql.ResponseDecoder.decode!(Grephql.Test.UnionE2E.Search, json)
+
+      [user, post] = result.search
+      assert %{__struct__: Grephql.Test.UnionE2E.Search.Search.User} = user
+      assert user.id == "1"
+      assert user.email == "a@b.com"
+      assert %{__struct__: Grephql.Test.UnionE2E.Search.Search.Post} = post
+      assert post.id == "2"
+      assert post.title == "Hello"
+    end
+
+    test "single union field (not list) uses field with union type" do
+      schema = schema_with_single_union()
+
+      operation =
+        parse!("query { node { __typename ... on User { name } ... on Post { title } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.SingleUnion,
+        function_name: :get_node
+      )
+
+      json = %{"node" => %{"__typename" => "User", "name" => "Alice"}}
+      result = Grephql.ResponseDecoder.decode!(Grephql.Test.SingleUnion.GetNode, json)
+
+      assert %{__struct__: Grephql.Test.SingleUnion.GetNode.Node.User} = result.node
+      assert result.node.name == "Alice"
+    end
+  end
+
   # Helpers
 
   defp parse!(query) do
@@ -290,5 +387,125 @@ defmodule Grephql.TypeGeneratorTest do
         }
       }
     })
+  end
+
+  defp schema_with_union do
+    types =
+      Map.merge(SchemaHelper.default_types(), %{
+        "Query" => %Type{
+          kind: :object,
+          name: "Query",
+          fields: %{
+            "search" => %SchemaField{
+              name: "search",
+              type: %TypeRef{
+                kind: :non_null,
+                of_type: %TypeRef{
+                  kind: :list,
+                  of_type: %TypeRef{kind: :union, name: "SearchResult"}
+                }
+              }
+            }
+          }
+        },
+        "SearchResult" => %Type{
+          kind: :union,
+          name: "SearchResult",
+          possible_types: ["User", "Post"]
+        },
+        "User" => %Type{
+          kind: :object,
+          name: "User",
+          fields: %{
+            "__typename" => %SchemaField{
+              name: "__typename",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "String"}}
+            },
+            "id" => %SchemaField{
+              name: "id",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+            },
+            "email" => %SchemaField{
+              name: "email",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            },
+            "name" => %SchemaField{
+              name: "name",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            }
+          }
+        },
+        "Post" => %Type{
+          kind: :object,
+          name: "Post",
+          fields: %{
+            "__typename" => %SchemaField{
+              name: "__typename",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "String"}}
+            },
+            "id" => %SchemaField{
+              name: "id",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+            },
+            "title" => %SchemaField{
+              name: "title",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            }
+          }
+        }
+      })
+
+    SchemaHelper.build_schema(types: types)
+  end
+
+  defp schema_with_single_union do
+    types =
+      Map.merge(SchemaHelper.default_types(), %{
+        "Query" => %Type{
+          kind: :object,
+          name: "Query",
+          fields: %{
+            "node" => %SchemaField{
+              name: "node",
+              type: %TypeRef{kind: :union, name: "Node"}
+            }
+          }
+        },
+        "Node" => %Type{
+          kind: :union,
+          name: "Node",
+          possible_types: ["User", "Post"]
+        },
+        "User" => %Type{
+          kind: :object,
+          name: "User",
+          fields: %{
+            "__typename" => %SchemaField{
+              name: "__typename",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "String"}}
+            },
+            "name" => %SchemaField{
+              name: "name",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            }
+          }
+        },
+        "Post" => %Type{
+          kind: :object,
+          name: "Post",
+          fields: %{
+            "__typename" => %SchemaField{
+              name: "__typename",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "String"}}
+            },
+            "title" => %SchemaField{
+              name: "title",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            }
+          }
+        }
+      })
+
+    SchemaHelper.build_schema(types: types)
   end
 end
