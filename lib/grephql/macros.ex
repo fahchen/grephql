@@ -73,6 +73,27 @@ defmodule Grephql.Macros do
     define_query_function(kind, func_name, query_str)
   end
 
+  # Handle interpolated strings — the AST is {:<<>>, _, parts} instead of a binary.
+  # Use bind_quoted to let the interpolation evaluate at compile time.
+  defp define_query_function(kind, func_name, {:<<>>, _meta, _parts} = query_str_ast)
+       when is_atom(func_name) do
+    function_ast = build_function_ast(kind, func_name)
+
+    quote bind_quoted: [func_name: func_name, query_str: query_str_ast],
+          unquote: true do
+      @grephql_query Grephql.Compiler.compile!(
+                       query_str,
+                       @grephql_schema,
+                       client_module: __MODULE__,
+                       function_name: func_name,
+                       scalar_types: @grephql_scalars,
+                       caller_env: __ENV__
+                     )
+
+      unquote(function_ast)
+    end
+  end
+
   defp define_query_function(kind, func_name, query_str)
        when is_atom(func_name) and is_binary(query_str) do
     function_ast = build_function_ast(kind, func_name)

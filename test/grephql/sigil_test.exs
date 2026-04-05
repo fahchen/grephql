@@ -58,7 +58,7 @@ defmodule Grephql.SigilTest do
     end
   end
 
-  describe "defgql with plain string still works" do
+  describe "defgql with plain string" do
     defmodule PlainStringClient do
       use Grephql,
         otp_app: :grephql,
@@ -67,8 +67,21 @@ defmodule Grephql.SigilTest do
       defgql(:get_user, "query GetUser($id: ID!) { user(id: $id) { name email } }")
     end
 
-    test "plain string defgql generates function" do
+    test "plain string generates function" do
       assert function_exported?(PlainStringClient, :get_user, 2)
+    end
+
+    test "plain string with interpolation generates function" do
+      defmodule InterpolatedClient do
+        use Grephql,
+          otp_app: :grephql,
+          source: "../support/schemas/minimal.json"
+
+        @fields "name email"
+        defgql(:get_user, "query GetUser($id: ID!) { user(id: $id) { #{@fields} } }")
+      end
+
+      assert function_exported?(InterpolatedClient, :get_user, 2)
     end
   end
 end
