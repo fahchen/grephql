@@ -256,6 +256,44 @@ defmodule Grephql.TypeGeneratorTest do
       assert post.title == "Hello"
     end
 
+    test "auto-injects __typename when not queried" do
+      schema = schema_with_single_union()
+
+      operation =
+        parse!("query { node { ... on User { name } ... on Post { title } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.AutoTypename,
+        function_name: :get_node
+      )
+
+      # __typename is auto-injected into each fragment struct
+      user_fields = Grephql.Test.AutoTypename.GetNode.Node.User.__schema__(:fields)
+      assert :__typename in user_fields
+
+      json = %{"node" => %{"__typename" => "User", "name" => "Alice"}}
+      result = Grephql.ResponseDecoder.decode!(Grephql.Test.AutoTypename.GetNode, json)
+
+      assert %{__struct__: Grephql.Test.AutoTypename.GetNode.Node.User} = result.node
+      assert result.node.name == "Alice"
+    end
+
+    test "does not duplicate __typename when already queried" do
+      schema = schema_with_single_union()
+
+      operation =
+        parse!("query { node { __typename ... on User { name } ... on Post { title } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.NoDupTypename,
+        function_name: :get_node
+      )
+
+      user_fields = Grephql.Test.NoDupTypename.GetNode.Node.User.__schema__(:fields)
+      typename_count = Enum.count(user_fields, &(&1 == :__typename))
+      assert typename_count == 1
+    end
+
     test "single union field (not list) uses field with union type" do
       schema = schema_with_single_union()
 

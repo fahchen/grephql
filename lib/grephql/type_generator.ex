@@ -108,6 +108,8 @@ defmodule Grephql.TypeGenerator do
          parent_module,
          context
        ) do
+    shared_fields = ensure_typename(shared_fields)
+
     {typename_to_module, all_modules} =
       Enum.reduce(inline_fragments, {%{}, []}, fn fragment, {type_map, mods_acc} ->
         type_name = fragment.type_condition.name
@@ -129,6 +131,14 @@ defmodule Grephql.TypeGenerator do
     Grephql.Types.Union.define(union_module, typename_to_module)
 
     {union_module, List.flatten(:lists.reverse(all_modules))}
+  end
+
+  defp ensure_typename(shared_fields) do
+    if Enum.any?(shared_fields, &(&1.name == "__typename")) do
+      shared_fields
+    else
+      [%QueryField{name: "__typename"} | shared_fields]
+    end
   end
 
   defp build_field_def(field, atom_name, field_name, resolved, parent_module, context) do
