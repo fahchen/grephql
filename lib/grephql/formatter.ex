@@ -1,8 +1,8 @@
 defmodule Grephql.Formatter do
   @moduledoc """
-  Formatter plugin for the `~G` sigil.
+  Formatter plugin for the `~GQL` sigil.
 
-  Formats GraphQL code inside `~G` sigils when running `mix format`.
+  Formats GraphQL code inside `~GQL` sigils when running `mix format`.
 
   ## Setup
 
@@ -25,7 +25,7 @@ defmodule Grephql.Formatter do
 
   @impl Mix.Tasks.Format
   def features(_opts) do
-    [sigils: [:G]]
+    [sigils: [:GQL]]
   end
 
   @impl Mix.Tasks.Format

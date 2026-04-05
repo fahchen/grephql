@@ -156,7 +156,7 @@ Plain strings still work with `defgql` — `~GQL` is optional and only needed fo
 
 ## Formatter Plugin
 
-Grephql includes a formatter plugin that automatically formats GraphQL code inside `~G` sigils when you run `mix format`. Use `~G` (uppercase, non-interpolating) for formatter support, or `~g` (lowercase) when you need string interpolation.
+Grephql includes a formatter plugin that automatically formats GraphQL code inside `~GQL` sigils when you run `mix format`.
 
 ### Setup
 
@@ -182,10 +182,10 @@ Or if using Grephql as a dependency:
 
 ```elixir
 # Before
-@query ~G"query GetUser($id: ID!) { user(id: $id) { name email posts { title } } }"
+defgql :get_user, ~GQL"query GetUser($id: ID!) { user(id: $id) { name email posts { title } } }"
 
 # After mix format
-@query ~G"query GetUser($id: ID!) {
+defgql :get_user, ~GQL"query GetUser($id: ID!) {
   user(id: $id) {
     name
     email
@@ -195,8 +195,6 @@ Or if using Grephql as a dependency:
   }
 }"
 ```
-
-> **Note:** The Elixir formatter plugin system only supports uppercase sigils (`~G`). Lowercase `~g` sigils (which support interpolation) are not formatted by `mix format`.
 
 ## Custom Scalars
 
