@@ -1,4 +1,7 @@
 # Grephql
+[![Build Status](https://github.com/fahchen/grephql/actions/workflows/ci.yml/badge.svg)](https://github.com/fahchen/grephql/actions/workflows/ci.yml)
+[![Hex.pm](https://img.shields.io/hexpm/v/grephql)](https://hex.pm/packages/grephql)
+[![HexDocs](https://img.shields.io/badge/HexDocs-gray)](https://hexdocs.pm/grephql)
 
 Compile-time GraphQL client for Elixir. Parses and validates queries during compilation, generates typed Ecto embedded schemas for responses and variables, and executes queries at runtime via [Req](https://github.com/wojtekmach/req).
 
@@ -17,7 +20,7 @@ Add `grephql` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:grephql, "~> 0.1.0"}
+    {:grephql, "~> 0.2.0"}
   ]
 end
 ```

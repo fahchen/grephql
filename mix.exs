@@ -1,7 +1,7 @@
 defmodule Grephql.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.2.0"
   @source_url "https://github.com/fahchen/grephql"
 
   def project do
@@ -61,8 +61,11 @@ defmodule Grephql.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url},
-      files: ~w(lib src/*.yrl .formatter.exs mix.exs README.md LICENSE NOTICE CHANGELOG.md)
+      links: %{
+        "GitHub" => @source_url,
+        "Hex" => "https://hex.pm/packages/grephql"
+      },
+      files: ~w(lib src/*.yrl .formatter.exs mix.exs README.md LICENSE NOTICE)
     ]
   end
 
@@ -73,7 +76,6 @@ defmodule Grephql.MixProject do
       source_url: @source_url,
       extras: [
         {"README.md", [title: "Introduction"]},
-        {"CHANGELOG.md", [title: "Changelog"]},
         {"LICENSE", [title: "License"]}
       ],
       skip_undefined_reference_warnings_on: [
