@@ -40,6 +40,7 @@ defmodule Grephql.MixProject do
       {:ecto, "~> 3.12"},
       {:ecto_typed_schema, "~> 0.1.0"},
       {:typed_structor, "~> 0.6"},
+      {:plug, "~> 1.0", only: :test},
       {:mimic, "~> 2.3", only: :test},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false}

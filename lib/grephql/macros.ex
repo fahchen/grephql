@@ -66,6 +66,15 @@ defmodule Grephql.Macros do
     operation.name |> Macro.underscore() |> String.to_atom()
   end
 
+  @doc false
+  @spec __execute_with_variables__(Grephql.Query.t(), map(), keyword()) ::
+          {:ok, Grephql.Result.t()} | {:error, Ecto.Changeset.t() | Req.Response.t()}
+  def __execute_with_variables__(%Grephql.Query{} = query, variables, opts) do
+    with {:ok, struct} <- query.variables_module.build(variables) do
+      Grephql.execute(query, struct, opts)
+    end
+  end
+
   @doc """
   Defines a public GraphQL query function.
 
@@ -160,7 +169,7 @@ defmodule Grephql.Macros do
   defp func_with_variables_ast(:def, name) do
     quote do
       def unquote(name)(variables, opts \\ []) do
-        Grephql.execute(@grephql_query, variables, opts)
+        Grephql.Macros.__execute_with_variables__(@grephql_query, variables, opts)
       end
     end
   end
@@ -168,7 +177,7 @@ defmodule Grephql.Macros do
   defp func_with_variables_ast(:defp, name) do
     quote do
       defp unquote(name)(variables, opts \\ []) do
-        Grephql.execute(@grephql_query, variables, opts)
+        Grephql.Macros.__execute_with_variables__(@grephql_query, variables, opts)
       end
     end
   end
