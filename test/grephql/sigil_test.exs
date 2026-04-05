@@ -7,7 +7,11 @@ defmodule Grephql.SigilTest do
         otp_app: :grephql,
         source: "../support/schemas/minimal.json"
 
-      @gql_string ~GQL"query GetUser($id: ID!) { user(id: $id) { name } }"
+      @gql_string ~GQL"query GetUser($id: ID!) {
+  user(id: $id) {
+    name
+  }
+}"
 
       def gql_string, do: @gql_string
     end
