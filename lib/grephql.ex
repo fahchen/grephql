@@ -41,6 +41,8 @@ defmodule Grephql do
   """
 
   alias Grephql.Query
+  alias Grephql.ResponseDecoder
+  alias Grephql.Result
   alias Grephql.Schema.Loader
 
   @use_config_keys [:endpoint, :req_options]
@@ -106,16 +108,68 @@ defmodule Grephql do
   Executes a compiled GraphQL query.
 
   Takes a `%Grephql.Query{}` struct (produced by `defgql` or `~GQL`),
-  a map of variables, and optional keyword options.
+  a variables struct (built by `Variables.build/1`), and optional keyword options.
 
   Options override runtime config which overrides compile-time defaults.
   """
   @spec execute(Query.t(), struct() | map(), keyword()) ::
-          {:ok, Grephql.Result.t()} | {:error, Req.Response.t() | :not_implemented}
+          {:ok, Result.t()} | {:error, Req.Response.t()}
   def execute(query, variables \\ %{}, opts \\ [])
 
-  def execute(%Query{} = _query, _variables, _opts) do
-    {:error, :not_implemented}
+  def execute(%Query{} = query, variables, opts) do
+    config = resolve_config(query.client_module, opts)
+
+    endpoint =
+      config[:endpoint] ||
+        raise ArgumentError, "Grephql: :endpoint is required but was not configured"
+
+    req_options = Keyword.get(config, :req_options, [])
+
+    variables_json = dump_variables(variables)
+
+    body = %{query: query.document, variables: variables_json}
+
+    body =
+      if query.operation_name, do: Map.put(body, :operationName, query.operation_name), else: body
+
+    response =
+      [url: endpoint, json: body]
+      |> Req.new()
+      |> Req.merge(req_options)
+      |> Req.post!()
+
+    case response.status do
+      status when status >= 200 and status <= 299 ->
+        decode_response(response.body, query.result_module)
+
+      _other ->
+        {:error, response}
+    end
+  end
+
+  defp dump_variables(%{__struct__: _module} = variables) do
+    Ecto.embedded_dump(variables, :json)
+  end
+
+  defp dump_variables(variables) when is_map(variables), do: variables
+
+  defp decode_response(body, result_module) when is_map(body) do
+    data =
+      case Map.get(body, "data") do
+        data when is_map(data) -> ResponseDecoder.decode!(result_module, data)
+        _nil_or_absent -> nil
+      end
+
+    errors =
+      body
+      |> Map.get("errors", [])
+      |> Enum.map(&Grephql.Error.from_json/1)
+
+    {:ok, %Result{data: data, errors: errors}}
+  end
+
+  defp decode_response(body, result_module) when is_binary(body) do
+    body |> Jason.decode!() |> decode_response(result_module)
   end
 
   @doc false

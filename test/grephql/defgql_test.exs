@@ -7,7 +7,8 @@ defmodule Grephql.DefgqlTest do
     defmodule WithVariables do
       use Grephql,
         otp_app: :grephql,
-        source: "../support/schemas/minimal.json"
+        source: "../support/schemas/minimal.json",
+        endpoint: "https://api.example.com/graphql"
 
       defgql(:get_user, "query GetUser($id: ID!) { user(id: $id) { name email } }")
     end
@@ -17,8 +18,8 @@ defmodule Grephql.DefgqlTest do
       assert function_exported?(WithVariables, :get_user, 1)
     end
 
-    test "function returns execute result" do
-      assert {:error, :not_implemented} = WithVariables.get_user(%{id: "1"})
+    test "validates variables before executing" do
+      assert {:error, %Ecto.Changeset{}} = WithVariables.get_user(%{})
     end
 
     test "generates output type modules" do
@@ -32,7 +33,8 @@ defmodule Grephql.DefgqlTest do
     defmodule WithoutVariables do
       use Grephql,
         otp_app: :grephql,
-        source: "../support/schemas/minimal.json"
+        source: "../support/schemas/minimal.json",
+        endpoint: "https://api.example.com/graphql"
 
       defgql(:get_user, "query { user(id: \"1\") { name } }")
     end
@@ -41,17 +43,14 @@ defmodule Grephql.DefgqlTest do
       assert function_exported?(WithoutVariables, :get_user, 1)
       assert function_exported?(WithoutVariables, :get_user, 0)
     end
-
-    test "function returns execute result" do
-      assert {:error, :not_implemented} = WithoutVariables.get_user()
-    end
   end
 
   describe "defgqlp" do
     defmodule PrivateQuery do
       use Grephql,
         otp_app: :grephql,
-        source: "../support/schemas/minimal.json"
+        source: "../support/schemas/minimal.json",
+        endpoint: "https://api.example.com/graphql"
 
       defgqlp(:get_user_private, "query($id: ID!) { user(id: $id) { name } }")
 
@@ -62,8 +61,8 @@ defmodule Grephql.DefgqlTest do
       refute function_exported?(PrivateQuery, :get_user_private, 2)
     end
 
-    test "private function is callable from within the module" do
-      assert {:error, :not_implemented} = PrivateQuery.call_private(%{id: "1"})
+    test "validates variables in private function" do
+      assert {:error, %Ecto.Changeset{}} = PrivateQuery.call_private(%{})
     end
   end
 
