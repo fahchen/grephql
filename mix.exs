@@ -76,6 +76,11 @@ defmodule Grephql.MixProject do
         {"CHANGELOG.md", [title: "Changelog"]},
         {"LICENSE", [title: "License"]}
       ],
+      skip_undefined_reference_warnings_on: [
+        "Grephql.TypeMapper",
+        "Grephql.TypeGenerator",
+        "Grephql.InputTypeGenerator"
+      ],
       groups_for_modules: [
         "Core API": [
           Grephql,
@@ -86,6 +91,9 @@ defmodule Grephql.MixProject do
         "Type System": [
           Grephql.EmbeddedSchema,
           Grephql.ResponseDecoder,
+          Grephql.TypeMapper,
+          Grephql.TypeGenerator,
+          Grephql.InputTypeGenerator,
           Grephql.Types.DateTime,
           Grephql.Types.Enum,
           Grephql.Types.Union,

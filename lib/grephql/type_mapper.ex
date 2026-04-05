@@ -1,5 +1,23 @@
 defmodule Grephql.TypeMapper do
-  @moduledoc false
+  @moduledoc """
+  Maps GraphQL type references to Ecto schema types.
+
+  Resolves the corresponding Ecto type (for embedded schema field definitions)
+  and nullability from a parsed GraphQL type reference.
+
+  ## Scalar mapping
+
+  Built-in GraphQL scalars map to Ecto primitives:
+
+    - `String` → `:string`
+    - `Int` → `:integer`
+    - `Float` → `:float`
+    - `Boolean` → `:boolean`
+    - `ID` → `:string`
+
+  Custom scalars map to user-provided Ecto Type modules via the `scalar_types` config.
+  Custom scalars override built-in defaults. Unknown scalars raise `ArgumentError`.
+  """
 
   alias Grephql.Schema.TypeRef
 
