@@ -12,7 +12,13 @@ defmodule Grephql do
           otp_app: :my_app,
           source: "priv/schemas/github.json"
 
-        defgql :get_user, ~GQL"query($login: String!) { user(login: $login) { name } }"
+        defgql :get_user, ~GQL\"\"\"
+          query($login: String!) {
+            user(login: $login) {
+              name
+            }
+          }
+        \"\"\"
       end
 
   ## Options

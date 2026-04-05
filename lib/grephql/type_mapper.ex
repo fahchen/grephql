@@ -1,9 +1,9 @@
 defmodule Grephql.TypeMapper do
   @moduledoc """
-  Maps GraphQL `TypeRef` to Ecto schema types and Elixir typespecs.
+  Maps GraphQL type references to Ecto schema types.
 
-  Given a `Schema.TypeRef`, resolves the corresponding Ecto type (for embedded
-  schema field definitions) and Elixir typespec AST (for `@type t()`).
+  Resolves the corresponding Ecto type (for embedded schema field definitions)
+  and nullability from a parsed GraphQL type reference.
 
   ## Scalar mapping
 
@@ -15,7 +15,7 @@ defmodule Grephql.TypeMapper do
     - `Boolean` → `:boolean`
     - `ID` → `:string`
 
-  Custom scalars map to user-provided Ecto Type modules via the `scalar_types` config.
+  Custom scalars map to user-provided `Ecto.Type` modules via the `scalar_types` config.
   Custom scalars override built-in defaults. Unknown scalars raise `ArgumentError`.
   """
 
@@ -47,7 +47,7 @@ defmodule Grephql.TypeMapper do
         }
 
   @doc """
-  Resolves a GraphQL `TypeRef` to its Ecto type and nullability.
+  Resolves a GraphQL type reference to its Ecto type and nullability.
 
   Returns a map with:
     - `:ecto_type` — the Ecto type for schema field definition
@@ -55,7 +55,7 @@ defmodule Grephql.TypeMapper do
 
   ## Parameters
 
-    - `type_ref` — the `Schema.TypeRef` to resolve
+    - `type_ref` — the GraphQL type reference to resolve
     - `scalar_types` — user-provided custom scalar mappings (default: `%{}`)
   """
   @spec resolve(TypeRef.t(), scalar_types()) :: resolve_result()

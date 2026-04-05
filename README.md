@@ -47,21 +47,21 @@ defmodule MyApp.GitHub do
     endpoint: "https://api.github.com/graphql"
 
   defgql :get_user, ~GQL"""
-  query GetUser($login: String!) {
-    user(login: $login) {
-      name
-      bio
+    query GetUser($login: String!) {
+      user(login: $login) {
+        name
+        bio
+      }
     }
-  }
   """
 
   defgql :get_viewer, ~GQL"""
-  query {
-    viewer {
-      login
-      email
+    query {
+      viewer {
+        login
+        email
+      }
     }
-  }
   """
 end
 ```
@@ -152,15 +152,17 @@ Or via dependency import:
 defgql :get_user, ~GQL"query GetUser($id: ID!) { user(id: $id) { name email posts { title } } }"
 
 # After mix format
-defgql :get_user, ~GQL"query GetUser($id: ID!) {
-  user(id: $id) {
-    name
-    email
-    posts {
-      title
+defgql :get_user, ~GQL"""
+  query GetUser($id: ID!) {
+    user(id: $id) {
+      name
+      email
+      posts {
+        title
+      }
     }
   }
-}"
+"""
 ```
 
 ## Custom Scalars
@@ -185,12 +187,16 @@ Union and interface types are resolved at decode time using the `__typename` fie
 
 ```elixir
 defgql :search, ~GQL"""
-query Search($q: String!) {
-  search(query: $q) {
-    ... on User { name }
-    ... on Repository { fullName }
+  query Search($q: String!) {
+    search(query: $q) {
+      ... on User {
+        name
+      }
+      ... on Repository {
+        fullName
+      }
+    }
   }
-}
 """
 ```
 
