@@ -1,0 +1,17 @@
+name: Publish to Hex
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflows/actions/setup
+      - run: mix hex.build
+      - run: mix hex.publish --yes --replace
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
