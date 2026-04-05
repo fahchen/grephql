@@ -20,7 +20,11 @@ defmodule Grephql.InputTypeGeneratorTest do
               Grephql.Test.Var.Mixed.Inputs.CreateUserInput,
               Grephql.Test.Var.Mixed.CreateUser.Variables,
               Grephql.Test.Var.Dump.Inputs.CreateUserInput,
-              Grephql.Test.Var.Dump.CreateUser.Variables
+              Grephql.Test.Var.Dump.CreateUser.Variables,
+              Grephql.Test.Var.Params.GetUser.Variables,
+              Grephql.Test.Var.ParamsEmbed.Inputs.CreateUserInput,
+              Grephql.Test.Var.ParamsEmbed.CreateUser.Variables,
+              Grephql.Test.Input.Params.Inputs.CreateUserInput
             ]}
 
   alias Grephql.InputTypeGenerator
@@ -345,6 +349,67 @@ defmodule Grephql.InputTypeGeneratorTest do
 
       assert dumped[:input][:name] == "Alice"
       assert dumped[:input][:email] == "a@b.com"
+    end
+  end
+
+  describe "params() type generation" do
+    test "Variables module with params() compiles successfully" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!("query GetUser($id: ID!) { user(id: $id) { name } }")
+
+      # params() type is injected at compilation — if this doesn't raise, it compiled
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: Grephql.Test.Var.Params,
+          function_name: :get_user,
+          scalar_types: %{}
+        )
+
+      # Module is functional with build/1
+      assert {:ok, vars} = variables_module.build(%{id: "123"})
+      assert vars.id == "123"
+    end
+
+    test "Input type modules with params() compile successfully" do
+      schema = schema_with_input()
+
+      operation =
+        parse!(
+          "mutation CreateUser($input: CreateUserInput!) { createUser(input: $input) { name } }"
+        )
+
+      modules =
+        InputTypeGenerator.generate(operation, schema,
+          client_module: Grephql.Test.Input.Params,
+          scalar_types: %{}
+        )
+
+      input_module = hd(modules)
+      assert {:ok, _struct} = input_module.build(%{name: "Alice"})
+    end
+
+    test "Variables with embed params() compiles and builds correctly" do
+      schema = schema_with_input()
+
+      operation =
+        parse!(
+          "mutation CreateUser($input: CreateUserInput!) { createUser(input: $input) { name } }"
+        )
+
+      InputTypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.Var.ParamsEmbed,
+        scalar_types: %{}
+      )
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: Grephql.Test.Var.ParamsEmbed,
+          function_name: :create_user,
+          scalar_types: %{}
+        )
+
+      assert {:ok, vars} = variables_module.build(%{input: %{name: "Alice"}})
+      assert vars.input.name == "Alice"
     end
   end
 

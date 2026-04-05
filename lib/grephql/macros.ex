@@ -114,19 +114,50 @@ defmodule Grephql.Macros do
   end
 
   defp build_function_ast(kind, func_name) do
-    with_vars = build_with_variables(kind, func_name)
-    without_vars = build_without_variables(kind, func_name)
-
     quote do
       if @grephql_query.has_variables? do
-        unquote(with_vars)
+        Grephql.Macros.__define_spec_with_vars__(
+          unquote(func_name),
+          @grephql_query.result_module,
+          @grephql_query.variables_module
+        )
+
+        unquote(func_with_variables_ast(kind, func_name))
       else
-        unquote(without_vars)
+        Grephql.Macros.__define_spec_without_vars__(
+          unquote(func_name),
+          @grephql_query.result_module
+        )
+
+        unquote(func_without_variables_ast(kind, func_name))
       end
     end
   end
 
-  defp build_with_variables(:def, name) do
+  @doc false
+  defmacro __define_spec_with_vars__(name, result_module, variables_module) do
+    quote bind_quoted: [
+            name: name,
+            result_module: result_module,
+            variables_module: variables_module
+          ] do
+      @spec unquote(name)(unquote(variables_module).params(), keyword()) ::
+              {:ok, Grephql.Result.t(unquote(result_module))}
+              | {:error, Ecto.Changeset.t()}
+              | {:error, Req.Response.t()}
+    end
+  end
+
+  @doc false
+  defmacro __define_spec_without_vars__(name, result_module) do
+    quote bind_quoted: [name: name, result_module: result_module] do
+      @spec unquote(name)(keyword()) ::
+              {:ok, Grephql.Result.t(unquote(result_module))}
+              | {:error, Req.Response.t()}
+    end
+  end
+
+  defp func_with_variables_ast(:def, name) do
     quote do
       def unquote(name)(variables, opts \\ []) do
         Grephql.execute(@grephql_query, variables, opts)
@@ -134,7 +165,7 @@ defmodule Grephql.Macros do
     end
   end
 
-  defp build_with_variables(:defp, name) do
+  defp func_with_variables_ast(:defp, name) do
     quote do
       defp unquote(name)(variables, opts \\ []) do
         Grephql.execute(@grephql_query, variables, opts)
@@ -142,7 +173,7 @@ defmodule Grephql.Macros do
     end
   end
 
-  defp build_without_variables(:def, name) do
+  defp func_without_variables_ast(:def, name) do
     quote do
       def unquote(name)(opts \\ []) do
         Grephql.execute(@grephql_query, %{}, opts)
@@ -150,7 +181,7 @@ defmodule Grephql.Macros do
     end
   end
 
-  defp build_without_variables(:defp, name) do
+  defp func_without_variables_ast(:defp, name) do
     quote do
       defp unquote(name)(opts \\ []) do
         Grephql.execute(@grephql_query, %{}, opts)
