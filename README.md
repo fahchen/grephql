@@ -24,9 +24,18 @@ end
 
 ## Quick Start
 
-### 1. Export your schema
+### 1. Download your schema
 
-Export your GraphQL schema as an [introspection JSON](https://graphql.org/learn/introspection/) file and place it in your project (e.g. `priv/schemas/github.json`).
+Use the built-in Mix task to download your GraphQL schema via introspection:
+
+```bash
+mix grephql.download_schema \
+  --endpoint https://api.example.com/graphql \
+  --output priv/schemas/schema.json \
+  --header "Authorization: Bearer token123"
+```
+
+This sends an introspection query, validates the response, and saves it as JSON.
 
 ### 2. Define a client module
 
@@ -182,6 +191,22 @@ test "get_user returns user data" do
   assert result.data.user.name == "Alice"
 end
 ```
+
+## Mix Tasks
+
+### `mix grephql.download_schema`
+
+Downloads a GraphQL schema via introspection and saves it as JSON.
+
+```bash
+mix grephql.download_schema --endpoint URL --output PATH [--header "Key: Value"]
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--endpoint` / `-e` | yes | GraphQL endpoint URL |
+| `--output` / `-o` | yes | File path to save the schema JSON |
+| `--header` / `-h` | no | HTTP header in `"Key: Value"` format (repeatable) |
 
 ## `use Grephql` Options
 
