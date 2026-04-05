@@ -13,37 +13,25 @@ Feature: Compilation caching
       Then only structs for "User" and its selected fields are generated
       And no structs are generated for "Post", "Comment", or "Admin"
 
-  Rule: Schema parse result is cached by content hash
+  Rule: Schema parse result is cached in persistent_term by source path
 
-    Scenario: Unchanged schema source skips re-parsing
+    Scenario: Unchanged schema source skips re-parsing within the same BEAM session
       Given a client module with source "priv/schemas/service.json"
-      And the schema file has not changed since last compilation
-      When the module is recompiled
-      Then the schema is loaded from cache without re-parsing the JSON
+      And the schema has already been loaded in this BEAM session
+      When another module references the same schema source
+      Then the schema is loaded from persistent_term without re-parsing the JSON
 
-    Scenario: Changed schema source invalidates cache
+  Rule: Schema file changes trigger recompilation via @external_resource
+
+    Scenario: Changed schema file triggers recompilation
       Given a client module with source "priv/schemas/service.json"
-      And the schema file content has changed since last compilation
-      When the module is recompiled
-      Then the schema is re-parsed from the updated file
+      And the schema file is registered as @external_resource
+      When the schema file content changes
+      Then the Elixir compiler detects the change and recompiles the client module
 
-  Rule: Each GQL compilation result is cached by schema hash + query content hash
+  Rule: Input type modules are deduplicated across queries
 
-    Scenario: Unchanged query with unchanged schema skips recompilation
-      Given a defgql :get_user with a specific query string
-      And neither the schema source nor the query string has changed
-      When the module is recompiled
-      Then the query validation and type generation are skipped
-      And the previously generated structs and function are reused
-
-    Scenario: Changed query content invalidates query cache
-      Given a defgql :get_user with a modified query string
-      And the schema source has not changed
-      When the module is recompiled
-      Then the query is re-validated and types are re-generated
-
-    Scenario: Changed schema invalidates all query caches for that schema
-      Given a client module with multiple defgql definitions
-      And the schema source has changed
-      When the module is recompiled
-      Then all queries are re-validated and types are re-generated
+    Scenario: Shared input type is not regenerated
+      Given a client module with multiple defgql definitions referencing "CreateUserInput"
+      When the module is compiled
+      Then only one Inputs.CreateUserInput module is created (via Code.ensure_loaded? guard)

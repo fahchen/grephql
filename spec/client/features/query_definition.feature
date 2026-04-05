@@ -46,29 +46,47 @@ Feature: GraphQL query definition and execution
       When the developer calls current_user(endpoint: "https://staging.example.com/graphql")
       Then the query is executed against the overridden endpoint
 
-  Rule: Fragments are reused via string interpolation in plain strings
+  Rule: Fragments are reused via string interpolation or deffragment
 
     Scenario: Interpolate a fragment string into a defgql query
       Given a module attribute @user_fields containing "name email"
       When the developer defines defgql :get_user with "query { user { #{@user_fields} } }"
       Then the interpolated query is validated and compiled
 
+    Scenario: Define and use a named fragment via deffragment
+      Given a client module with a valid schema
+      When the developer defines deffragment :user_fields with a fragment on User
+      And defines defgql :get_user with a query that spreads ...UserFields
+      Then the fragment is auto-concatenated to the query string
+      And the fragment result struct is generated under ClientModule.Fragments.UserFields
+
+    Scenario: Nested fragments are resolved transitively
+      Given fragment A spreads fragment B
+      And defgql :get_user spreads fragment A
+      When the module is compiled
+      Then both fragment A and B are concatenated to the query string
+
   Rule: Response distinguishes GraphQL-level results from transport errors
 
     Scenario: Successful response with full data
       Given a valid query is executed
       When the GraphQL server returns data with no errors
-      Then the response is {:ok, %{data: typed_result, errors: []}}
+      Then the response is {:ok, %Grephql.Result{data: typed_result, errors: []}}
 
     Scenario: Partial data with GraphQL errors
       Given a valid query is executed
       When the GraphQL server returns partial data with field-level errors
-      Then the response is {:ok, %{data: partial_typed_result, errors: [%Grephql.Error{}, ...]}}
+      Then the response is {:ok, %Grephql.Result{data: partial_typed_result, errors: [%Grephql.Error{}, ...]}}
 
     Scenario: Transport-level failure
       Given a valid query is executed
       When the HTTP request fails due to network error
-      Then the response is {:error, reason}
+      Then the response is {:error, %Exception{}}
+
+    Scenario: Non-2xx HTTP response
+      Given a valid query is executed
+      When the GraphQL server returns a non-2xx HTTP status
+      Then the response is {:error, %Req.Response{}}
 
   Rule: GraphQL errors are represented as Grephql.Error structs
 

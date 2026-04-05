@@ -63,18 +63,18 @@ defmodule Mix.Tasks.Grephql.DownloadSchema do
 
     body = %{query: @introspection_query}
 
-    response =
-      [url: endpoint, json: body, headers: headers]
-      |> Req.new()
-      |> Req.merge(req_options)
-      |> Req.post!()
-
-    case response.status do
-      status when status >= 200 and status <= 299 ->
+    case [url: endpoint, json: body, headers: headers]
+         |> Req.new()
+         |> Req.merge(req_options)
+         |> Req.post() do
+      {:ok, %{status: status} = response} when status >= 200 and status <= 299 ->
         validate_and_save!(response.body, output)
 
-      _other ->
+      {:ok, response} ->
         Mix.raise("HTTP #{response.status}: #{inspect(response.body)}")
+
+      {:error, exception} ->
+        Mix.raise("Request failed: #{Exception.message(exception)}")
     end
   end
 

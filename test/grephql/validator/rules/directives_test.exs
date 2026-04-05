@@ -102,6 +102,19 @@ defmodule Grephql.Validator.Rules.DirectivesTest do
       assert error.message =~ "required argument \"if\" is missing on directive \"@skip\""
     end
 
+    test "wrong argument type fails" do
+      ctx = validate(~s|query { user(id: "1") { name @skip(if: "yes") } }|)
+      type_errors = Enum.filter(errors(ctx), &(&1.message =~ "type mismatch"))
+      assert [error] = type_errors
+      assert error.message =~ "type mismatch for argument \"if\" on directive \"@skip\""
+    end
+
+    test "correct argument type passes" do
+      ctx = validate(~s|query { user(id: "1") { name @skip(if: true) } }|)
+      type_errors = Enum.filter(errors(ctx), &(&1.message =~ "type mismatch"))
+      assert type_errors == []
+    end
+
     test "optional argument can be omitted" do
       directives = [
         %SchemaDirective{

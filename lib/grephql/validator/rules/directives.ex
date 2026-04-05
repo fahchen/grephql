@@ -82,6 +82,7 @@ defmodule Grephql.Validator.Rules.Directives do
         |> check_location(dir, location, schema_directive)
         |> check_arg_existence(dir, schema_directive)
         |> check_required_args(dir, schema_directive)
+        |> check_arg_types(dir, schema_directive)
 
       :error ->
         Context.add_error(ctx, "unknown directive \"@#{dir.name}\"", line: Helpers.loc_line(dir))
@@ -140,6 +141,25 @@ defmodule Grephql.Validator.Rules.Directives do
         acc
       end
     end)
+  end
+
+  defp check_arg_types(ctx, dir, schema_directive) do
+    Enum.reduce(dir.arguments, ctx, fn arg, acc ->
+      check_arg_value_type(acc, arg, schema_directive, dir.name)
+    end)
+  end
+
+  defp check_arg_value_type(ctx, arg, schema_directive, directive_name) do
+    with {:ok, input_value} <- Map.fetch(schema_directive.args, arg.name),
+         true <- Helpers.value_type_mismatch?(arg, input_value.type) do
+      Context.add_error(
+        ctx,
+        "type mismatch for argument \"#{arg.name}\" on directive \"@#{directive_name}\"",
+        line: Helpers.loc_line(arg)
+      )
+    else
+      _no_mismatch -> ctx
+    end
   end
 
   defp location_label(:query), do: "query operations"

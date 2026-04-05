@@ -117,9 +117,14 @@ Feature: Compile-time GraphQL validation
   Rule: Argument types must match
 
     Scenario: Argument type mismatch raises compile error
+      Given a schema where "user" accepts argument "active" of type "Boolean!"
+      When the developer writes ~GQL with "query { user(active: \"yes\") { name } }"
+      Then a compile error is raised indicating type mismatch for argument "active"
+
+    Scenario: Integer literal is compatible with ID type
       Given a schema where "user" accepts argument "id" of type "ID!"
       When the developer writes ~GQL with "query { user(id: 123) { name } }"
-      Then a compile error is raised indicating type mismatch for argument "id"
+      Then the module compiles successfully (GraphQL spec allows Int coercion to ID)
 
   Rule: Arguments must be unique per field
 
