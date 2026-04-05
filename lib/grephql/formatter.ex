@@ -29,10 +29,19 @@ defmodule Grephql.Formatter do
   end
 
   @impl Mix.Tasks.Format
-  def format(contents, _opts) do
+  def format(contents, opts) do
     case Grephql.Parser.parse(contents) do
-      {:ok, document} -> Grephql.Printer.print(document)
-      {:error, _reason} -> contents
+      {:ok, document} ->
+        formatted = Grephql.Printer.print(document)
+
+        if opts[:opening_delimiter] in ["\"\"\"", "'''"] do
+          formatted <> "\n"
+        else
+          formatted
+        end
+
+      {:error, _reason} ->
+        contents
     end
   rescue
     # Parser.parse/1 raises FunctionClauseError on edge cases like empty strings

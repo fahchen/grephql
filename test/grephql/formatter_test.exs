@@ -80,5 +80,30 @@ defmodule Grephql.FormatterTest do
              }\
              """
     end
+
+    test "appends trailing newline for heredoc delimiter" do
+      input = "query GetUser($id: ID!) { user(id: $id) { name } }"
+
+      result = Formatter.format(input, sigil: :G, opening_delimiter: ~S("""))
+
+      assert String.ends_with?(result, "}\n")
+    end
+
+    test "no trailing newline for inline delimiter" do
+      input = "query GetUser($id: ID!) { user(id: $id) { name } }"
+
+      result = Formatter.format(input, sigil: :G, opening_delimiter: ~S("))
+
+      refute String.ends_with?(result, "}\n")
+    end
+
+    test "heredoc format is idempotent" do
+      input = "query GetUser($id: ID!) { user(id: $id) { name } }"
+      opts = [sigil: :G, opening_delimiter: ~S(""")]
+
+      first = Formatter.format(input, opts)
+      second = Formatter.format(first, opts)
+      assert first == second
+    end
   end
 end
