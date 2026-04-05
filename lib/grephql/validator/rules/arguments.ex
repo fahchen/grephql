@@ -8,8 +8,8 @@ defmodule Grephql.Validator.Rules.Arguments do
   alias Grephql.Validator.Traversal
 
   @spec validate(Document.t(), Context.t()) :: Context.t()
-  def validate(%Document{definitions: definitions}, %Context{} = ctx) do
-    Traversal.traverse_operations(definitions, ctx.schema, ctx, &validate_field_args/3)
+  def validate(%Document{definitions: definitions}, %Context{schema: schema} = ctx) do
+    Traversal.traverse_all(definitions, schema, ctx, &validate_field_args/3)
   end
 
   # nil type_name means upstream type couldn't be resolved — already reported

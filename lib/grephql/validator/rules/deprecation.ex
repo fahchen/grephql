@@ -12,8 +12,8 @@ defmodule Grephql.Validator.Rules.Deprecation do
   alias Grephql.Validator.Traversal
 
   @spec validate(Document.t(), Context.t()) :: Context.t()
-  def validate(%Document{definitions: definitions}, %Context{} = ctx) do
-    Traversal.traverse_operations(definitions, ctx.schema, ctx, &check_field/3)
+  def validate(%Document{definitions: definitions}, %Context{schema: schema} = ctx) do
+    Traversal.traverse_all(definitions, schema, ctx, &check_field/3)
   end
 
   defp check_field(_field, nil, ctx), do: ctx

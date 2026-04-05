@@ -2,6 +2,7 @@ defmodule Grephql.Compiler do
   @moduledoc false
 
   alias Grephql.InputTypeGenerator
+  alias Grephql.Language.Fragment
   alias Grephql.Language.OperationDefinition
   alias Grephql.Parser
   alias Grephql.Query
@@ -14,12 +15,19 @@ defmodule Grephql.Compiler do
           | {:function_name, atom()}
           | {:scalar_types, map()}
           | {:caller_env, Macro.Env.t()}
+          | {:fragments, %{String.t() => fragment_entry()}}
+
+  @type fragment_entry() :: %{
+          source: String.t(),
+          fragment: Fragment.t(),
+          result_module: module()
+        }
 
   # Dialyzer cannot trace callers of compile!/3 because it is only invoked
   # inside `quote` blocks at macro expansion time, not at runtime.
   @dialyzer [
-    {:no_return, compile!: 3, compile_document!: 4},
-    {:no_contracts, compile!: 3, compile_document!: 4}
+    {:no_return, compile!: 3, compile_document!: 4, compile_fragment!: 3},
+    {:no_contracts, compile!: 3, compile_document!: 4, compile_fragment!: 3}
   ]
 
   @doc """
@@ -43,16 +51,30 @@ defmodule Grephql.Compiler do
   @spec compile_document!(Grephql.Language.Document.t(), String.t(), Schema.t(), [option()]) ::
           Query.t()
   def compile_document!(document, query_string, schema, opts) do
-    operation = extract_operation!(document)
+    operation =
+      extract_single!(
+        document,
+        &match?(%OperationDefinition{}, &1),
+        "no operation definition found in query",
+        "multiple operation definitions found; defgql supports exactly one operation per query"
+      )
+
     caller_env = Keyword.get(opts, :caller_env)
-    validate!(document, schema, caller_env)
+
+    raise_on_errors!(
+      Validator.validate(document, schema, caller_env),
+      "GraphQL validation errors"
+    )
 
     client_module = Keyword.fetch!(opts, :client_module)
+
+    fragments = Keyword.get(opts, :fragments, %{})
 
     generator_opts = [
       client_module: client_module,
       function_name: Keyword.fetch!(opts, :function_name),
-      scalar_types: Keyword.get(opts, :scalar_types, %{})
+      scalar_types: Keyword.get(opts, :scalar_types, %{}),
+      fragments: fragments
     ]
 
     output_modules = TypeGenerator.generate(operation, schema, generator_opts)
@@ -70,6 +92,46 @@ defmodule Grephql.Compiler do
     }
   end
 
+  @doc """
+  Compiles a GraphQL fragment string into a fragment entry map.
+
+  Parses the fragment, validates it, and generates a result struct module
+  under `ClientModule.Fragments.FragmentName`. Returns a map with `:source`,
+  `:fragment`, and `:result_module` keys.
+
+  Raises `CompileError` on parse or validation failure.
+  """
+  @spec compile_fragment!(String.t(), Schema.t(), [option()]) :: fragment_entry()
+  def compile_fragment!(fragment_string, schema, opts) do
+    document = parse!(fragment_string)
+
+    fragment =
+      extract_single!(
+        document,
+        &match?(%Fragment{}, &1),
+        "no fragment definition found",
+        "multiple fragment definitions found; deffragment supports exactly one fragment per call"
+      )
+
+    caller_env = Keyword.get(opts, :caller_env)
+
+    raise_on_errors!(
+      Validator.validate_fragment(document, schema, caller_env),
+      "GraphQL fragment validation errors"
+    )
+
+    client_module = Keyword.fetch!(opts, :client_module)
+    scalar_types = Keyword.get(opts, :scalar_types, %{})
+
+    result_module = TypeGenerator.generate_fragment(fragment, schema, client_module, scalar_types)
+
+    %{
+      source: String.trim(fragment_string),
+      fragment: fragment,
+      result_module: result_module
+    }
+  end
+
   defp parse!(query_string) do
     case Parser.parse(query_string) do
       {:ok, document} -> document
@@ -77,34 +139,23 @@ defmodule Grephql.Compiler do
     end
   end
 
-  defp extract_operation!(document) do
-    operations =
-      Enum.filter(document.definitions, &match?(%OperationDefinition{}, &1))
-
-    case operations do
-      [operation] ->
-        operation
+  defp extract_single!(document, predicate, none_message, multiple_message) do
+    case Enum.filter(document.definitions, predicate) do
+      [single] ->
+        single
 
       [] ->
-        raise CompileError, description: "no operation definition found in query"
+        raise CompileError, description: none_message
 
       _multiple ->
-        raise CompileError,
-          description:
-            "multiple operation definitions found; defgql supports exactly one operation per query"
+        raise CompileError, description: multiple_message
     end
   end
 
-  defp validate!(document, schema, caller_env) do
-    case Validator.validate(document, schema, caller_env) do
-      :ok ->
-        :ok
+  defp raise_on_errors!(:ok, _label), do: :ok
 
-      {:error, errors} ->
-        messages = Enum.map_join(errors, "\n  ", & &1.message)
-
-        raise CompileError,
-          description: "GraphQL validation errors:\n  #{messages}"
-    end
+  defp raise_on_errors!({:error, errors}, label) do
+    messages = Enum.map_join(errors, "\n  ", & &1.message)
+    raise CompileError, description: "#{label}:\n  #{messages}"
   end
 end

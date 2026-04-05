@@ -4,6 +4,7 @@ defmodule Grephql.Validator.Rules.Directives do
   alias Grephql.Language.Directive
   alias Grephql.Language.Document
   alias Grephql.Language.Field
+  alias Grephql.Language.Fragment
   alias Grephql.Language.InlineFragment
   alias Grephql.Language.OperationDefinition
   alias Grephql.Language.SelectionSet
@@ -13,9 +14,14 @@ defmodule Grephql.Validator.Rules.Directives do
 
   @spec validate(Document.t(), Context.t()) :: Context.t()
   def validate(%Document{definitions: definitions}, %Context{} = ctx) do
+    ctx =
+      definitions
+      |> Enum.filter(&match?(%OperationDefinition{}, &1))
+      |> Enum.reduce(ctx, &validate_operation/2)
+
     definitions
-    |> Enum.filter(&match?(%OperationDefinition{}, &1))
-    |> Enum.reduce(ctx, &validate_operation/2)
+    |> Enum.filter(&match?(%Fragment{}, &1))
+    |> Enum.reduce(ctx, &validate_fragment_directives/2)
   end
 
   defp validate_operation(op, ctx) do
@@ -23,6 +29,12 @@ defmodule Grephql.Validator.Rules.Directives do
     |> validate_directives(op.directives, op.operation, ctx.schema)
     |> validate_variable_definition_directives(op.variable_definitions, ctx.schema)
     |> validate_selection_set_directives(op.selection_set, ctx.schema)
+  end
+
+  defp validate_fragment_directives(frag, ctx) do
+    ctx
+    |> validate_directives(frag.directives, :fragment_definition, ctx.schema)
+    |> validate_selection_set_directives(frag.selection_set, ctx.schema)
   end
 
   defp validate_variable_definition_directives(ctx, var_defs, schema) do
@@ -135,5 +147,6 @@ defmodule Grephql.Validator.Rules.Directives do
   defp location_label(:subscription), do: "subscription operations"
   defp location_label(:field), do: "fields"
   defp location_label(:inline_fragment), do: "inline fragments"
+  defp location_label(:fragment_definition), do: "fragment definitions"
   defp location_label(:variable_definition), do: "variable definitions"
 end

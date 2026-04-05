@@ -3,6 +3,7 @@ defmodule Grephql.Validator.Rules.Fragments do
 
   alias Grephql.Language.Document
   alias Grephql.Language.Field
+  alias Grephql.Language.Fragment
   alias Grephql.Language.InlineFragment
   alias Grephql.Language.OperationDefinition
   alias Grephql.Language.SelectionSet
@@ -12,12 +13,42 @@ defmodule Grephql.Validator.Rules.Fragments do
 
   @spec validate(Document.t(), Context.t()) :: Context.t()
   def validate(%Document{definitions: definitions}, %Context{} = ctx) do
+    ctx =
+      definitions
+      |> Enum.filter(&match?(%OperationDefinition{}, &1))
+      |> Enum.reduce(ctx, fn op, acc ->
+        root_type_name = Helpers.root_type_name(acc.schema, op.operation)
+        validate_selection_set(acc, op.selection_set, root_type_name, acc.schema)
+      end)
+
     definitions
-    |> Enum.filter(&match?(%OperationDefinition{}, &1))
-    |> Enum.reduce(ctx, fn op, acc ->
-      root_type_name = Helpers.root_type_name(acc.schema, op.operation)
-      validate_selection_set(acc, op.selection_set, root_type_name, acc.schema)
+    |> Enum.filter(&match?(%Fragment{}, &1))
+    |> Enum.reduce(ctx, fn frag, acc ->
+      frag_type = frag.type_condition.name
+      acc = validate_fragment_type_condition(acc, frag, frag_type)
+      validate_selection_set(acc, frag.selection_set, frag_type, acc.schema)
     end)
+  end
+
+  defp validate_fragment_type_condition(ctx, frag, type_name) do
+    case Schema.get_type(ctx.schema, type_name) do
+      {:ok, %{kind: kind}} when kind in [:object, :interface, :union] ->
+        ctx
+
+      {:ok, %{kind: kind}} ->
+        Context.add_error(
+          ctx,
+          "fragment \"#{frag.name}\" cannot be defined on #{kind} type \"#{type_name}\"",
+          line: Helpers.loc_line(frag)
+        )
+
+      :error ->
+        Context.add_error(
+          ctx,
+          "type \"#{type_name}\" in fragment \"#{frag.name}\" does not exist in the schema",
+          line: Helpers.loc_line(frag)
+        )
+    end
   end
 
   defp validate_selection_set(ctx, nil, _parent_type, _schema), do: ctx
