@@ -123,44 +123,11 @@ MyApp.GitHub.get_user(%{login: "octocat"},
 )
 ```
 
-## The `~GQL` Sigil
+## The `~GQL` Sigil and Formatter
 
-Use the `~GQL` sigil with `defgql` to get GraphQL formatting support via `mix format`:
+The `~GQL` sigil marks GraphQL strings for automatic formatting by `mix format`. Plain strings still work with `defgql` — `~GQL` is optional.
 
-```elixir
-defmodule MyApp.GitHub do
-  use Grephql,
-    otp_app: :my_app,
-    source: "priv/schemas/github.json"
-
-  defgql :get_user, ~GQL"""
-  query GetUser($login: String!) {
-    user(login: $login) {
-      name
-    }
-  }
-  """
-end
-```
-
-To enable formatting, add `Grephql.Formatter` to your `.formatter.exs` plugins:
-
-```elixir
-[
-  plugins: [Grephql.Formatter],
-  inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"]
-]
-```
-
-Plain strings still work with `defgql` — `~GQL` is optional and only needed for formatter support.
-
-## Formatter Plugin
-
-Grephql includes a formatter plugin that automatically formats GraphQL code inside `~GQL` sigils when you run `mix format`.
-
-### Setup
-
-Add the plugin to your `.formatter.exs`:
+Add the formatter plugin to your `.formatter.exs`:
 
 ```elixir
 [
@@ -169,7 +136,7 @@ Add the plugin to your `.formatter.exs`:
 ]
 ```
 
-Or if using Grephql as a dependency:
+Or via dependency import:
 
 ```elixir
 [
