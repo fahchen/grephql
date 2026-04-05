@@ -14,28 +14,28 @@ Feature: GraphQL to Elixir type generation
       And non-null fields are enforced, nullable fields default to nil
       And automatic @type t() spec is generated
 
-  Rule: Output struct names are derived from the query field path (per-query isolation)
+  Rule: Output struct names are derived from the query field path under a Result namespace (per-query isolation)
 
-    Scenario: Top-level field becomes ClientModule.FunctionName.FieldName
+    Scenario: Top-level field becomes ClientModule.FunctionName.Result.FieldName
       Given a client module MyApp.UserService
       When the developer defines defgql :get_user with "query($id: ID!) { user(id: $id) { name email } }"
-      Then the generated struct is MyApp.UserService.GetUser.User
+      Then the generated struct is MyApp.UserService.GetUser.Result.User
 
     Scenario: Nested fields extend the path
       Given a client module MyApp.UserService
       When the developer defines defgql :get_user with "query($id: ID!) { user(id: $id) { name posts { title author { name } } } }"
       Then the generated structs are:
-        | struct name                                          |
-        | MyApp.UserService.GetUser.User                       |
-        | MyApp.UserService.GetUser.User.Posts                 |
-        | MyApp.UserService.GetUser.User.Posts.Author          |
+        | struct name                                                 |
+        | MyApp.UserService.GetUser.Result.User                       |
+        | MyApp.UserService.GetUser.Result.User.Posts                 |
+        | MyApp.UserService.GetUser.Result.User.Posts.Author          |
 
     Scenario: Different queries for same type get independent structs
       Given a client module MyApp.UserService
       And defgql :get_user selects "name email" on User
       And defgql :list_users selects only "name" on User
-      Then MyApp.UserService.GetUser.User has fields name and email
-      And MyApp.UserService.ListUsers.User has only field name
+      Then MyApp.UserService.GetUser.Result.User has fields name and email
+      And MyApp.UserService.ListUsers.Result.User has only field name
 
   Rule: Nested object types are also embedded schemas (fully recursive)
 
@@ -105,31 +105,31 @@ Feature: GraphQL to Elixir type generation
       Given a client module MyApp.UserService
       And a schema input "CreateUserInput" with fields "name: String!" and "email: String"
       When the type is generated
-      Then an embedded schema MyApp.UserService.CreateUserInput is generated with the corresponding fields
+      Then an embedded schema MyApp.UserService.Inputs.CreateUserInput is generated with the corresponding fields
 
     Scenario: Input type provides build/1 to construct from plain map
       Given a generated input type MyApp.UserService.CreateUserInput
-      When the developer calls MyApp.UserService.CreateUserInput.build(%{name: "Alice", email: "a@b.com"})
-      Then it returns {:ok, %MyApp.UserService.CreateUserInput{name: "Alice", email: "a@b.com"}}
+      When the developer calls MyApp.UserService.Inputs.CreateUserInput.build(%{name: "Alice", email: "a@b.com"})
+      Then it returns {:ok, %MyApp.UserService.Inputs.CreateUserInput{name: "Alice", email: "a@b.com"}}
 
     Scenario: build/1 validates required fields via changeset
-      Given a generated input type MyApp.UserService.CreateUserInput with required field "name: String!"
-      When the developer calls MyApp.UserService.CreateUserInput.build(%{email: "a@b.com"})
+      Given a generated input type MyApp.UserService.Inputs.CreateUserInput with required field "name: String!"
+      When the developer calls MyApp.UserService.Inputs.CreateUserInput.build(%{email: "a@b.com"})
       Then it returns {:error, changeset} with validation error for missing "name"
 
-  Rule: Input type structs are named at schema level (ClientModule.InputTypeName)
+  Rule: Input type structs are named under ClientModule.Inputs namespace
 
     Scenario: Input type struct is shared across queries
       Given a client module MyApp.UserService
       And a schema input "CreateUserInput" used by multiple mutations
-      Then only one struct MyApp.UserService.CreateUserInput is generated
+      Then only one struct MyApp.UserService.Inputs.CreateUserInput is generated
       And it is reusable across all queries that reference CreateUserInput
 
     Scenario: Input type naming differs from output type naming
       Given a client module MyApp.UserService
       And defgql :create_user with "mutation($input: CreateUserInput!) { createUser(input: $input) { id name } }"
-      Then the input struct is MyApp.UserService.CreateUserInput (schema-level)
-      And the output struct is MyApp.UserService.CreateUser.CreateUser (per-query, field path)
+      Then the input struct is MyApp.UserService.Inputs.CreateUserInput (under Inputs namespace)
+      And the output struct is MyApp.UserService.CreateUser.Result.CreateUser (under Result namespace)
 
   Rule: Custom scalar types use Ecto Type for casting, serialization, and deserialization
 
