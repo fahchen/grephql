@@ -7,7 +7,7 @@ summary: Fragments reused via Elixir string interpolation instead of GraphQL fra
 ---
 
 **Feature**: client/features/query_definition.feature
-**Rule**: Fragments are reused via string interpolation
+**Rule**: Fragments are reused via string interpolation in plain strings
 
 ## Reason
 
