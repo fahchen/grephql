@@ -26,8 +26,18 @@ defmodule Grephql do
 
       - Headers: `req_options: [headers: [authorization: "Bearer token"]]`
       - Timeouts: `req_options: [receive_timeout: 30_000]`
-      - Custom plugins: `req_options: [plug: {MyPlug, opts}]`
-      - Testing with `req_test`: `req_options: [plug: {Req.Test, MyApp.GitHub}]`
+      - Plug (for testing): `req_options: [plug: {Req.Test, MyApp.GitHub}]`
+
+      You can also attach Req plugins via the `:req_options` key. Plugins are
+      attached by passing the plugin's `attach/1` options:
+
+          # In config/runtime.exs
+          config :my_app, MyApp.GitHub,
+            req_options: [auth: {:bearer, System.fetch_env!("GITHUB_TOKEN")}]
+
+          # In test setup
+          config :my_app, MyApp.GitHub,
+            req_options: [plug: {Req.Test, MyApp.GitHub}]
   """
 
   alias Grephql.Query
