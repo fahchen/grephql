@@ -1,5 +1,5 @@
 # Grephql
-[![Build Status](https://github.com/fahchen/grephql/actions/workflows/ci.yml/badge.svg)](https://github.com/fahchen/grephql/actions/workflows/ci.yml)
+[![Build Status](https://github.com/fahchen/grephql/workflows/CI/badge.svg)](https://github.com/fahchen/grephql/actions/workflows/ci.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/grephql)](https://hex.pm/packages/grephql)
 [![HexDocs](https://img.shields.io/badge/HexDocs-gray)](https://hexdocs.pm/grephql)
 
