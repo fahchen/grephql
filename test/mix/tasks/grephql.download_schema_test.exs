@@ -17,21 +17,20 @@ defmodule Mix.Tasks.Grephql.DownloadSchemaTest do
     }
   }
 
-  defp stub_success do
-    Req.Test.stub(__MODULE__, fn conn ->
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.send_resp(200, Jason.encode!(@valid_response))
-    end)
+  setup do
+    previous_shell = Mix.shell()
+    Mix.shell(Mix.Shell.Quiet)
+    on_exit(fn -> Mix.shell(previous_shell) end)
+    :ok
   end
 
-  defp req_options, do: [plug: {Req.Test, __MODULE__}]
+  setup {Req.Test, :verify_on_exit!}
 
   describe "run/2" do
     test "downloads and saves schema", %{tmp_dir: tmp_dir} do
       output = Path.join(tmp_dir, "schema.json")
 
-      Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.expect(__MODULE__, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
@@ -56,7 +55,7 @@ defmodule Mix.Tasks.Grephql.DownloadSchemaTest do
     test "passes headers to request", %{tmp_dir: tmp_dir} do
       output = Path.join(tmp_dir, "schema.json")
 
-      Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.expect(__MODULE__, fn conn ->
         auth = Plug.Conn.get_req_header(conn, "authorization")
         assert auth == ["Bearer token123"]
 
@@ -82,7 +81,7 @@ defmodule Mix.Tasks.Grephql.DownloadSchemaTest do
 
     test "creates output directory if it does not exist", %{tmp_dir: tmp_dir} do
       output = Path.join([tmp_dir, "nested", "dir", "schema.json"])
-      stub_success()
+      expect_success()
 
       DownloadSchema.run(
         ["--endpoint", "https://api.example.com/graphql", "--output", output],
@@ -110,7 +109,7 @@ defmodule Mix.Tasks.Grephql.DownloadSchemaTest do
     test "raises on non-2xx response", %{tmp_dir: tmp_dir} do
       output = Path.join(tmp_dir, "schema.json")
 
-      Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.expect(__MODULE__, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(401, Jason.encode!(%{"error" => "Unauthorized"}))
@@ -127,7 +126,7 @@ defmodule Mix.Tasks.Grephql.DownloadSchemaTest do
     test "raises on invalid introspection response", %{tmp_dir: tmp_dir} do
       output = Path.join(tmp_dir, "schema.json")
 
-      Req.Test.stub(__MODULE__, fn conn ->
+      Req.Test.expect(__MODULE__, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(200, Jason.encode!(%{"data" => %{"something" => "else"}}))
@@ -156,5 +155,15 @@ defmodule Mix.Tasks.Grephql.DownloadSchemaTest do
         )
       end
     end
+  end
+
+  defp req_options, do: [plug: {Req.Test, __MODULE__}]
+
+  defp expect_success do
+    Req.Test.expect(__MODULE__, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(200, Jason.encode!(@valid_response))
+    end)
   end
 end

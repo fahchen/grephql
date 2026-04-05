@@ -22,7 +22,6 @@ defmodule Grephql.IntegrationTest do
         "PostStatus" => Grephql.IntegrationTest.Enums.PostStatus
       }
 
-    # Query with enum, DateTime, nested object, list of objects
     defgql(:get_user, """
     query GetUser($id: ID!) {
       user(id: $id) {
@@ -37,14 +36,12 @@ defmodule Grephql.IntegrationTest do
     }
     """)
 
-    # Query returning a list of objects
     defgql(:list_users, """
     query ListUsers {
       users { id name role }
     }
     """)
 
-    # Union query
     defgql(:search, """
     query Search($query: String!) {
       search(query: $query) {
@@ -54,7 +51,6 @@ defmodule Grephql.IntegrationTest do
     }
     """)
 
-    # Interface query
     defgql(:get_nodes, """
     query GetNodes($ids: [ID!]!) {
       nodes(ids: $ids) {
@@ -64,7 +60,6 @@ defmodule Grephql.IntegrationTest do
     }
     """)
 
-    # Mutation with input object
     defgql(:create_user, """
     mutation CreateUser($input: CreateUserInput!) {
       createUser(input: $input) {
@@ -77,7 +72,6 @@ defmodule Grephql.IntegrationTest do
     }
     """)
 
-    # Mutation with nested input object
     defgql(:update_user, """
     mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {
       updateUser(id: $id, input: $input) {
@@ -89,19 +83,11 @@ defmodule Grephql.IntegrationTest do
     """)
   end
 
-  defp req_options, do: [plug: {Req.Test, Client}]
-
-  defp stub_json(status \\ 200, body) do
-    Req.Test.stub(Client, fn conn ->
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.send_resp(status, Jason.encode!(body))
-    end)
-  end
+  setup {Req.Test, :verify_on_exit!}
 
   describe "enum fields" do
     test "decodes enum values in response" do
-      stub_json(%{
+      expect_json(%{
         "data" => %{
           "user" => %{
             "id" => "1",
@@ -121,7 +107,7 @@ defmodule Grephql.IntegrationTest do
     end
 
     test "decodes enum in list of objects" do
-      stub_json(%{
+      expect_json(%{
         "data" => %{
           "users" => [
             %{"id" => "1", "name" => "Alice", "role" => "ADMIN"},
@@ -140,7 +126,7 @@ defmodule Grephql.IntegrationTest do
 
   describe "DateTime custom scalar" do
     test "decodes DateTime field" do
-      stub_json(%{
+      expect_json(%{
         "data" => %{
           "user" => %{
             "id" => "1",
@@ -160,7 +146,7 @@ defmodule Grephql.IntegrationTest do
     end
 
     test "decodes nullable DateTime as nil" do
-      stub_json(%{
+      expect_json(%{
         "data" => %{
           "user" => %{
             "id" => "1",
@@ -191,7 +177,7 @@ defmodule Grephql.IntegrationTest do
 
   describe "nested objects" do
     test "decodes embeds_one nested object" do
-      stub_json(%{
+      expect_json(%{
         "data" => %{
           "user" => %{
             "id" => "1",
@@ -215,7 +201,7 @@ defmodule Grephql.IntegrationTest do
     end
 
     test "decodes nullable nested object as nil" do
-      stub_json(%{
+      expect_json(%{
         "data" => %{
           "user" => %{
             "id" => "1",
@@ -237,7 +223,7 @@ defmodule Grephql.IntegrationTest do
 
   describe "list fields" do
     test "decodes list of objects (embeds_many)" do
-      stub_json(%{
+      expect_json(%{
         "data" => %{
           "user" => %{
             "id" => "1",
@@ -281,7 +267,7 @@ defmodule Grephql.IntegrationTest do
     end
 
     test "decodes list of scalar strings (tags)" do
-      stub_json(%{
+      expect_json(%{
         "data" => %{
           "user" => %{
             "id" => "1",
@@ -311,7 +297,7 @@ defmodule Grephql.IntegrationTest do
 
   describe "union types" do
     test "decodes union with mixed types" do
-      stub_json(%{
+      expect_json(%{
         "data" => %{
           "search" => [
             %{"__typename" => "User", "id" => "1", "name" => "Alice", "role" => "ADMIN"},
@@ -335,7 +321,7 @@ defmodule Grephql.IntegrationTest do
 
   describe "interface types" do
     test "decodes interface with concrete types" do
-      stub_json(%{
+      expect_json(%{
         "data" => %{
           "nodes" => [
             %{"__typename" => "User", "id" => "1", "name" => "Alice"},
@@ -359,7 +345,7 @@ defmodule Grephql.IntegrationTest do
 
   describe "mutations" do
     test "mutation with input object" do
-      Req.Test.stub(Client, fn conn ->
+      Req.Test.expect(Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
@@ -398,11 +384,10 @@ defmodule Grephql.IntegrationTest do
     end
 
     test "mutation with nested input object variables serialized correctly" do
-      Req.Test.stub(Client, fn conn ->
+      Req.Test.expect(Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
-        # Verify camelCase serialization of variables
         input = request["variables"]["input"]
         assert input["name"] == "Alice"
         assert input["email"] == "alice@example.com"
@@ -443,7 +428,7 @@ defmodule Grephql.IntegrationTest do
     end
 
     test "mutation with multiple variables" do
-      Req.Test.stub(Client, fn conn ->
+      Req.Test.expect(Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
@@ -481,11 +466,10 @@ defmodule Grephql.IntegrationTest do
 
   describe "variables serialization round-trip" do
     test "variables are serialized to camelCase JSON" do
-      Req.Test.stub(Client, fn conn ->
+      Req.Test.expect(Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
-        # Variable names should be camelCase (matching GraphQL)
         assert Map.has_key?(request["variables"], "id")
         assert request["variables"]["id"] == "42"
 
@@ -513,7 +497,7 @@ defmodule Grephql.IntegrationTest do
     end
 
     test "list variable serialized correctly" do
-      Req.Test.stub(Client, fn conn ->
+      Req.Test.expect(Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
@@ -537,5 +521,17 @@ defmodule Grephql.IntegrationTest do
       assert {:ok, %Result{}} =
                Client.get_nodes(%{ids: ["1", "2", "3"]}, req_options: req_options())
     end
+  end
+
+  defp req_options, do: [plug: {Req.Test, Client}]
+
+  defp expect_json(body), do: expect_json(200, body)
+
+  defp expect_json(status, body) do
+    Req.Test.expect(Client, fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.send_resp(status, Jason.encode!(body))
+    end)
   end
 end
