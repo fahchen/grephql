@@ -81,10 +81,18 @@ defmodule Grephql.FormatterTest do
              """
     end
 
-    test "appends trailing newline for heredoc delimiter" do
+    test "appends trailing newline for double-quote heredoc delimiter" do
       input = "query GetUser($id: ID!) { user(id: $id) { name } }"
 
       result = Formatter.format(input, sigil: :G, opening_delimiter: ~S("""))
+
+      assert String.ends_with?(result, "}\n")
+    end
+
+    test "appends trailing newline for single-quote heredoc delimiter" do
+      input = "query GetUser($id: ID!) { user(id: $id) { name } }"
+
+      result = Formatter.format(input, sigil: :G, opening_delimiter: ~S('''))
 
       assert String.ends_with?(result, "}\n")
     end
