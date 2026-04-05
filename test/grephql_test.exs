@@ -121,6 +121,18 @@ defmodule GrephqlTest do
       assert result.data.user.name == "Default"
     end
 
+    test "transport error returns {:error, exception}" do
+      assert {:error, %Req.TransportError{reason: :econnrefused}} =
+               ExecuteClient.get_default_user(
+                 req_options: [
+                   retry: false,
+                   adapter: fn req ->
+                     {req, %Req.TransportError{reason: :econnrefused}}
+                   end
+                 ]
+               )
+    end
+
     test "raises when endpoint is not configured" do
       defmodule NoEndpointClient do
         use Grephql,
