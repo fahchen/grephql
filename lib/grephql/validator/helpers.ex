@@ -69,6 +69,31 @@ defmodule Grephql.Validator.Helpers do
     end)
   end
 
+  @spec variable?(Grephql.Language.value_t()) :: boolean()
+  def variable?(%Grephql.Language.Variable{}), do: true
+  def variable?(_value), do: false
+
+  @spec compatible_value?(Grephql.Language.value_t(), String.t()) :: boolean()
+  def compatible_value?(%Grephql.Language.IntValue{}, name), do: name in ["Int", "Float", "ID"]
+  def compatible_value?(%Grephql.Language.FloatValue{}, name), do: name in ["Float"]
+  def compatible_value?(%Grephql.Language.StringValue{}, name), do: name in ["String", "ID"]
+  def compatible_value?(%Grephql.Language.BooleanValue{}, "Boolean"), do: true
+  def compatible_value?(%Grephql.Language.NullValue{}, _name), do: true
+  def compatible_value?(%Grephql.Language.EnumValue{}, _name), do: true
+  def compatible_value?(%Grephql.Language.ListValue{}, _name), do: true
+  def compatible_value?(%Grephql.Language.ObjectValue{}, _name), do: true
+  def compatible_value?(_value, _name), do: false
+
+  @spec value_type_mismatch?(Grephql.Language.Argument.t(), TypeRef.t()) :: boolean()
+  def value_type_mismatch?(arg, expected_type) do
+    if variable?(arg.value) do
+      false
+    else
+      named_type = unwrap_type(expected_type)
+      named_type != nil and not compatible_value?(arg.value, named_type.name)
+    end
+  end
+
   @spec required?(Schema.InputValue.t()) :: boolean()
   def required?(%{type: %TypeRef{kind: :non_null}, default_value: nil}), do: true
   def required?(_input_value), do: false

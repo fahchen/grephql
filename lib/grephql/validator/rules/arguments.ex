@@ -77,51 +77,20 @@ defmodule Grephql.Validator.Rules.Arguments do
 
   defp check_arg_types(ctx, field, schema_field) do
     Enum.reduce(field.arguments, ctx, fn arg, acc ->
-      case Map.fetch(schema_field.args, arg.name) do
-        {:ok, input_value} ->
-          check_value_type(acc, arg, input_value.type, field.name)
-
-        # Already reported by check_arg_existence
-        :error ->
-          acc
-      end
+      check_arg_value_type(acc, arg, schema_field, field.name)
     end)
   end
 
-  defp check_value_type(ctx, arg, expected_type, field_name) do
-    if variable?(arg.value) do
-      ctx
+  defp check_arg_value_type(ctx, arg, schema_field, field_name) do
+    with {:ok, input_value} <- Map.fetch(schema_field.args, arg.name),
+         true <- Helpers.value_type_mismatch?(arg, input_value.type) do
+      Context.add_error(
+        ctx,
+        "type mismatch for argument \"#{arg.name}\" on field \"#{field_name}\"",
+        line: Helpers.loc_line(arg)
+      )
     else
-      named_type = Helpers.unwrap_type(expected_type)
-
-      if named_type && !compatible_value?(arg.value, named_type.name) do
-        Context.add_error(
-          ctx,
-          "type mismatch for argument \"#{arg.name}\" on field \"#{field_name}\"",
-          line: Helpers.loc_line(arg)
-        )
-      else
-        ctx
-      end
+      _no_mismatch -> ctx
     end
   end
-
-  defp variable?(%Grephql.Language.Variable{}), do: true
-  defp variable?(_value), do: false
-
-  defp compatible_value?(%Grephql.Language.IntValue{}, name),
-    do: name in ["Int", "Float", "ID"]
-
-  defp compatible_value?(%Grephql.Language.FloatValue{}, name),
-    do: name in ["Float"]
-
-  defp compatible_value?(%Grephql.Language.StringValue{}, name),
-    do: name in ["String", "ID"]
-
-  defp compatible_value?(%Grephql.Language.BooleanValue{}, "Boolean"), do: true
-  defp compatible_value?(%Grephql.Language.NullValue{}, _name), do: true
-  defp compatible_value?(%Grephql.Language.EnumValue{}, _name), do: true
-  defp compatible_value?(%Grephql.Language.ListValue{}, _name), do: true
-  defp compatible_value?(%Grephql.Language.ObjectValue{}, _name), do: true
-  defp compatible_value?(_value, _name), do: false
 end
