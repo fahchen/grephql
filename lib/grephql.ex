@@ -80,6 +80,8 @@ defmodule Grephql do
 
       unquote(external_resource_ast)
 
+      Module.register_attribute(__MODULE__, :grephql_fragments, accumulate: true)
+
       @grephql_otp_app unquote(otp_app)
       @grephql_scalars unquote(scalars_ast)
       @grephql_use_config unquote(use_config)

@@ -23,11 +23,16 @@ defmodule Grephql.TypeGenerator do
 
   alias Grephql.GeneratorHelpers
   alias Grephql.Language.Field, as: QueryField
+  alias Grephql.Language.FragmentSpread
   alias Grephql.Schema
   alias Grephql.TypeMapper
   alias Grephql.Validator.Helpers
 
-  @type option() :: {:client_module, module()} | {:function_name, atom()} | {:scalar_types, map()}
+  @type option() ::
+          {:client_module, module()}
+          | {:function_name, atom()}
+          | {:scalar_types, map()}
+          | {:fragments, map()}
 
   @doc """
   Generates embedded schema modules for an operation's output types.
@@ -45,18 +50,39 @@ defmodule Grephql.TypeGenerator do
     client_module = Keyword.fetch!(opts, :client_module)
     function_name = Keyword.fetch!(opts, :function_name)
     scalar_types = Keyword.get(opts, :scalar_types, %{})
+    fragments = Keyword.get(opts, :fragments, %{})
 
     # Module names derived from schema at compile time
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     base_module = Module.concat([client_module, GeneratorHelpers.camelize(function_name), Result])
 
     root_type_name = Helpers.root_type_name(schema, operation.operation)
-    context = {schema, scalar_types}
+    context = {schema, scalar_types, fragments}
 
     generate_selections(operation.selection_set.selections, root_type_name, base_module, context)
   end
 
+  @doc """
+  Generates an embedded schema module for a named fragment under
+  `ClientModule.Fragments.FragmentName`.
+  """
+  @spec generate_fragment(Grephql.Language.Fragment.t(), Schema.t(), module(), map()) :: module()
+  def generate_fragment(fragment, schema, client_module, scalar_types) do
+    # Fragment module names from schema, bounded set
+    # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
+    base_module =
+      Module.concat([client_module, Fragments, GeneratorHelpers.camelize(fragment.name)])
+
+    type_name = fragment.type_condition.name
+    context = {schema, scalar_types, %{}}
+
+    generate_selections(fragment.selection_set.selections, type_name, base_module, context)
+
+    base_module
+  end
+
   defp generate_selections(selections, parent_type_name, parent_module, context) do
+    selections = expand_fragment_spreads(selections, context)
     {shared_fields, inline_fragments} = Enum.split_with(selections, &match?(%QueryField{}, &1))
 
     case inline_fragments do
@@ -73,11 +99,27 @@ defmodule Grephql.TypeGenerator do
     end
   end
 
+  defp expand_fragment_spreads(selections, {_schema, _scalar_types, fragments} = context) do
+    Enum.flat_map(selections, fn
+      %FragmentSpread{name: name} ->
+        case Map.fetch(fragments, name) do
+          {:ok, entry} ->
+            expand_fragment_spreads(entry.fragment.selection_set.selections, context)
+
+          :error ->
+            []
+        end
+
+      other ->
+        [other]
+    end)
+  end
+
   defp generate_object_schema(
          fields,
          parent_type_name,
          parent_module,
-         {schema, scalar_types} = context
+         {schema, scalar_types, _fragments} = context
        ) do
     {field_defs, nested_modules} =
       Enum.reduce(fields, {[], []}, fn %QueryField{} = field, {defs_acc, mods_acc} ->

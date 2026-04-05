@@ -1,12 +1,21 @@
 defmodule Grephql.Validator.Traversal do
   @moduledoc false
 
+  alias Grephql.Language.Fragment
   alias Grephql.Language.FragmentSpread
   alias Grephql.Language.InlineFragment
   alias Grephql.Language.OperationDefinition
   alias Grephql.Language.SelectionSet
   alias Grephql.Schema
   alias Grephql.Validator.Helpers
+
+  @spec traverse_all([Grephql.Language.definition_t()], Schema.t(), acc, field_callback) :: acc
+        when acc: Grephql.Validator.Context.t(),
+             field_callback: (Grephql.Language.Field.t(), String.t() | nil, acc -> acc)
+  def traverse_all(definitions, schema, acc, field_callback) do
+    acc = traverse_operations(definitions, schema, acc, field_callback)
+    traverse_fragments(definitions, schema, acc, field_callback)
+  end
 
   @spec traverse_operations([Grephql.Language.definition_t()], Schema.t(), acc, field_callback) ::
           acc
@@ -18,6 +27,19 @@ defmodule Grephql.Validator.Traversal do
     |> Enum.reduce(acc, fn op, ctx ->
       root_type_name = Helpers.root_type_name(schema, op.operation)
       traverse_selection_set(op.selection_set, root_type_name, schema, ctx, field_callback)
+    end)
+  end
+
+  @spec traverse_fragments([Grephql.Language.definition_t()], Schema.t(), acc, field_callback) ::
+          acc
+        when acc: Grephql.Validator.Context.t(),
+             field_callback: (Grephql.Language.Field.t(), String.t() | nil, acc -> acc)
+  def traverse_fragments(definitions, schema, acc, field_callback) do
+    definitions
+    |> Enum.filter(&match?(%Fragment{}, &1))
+    |> Enum.reduce(acc, fn frag, ctx ->
+      type_name = frag.type_condition.name
+      traverse_selection_set(frag.selection_set, type_name, schema, ctx, field_callback)
     end)
   end
 

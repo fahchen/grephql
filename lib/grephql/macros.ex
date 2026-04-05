@@ -35,6 +35,96 @@ defmodule Grephql.Macros do
     end
   end
 
+  @doc false
+  @spec __resolve_fragments__(String.t(), [{atom(), Grephql.Compiler.fragment_entry()}]) ::
+          {String.t(), %{String.t() => Grephql.Compiler.fragment_entry()}}
+  def __resolve_fragments__(query_str, fragment_pairs) do
+    fragment_map =
+      Map.new(fragment_pairs, fn {_key, entry} -> {entry.fragment.name, entry} end)
+
+    used = collect_spread_names(query_str, fragment_map, MapSet.new())
+
+    appended = Enum.map_join(used, "\n", fn name -> fragment_map[name].source end)
+
+    full_query = if appended == "", do: query_str, else: query_str <> "\n" <> appended
+    used_map = Map.take(fragment_map, MapSet.to_list(used))
+
+    {full_query, used_map}
+  end
+
+  @fragment_spread_pattern ~r/\.\.\.([A-Z]\w*)/
+
+  # Dialyzer incorrectly flags MapSet as opaque in recursive calls
+  @dialyzer {:no_opaque, collect_spread_names: 3}
+  defp collect_spread_names(source, fragment_map, seen) do
+    names =
+      @fragment_spread_pattern
+      |> Regex.scan(source)
+      |> Enum.map(fn [_full, name] -> name end)
+      |> Enum.reject(&MapSet.member?(seen, &1))
+
+    Enum.reduce(names, seen, fn name, acc ->
+      case Map.fetch(fragment_map, name) do
+        {:ok, entry} ->
+          collect_spread_names(entry.source, fragment_map, MapSet.put(acc, name))
+
+        :error ->
+          acc
+      end
+    end)
+  end
+
+  @doc """
+  Defines a reusable named GraphQL fragment.
+
+  At compile time, parses and validates the fragment against the schema,
+  then registers it in the module for use by `defgql`/`defgqlp`. When a
+  query uses `...FragmentName`, the fragment definition is automatically
+  appended to the query string sent to the server.
+
+  ## Examples
+
+      deffragment :user_fields, ~GQL\"\"\"
+      fragment UserFields on User {
+        name
+        email
+      }
+      \"\"\"
+
+      defgql :get_user, ~GQL\"\"\"
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          ...UserFields
+        }
+      }
+      \"\"\"
+  """
+  defmacro deffragment(name, fragment_string) do
+    define_fragment(name, fragment_string)
+  end
+
+  # ~GQL sigil doesn't expand before deffragment receives it — extract the binary
+  defp define_fragment(
+         name,
+         {:sigil_GQL, _meta, [{:<<>>, _bin_meta, [frag_str]}, _modifiers]}
+       )
+       when is_atom(name) and is_binary(frag_str) do
+    define_fragment(name, frag_str)
+  end
+
+  defp define_fragment(name, frag_str_ast) when is_atom(name) do
+    quote bind_quoted: [name: name, frag_str: frag_str_ast] do
+      @grephql_fragments {name,
+                          Grephql.Compiler.compile_fragment!(
+                            frag_str,
+                            @grephql_schema,
+                            client_module: __MODULE__,
+                            scalar_types: @grephql_scalars,
+                            caller_env: __ENV__
+                          )}
+    end
+  end
+
   @doc """
   Defines a public GraphQL query function.
 
@@ -73,42 +163,33 @@ defmodule Grephql.Macros do
     define_query_function(kind, func_name, query_str)
   end
 
-  # Handle interpolated strings — the AST is {:<<>>, _, parts} instead of a binary.
-  # Use bind_quoted to let the interpolation evaluate at compile time.
+  # Handle interpolated strings — bind_quoted evaluates at compile time.
   defp define_query_function(kind, func_name, {:<<>>, _meta, _parts} = query_str_ast)
        when is_atom(func_name) do
-    function_ast = build_function_ast(kind, func_name)
-
-    quote bind_quoted: [func_name: func_name, query_str: query_str_ast],
-          unquote: true do
-      @grephql_query Grephql.Compiler.compile!(
-                       query_str,
-                       @grephql_schema,
-                       client_module: __MODULE__,
-                       function_name: func_name,
-                       scalar_types: @grephql_scalars,
-                       caller_env: __ENV__
-                     )
-
-      unquote(function_ast)
-    end
+    build_query_ast(kind, func_name, query_str_ast)
   end
 
   defp define_query_function(kind, func_name, query_str)
        when is_atom(func_name) and is_binary(query_str) do
+    build_query_ast(kind, func_name, query_str)
+  end
+
+  defp build_query_ast(kind, func_name, query_str_ast) do
     function_ast = build_function_ast(kind, func_name)
 
-    # @grephql_schema and @grephql_scalars are module attributes
-    # available only in the caller's compile context (inside quote)
-    quote bind_quoted: [func_name: func_name, query_str: query_str],
+    quote bind_quoted: [func_name: func_name, query_str: query_str_ast],
           unquote: true do
+      {grephql_full_query, grephql_fragments} =
+        Grephql.Macros.__resolve_fragments__(query_str, @grephql_fragments)
+
       @grephql_query Grephql.Compiler.compile!(
-                       query_str,
+                       grephql_full_query,
                        @grephql_schema,
                        client_module: __MODULE__,
                        function_name: func_name,
                        scalar_types: @grephql_scalars,
-                       caller_env: __ENV__
+                       caller_env: __ENV__,
+                       fragments: grephql_fragments
                      )
 
       unquote(function_ast)
