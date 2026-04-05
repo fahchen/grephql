@@ -5,18 +5,18 @@ defmodule Grephql.TypeGeneratorTest do
   # runtime, so the compiler cannot see them when compiling this test file.
   @compile {:no_warn_undefined,
             [
-              Grephql.Test.Alias.GetUser.User,
-              Grephql.Test.AutoTypename.GetNode.Node.User,
-              Grephql.Test.Isolation.GetUser.User,
-              Grephql.Test.Isolation.ListUsers.User,
-              Grephql.Test.ListEmbed.GetUser.User,
-              Grephql.Test.Nested.GetUser.User,
-              Grephql.Test.NoDupTypename.GetNode.Node.User,
-              Grephql.Test.NoPK.GetUser.User,
-              Grephql.Test.NonNull.GetUser.User,
-              Grephql.Test.Union.Search.Search.Post,
-              Grephql.Test.Union.Search.Search.User,
-              Grephql.Test.UnionField.Search
+              Grephql.Test.Alias.GetUser.Result.User,
+              Grephql.Test.AutoTypename.GetNode.Result.Node.User,
+              Grephql.Test.Isolation.GetUser.Result.User,
+              Grephql.Test.Isolation.ListUsers.Result.User,
+              Grephql.Test.ListEmbed.GetUser.Result.User,
+              Grephql.Test.Nested.GetUser.Result.User,
+              Grephql.Test.NoDupTypename.GetNode.Result.Node.User,
+              Grephql.Test.NoPK.GetUser.Result.User,
+              Grephql.Test.NonNull.GetUser.Result.User,
+              Grephql.Test.Union.Search.Result.Search.Post,
+              Grephql.Test.Union.Search.Result.Search.User,
+              Grephql.Test.UnionField.Search.Result.Result
             ]}
 
   alias Grephql.Schema.Field, as: SchemaField
@@ -36,9 +36,9 @@ defmodule Grephql.TypeGeneratorTest do
           function_name: :get_user
         )
 
-      assert Grephql.Test.Basic.GetUser.User in modules
+      assert Grephql.Test.Basic.GetUser.Result.User in modules
 
-      user = struct(Grephql.Test.Basic.GetUser.User, name: "Alice", email: "a@b.com")
+      user = struct(Grephql.Test.Basic.GetUser.Result.User, name: "Alice", email: "a@b.com")
       assert user.name == "Alice"
       assert user.email == "a@b.com"
     end
@@ -53,7 +53,7 @@ defmodule Grephql.TypeGeneratorTest do
         function_name: :get_user
       )
 
-      fields = Grephql.Test.NonNull.GetUser.User.__schema__(:fields)
+      fields = Grephql.Test.NonNull.GetUser.Result.User.__schema__(:fields)
       assert :name in fields
     end
 
@@ -66,7 +66,7 @@ defmodule Grephql.TypeGeneratorTest do
         function_name: :get_user
       )
 
-      user = struct(Grephql.Test.Nullable.GetUser.User)
+      user = struct(Grephql.Test.Nullable.GetUser.Result.User)
       assert user.name == nil
       assert user.email == nil
     end
@@ -84,10 +84,10 @@ defmodule Grephql.TypeGeneratorTest do
           function_name: :get_user
         )
 
-      assert Grephql.Test.Nested.GetUser.User in modules
-      assert Grephql.Test.Nested.GetUser.User.Posts in modules
+      assert Grephql.Test.Nested.GetUser.Result.User in modules
+      assert Grephql.Test.Nested.GetUser.Result.User.Posts in modules
 
-      assert :posts in Grephql.Test.Nested.GetUser.User.__schema__(:embeds)
+      assert :posts in Grephql.Test.Nested.GetUser.Result.User.__schema__(:embeds)
     end
 
     test "deeply nested objects generate full path" do
@@ -103,9 +103,9 @@ defmodule Grephql.TypeGeneratorTest do
           function_name: :get_user
         )
 
-      assert Grephql.Test.Deep.GetUser.User in modules
-      assert Grephql.Test.Deep.GetUser.User.Posts in modules
-      assert Grephql.Test.Deep.GetUser.User.Posts.Author in modules
+      assert Grephql.Test.Deep.GetUser.Result.User in modules
+      assert Grephql.Test.Deep.GetUser.Result.User.Posts in modules
+      assert Grephql.Test.Deep.GetUser.Result.User.Posts.Author in modules
     end
 
     test "list field generates embeds_many" do
@@ -118,7 +118,7 @@ defmodule Grephql.TypeGeneratorTest do
         function_name: :get_user
       )
 
-      assert :posts in Grephql.Test.ListEmbed.GetUser.User.__schema__(:embeds)
+      assert :posts in Grephql.Test.ListEmbed.GetUser.Result.User.__schema__(:embeds)
     end
   end
 
@@ -132,7 +132,7 @@ defmodule Grephql.TypeGeneratorTest do
         function_name: :get_user
       )
 
-      fields = Grephql.Test.Alias.GetUser.User.__schema__(:fields)
+      fields = Grephql.Test.Alias.GetUser.Result.User.__schema__(:fields)
       assert :display_name in fields
       refute :name in fields
     end
@@ -148,8 +148,8 @@ defmodule Grephql.TypeGeneratorTest do
           function_name: :get_user
         )
 
-      assert Grephql.Test.AliasNested.GetUser.User.Articles in modules
-      refute Grephql.Test.AliasNested.GetUser.User.Posts in modules
+      assert Grephql.Test.AliasNested.GetUser.Result.User.Articles in modules
+      refute Grephql.Test.AliasNested.GetUser.Result.User.Posts in modules
     end
   end
 
@@ -171,8 +171,8 @@ defmodule Grephql.TypeGeneratorTest do
         function_name: :list_users
       )
 
-      get_fields = Grephql.Test.Isolation.GetUser.User.__schema__(:fields)
-      list_fields = Grephql.Test.Isolation.ListUsers.User.__schema__(:fields)
+      get_fields = Grephql.Test.Isolation.GetUser.Result.User.__schema__(:fields)
+      list_fields = Grephql.Test.Isolation.ListUsers.Result.User.__schema__(:fields)
 
       assert :name in get_fields
       assert :email in get_fields
@@ -191,7 +191,7 @@ defmodule Grephql.TypeGeneratorTest do
         function_name: :get_user
       )
 
-      fields = Grephql.Test.NoPK.GetUser.User.__schema__(:fields)
+      fields = Grephql.Test.NoPK.GetUser.Result.User.__schema__(:fields)
       refute :id in fields
     end
   end
@@ -209,18 +209,18 @@ defmodule Grephql.TypeGeneratorTest do
           function_name: :search
         )
 
-      assert Grephql.Test.Union.Search in modules
-      assert Grephql.Test.Union.Search.Search.User in modules
-      assert Grephql.Test.Union.Search.Search.Post in modules
+      assert Grephql.Test.Union.Search.Result in modules
+      assert Grephql.Test.Union.Search.Result.Search.User in modules
+      assert Grephql.Test.Union.Search.Result.Search.Post in modules
 
       # User struct has shared fields + own fields
-      user_fields = Grephql.Test.Union.Search.Search.User.__schema__(:fields)
+      user_fields = Grephql.Test.Union.Search.Result.Search.User.__schema__(:fields)
       assert :__typename in user_fields
       assert :id in user_fields
       assert :email in user_fields
 
       # Post struct has shared fields + own fields
-      post_fields = Grephql.Test.Union.Search.Search.Post.__schema__(:fields)
+      post_fields = Grephql.Test.Union.Search.Result.Search.Post.__schema__(:fields)
       assert :__typename in post_fields
       assert :id in post_fields
       assert :title in post_fields
@@ -238,10 +238,10 @@ defmodule Grephql.TypeGeneratorTest do
       )
 
       # search field should be a regular field (parameterized type), not an embed
-      embeds = Grephql.Test.UnionField.Search.__schema__(:embeds)
+      embeds = Grephql.Test.UnionField.Search.Result.__schema__(:embeds)
       refute :search in embeds
 
-      fields = Grephql.Test.UnionField.Search.__schema__(:fields)
+      fields = Grephql.Test.UnionField.Search.Result.__schema__(:fields)
       assert :search in fields
     end
 
@@ -263,13 +263,13 @@ defmodule Grephql.TypeGeneratorTest do
         ]
       }
 
-      result = Grephql.ResponseDecoder.decode!(Grephql.Test.UnionE2E.Search, json)
+      result = Grephql.ResponseDecoder.decode!(Grephql.Test.UnionE2E.Search.Result, json)
 
       [user, post] = result.search
-      assert %{__struct__: Grephql.Test.UnionE2E.Search.Search.User} = user
+      assert %{__struct__: Grephql.Test.UnionE2E.Search.Result.Search.User} = user
       assert user.id == "1"
       assert user.email == "a@b.com"
-      assert %{__struct__: Grephql.Test.UnionE2E.Search.Search.Post} = post
+      assert %{__struct__: Grephql.Test.UnionE2E.Search.Result.Search.Post} = post
       assert post.id == "2"
       assert post.title == "Hello"
     end
@@ -286,13 +286,13 @@ defmodule Grephql.TypeGeneratorTest do
       )
 
       # __typename is auto-injected into each fragment struct
-      user_fields = Grephql.Test.AutoTypename.GetNode.Node.User.__schema__(:fields)
+      user_fields = Grephql.Test.AutoTypename.GetNode.Result.Node.User.__schema__(:fields)
       assert :__typename in user_fields
 
       json = %{"node" => %{"__typename" => "User", "name" => "Alice"}}
-      result = Grephql.ResponseDecoder.decode!(Grephql.Test.AutoTypename.GetNode, json)
+      result = Grephql.ResponseDecoder.decode!(Grephql.Test.AutoTypename.GetNode.Result, json)
 
-      assert %{__struct__: Grephql.Test.AutoTypename.GetNode.Node.User} = result.node
+      assert %{__struct__: Grephql.Test.AutoTypename.GetNode.Result.Node.User} = result.node
       assert result.node.name == "Alice"
     end
 
@@ -307,7 +307,7 @@ defmodule Grephql.TypeGeneratorTest do
         function_name: :get_node
       )
 
-      user_fields = Grephql.Test.NoDupTypename.GetNode.Node.User.__schema__(:fields)
+      user_fields = Grephql.Test.NoDupTypename.GetNode.Result.Node.User.__schema__(:fields)
       typename_count = Enum.count(user_fields, &(&1 == :__typename))
       assert typename_count == 1
     end
@@ -324,9 +324,9 @@ defmodule Grephql.TypeGeneratorTest do
       )
 
       json = %{"node" => %{"__typename" => "User", "name" => "Alice"}}
-      result = Grephql.ResponseDecoder.decode!(Grephql.Test.SingleUnion.GetNode, json)
+      result = Grephql.ResponseDecoder.decode!(Grephql.Test.SingleUnion.GetNode.Result, json)
 
-      assert %{__struct__: Grephql.Test.SingleUnion.GetNode.Node.User} = result.node
+      assert %{__struct__: Grephql.Test.SingleUnion.GetNode.Result.Node.User} = result.node
       assert result.node.name == "Alice"
     end
   end
