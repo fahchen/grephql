@@ -140,6 +140,20 @@ defmodule Mix.Tasks.Grephql.DownloadSchemaTest do
       end
     end
 
+    test "raises on transport error", %{tmp_dir: tmp_dir} do
+      output = Path.join(tmp_dir, "schema.json")
+
+      assert_raise Mix.Error, ~r/Request failed: connection refused/, fn ->
+        DownloadSchema.run(
+          ["--endpoint", "https://api.example.com/graphql", "--output", output],
+          retry: false,
+          adapter: fn req ->
+            {req, %Req.TransportError{reason: :econnrefused}}
+          end
+        )
+      end
+    end
+
     test "raises on invalid header format" do
       assert_raise Mix.Error, ~r/Invalid header format/, fn ->
         DownloadSchema.run(
