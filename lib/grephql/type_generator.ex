@@ -12,6 +12,13 @@ defmodule Grephql.TypeGenerator do
       ClientModule.FunctionName.FieldName.NestedField...
 
   Field aliases override both struct field names and module path segments.
+
+  ## Union/Interface support
+
+  When a field's type is a union or interface, inline fragments determine
+  which concrete types to generate. Shared fields (outside fragments) are
+  merged into each concrete type's struct. A parameterized `Grephql.Types.Union`
+  Ecto Type handles `__typename`-based dispatch during deserialization.
   """
 
   alias Grephql.Language.Field, as: QueryField
@@ -48,38 +55,90 @@ defmodule Grephql.TypeGenerator do
     generate_selections(operation.selection_set.selections, root_type_name, base_module, context)
   end
 
-  defp generate_selections(
-         selections,
+  defp generate_selections(selections, parent_type_name, parent_module, context) do
+    {shared_fields, inline_fragments} = Enum.split_with(selections, &match?(%QueryField{}, &1))
+
+    case inline_fragments do
+      [] ->
+        generate_object_schema(shared_fields, parent_type_name, parent_module, context)
+
+      _fragments ->
+        generate_union_schemas(
+          shared_fields,
+          inline_fragments,
+          parent_module,
+          context
+        )
+    end
+  end
+
+  defp generate_object_schema(
+         fields,
          parent_type_name,
          parent_module,
          {schema, scalar_types} = context
        ) do
     {field_defs, nested_modules} =
-      Enum.reduce(selections, {[], []}, fn
-        %QueryField{} = field, {defs_acc, mods_acc} ->
-          field_name = field_name(field)
+      Enum.reduce(fields, {[], []}, fn %QueryField{} = field, {defs_acc, mods_acc} ->
+        field_name = field_name(field)
 
-          # Field names from GraphQL schema, bounded set
-          # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
-          atom_name =
-            field_name |> Macro.underscore() |> String.to_atom()
+        # Field names from GraphQL schema, bounded set
+        # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
+        atom_name =
+          field_name |> Macro.underscore() |> String.to_atom()
 
-          {:ok, schema_field} = Schema.get_field(schema, parent_type_name, field.name)
-          resolved = TypeMapper.resolve(schema_field.type, scalar_types)
+        {:ok, schema_field} = Schema.get_field(schema, parent_type_name, field.name)
+        resolved = TypeMapper.resolve(schema_field.type, scalar_types)
 
-          {field_def, new_modules} =
-            build_field_def(field, atom_name, field_name, resolved, parent_module, context)
+        {field_def, new_modules} =
+          build_field_def(field, atom_name, field_name, resolved, parent_module, context)
 
-          {[field_def | defs_acc], [new_modules | mods_acc]}
-
-        _non_field, acc ->
-          acc
+        {[field_def | defs_acc], [new_modules | mods_acc]}
       end)
 
     field_defs = :lists.reverse(field_defs)
     create_embedded_schema(parent_module, field_defs)
 
     [parent_module | List.flatten(:lists.reverse(nested_modules))]
+  end
+
+  defp generate_union_schemas(
+         shared_fields,
+         inline_fragments,
+         parent_module,
+         context
+       ) do
+    shared_fields = ensure_typename(shared_fields)
+
+    {typename_to_module, all_modules} =
+      Enum.reduce(inline_fragments, {%{}, []}, fn fragment, {type_map, mods_acc} ->
+        type_name = fragment.type_condition.name
+        merged_selections = shared_fields ++ fragment.selection_set.selections
+
+        # Fragment type names from schema, bounded set
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        fragment_module = Module.concat(parent_module, camelize(type_name))
+
+        fragment_modules =
+          generate_object_schema(merged_selections, type_name, fragment_module, context)
+
+        {Map.put(type_map, type_name, fragment_module), [fragment_modules | mods_acc]}
+      end)
+
+    # Union type module names derived from schema at compile time
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    union_module = Module.concat(parent_module, "Union")
+    Grephql.Types.Union.define(union_module, typename_to_module)
+
+    {union_module, List.flatten(:lists.reverse(all_modules))}
+  end
+
+  defp ensure_typename(shared_fields) do
+    if Enum.any?(shared_fields, &(&1.name == "__typename")) do
+      shared_fields
+    else
+      [%QueryField{name: "__typename"} | shared_fields]
+    end
   end
 
   defp build_field_def(field, atom_name, field_name, resolved, parent_module, context) do
@@ -128,11 +187,21 @@ defmodule Grephql.TypeGenerator do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     nested_module = Module.concat(parent_module, camelize(field_name))
 
-    nested_modules =
+    result =
       generate_selections(field.selection_set.selections, type_name, nested_module, context)
 
-    typed_opts = embed_typed_opts(kind, resolved)
-    {{kind, atom_name, nested_module, [typed: typed_opts]}, nested_modules}
+    case result do
+      # Union/interface: use parameterized type field instead of embed
+      {union_module, nested_modules} ->
+        ecto_type = if kind == :embeds_many, do: {:array, union_module}, else: union_module
+        typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
+        {{:field, atom_name, ecto_type, [typed: typed_opts]}, nested_modules}
+
+      # Regular object: use embeds_one/embeds_many
+      [_nested_module | _rest] = nested_modules ->
+        typed_opts = embed_typed_opts(kind, resolved)
+        {{kind, atom_name, nested_module, [typed: typed_opts]}, nested_modules}
+    end
   end
 
   defp embed_typed_opts(:embeds_one, %{nullable: true}), do: [null: true]
