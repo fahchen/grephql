@@ -46,9 +46,23 @@ defmodule MyApp.GitHub do
     source: "priv/schemas/github.json",
     endpoint: "https://api.github.com/graphql"
 
-  defgql :get_user, "query GetUser($login: String!) { user(login: $login) { name bio } }"
+  defgql :get_user, ~GQL"""
+  query GetUser($login: String!) {
+    user(login: $login) {
+      name
+      bio
+    }
+  }
+  """
 
-  defgql :get_viewer, "query { viewer { login email } }"
+  defgql :get_viewer, ~GQL"""
+  query {
+    viewer {
+      login
+      email
+    }
+  }
+  """
 end
 ```
 
@@ -205,7 +219,7 @@ use Grephql,
 Union and interface types are resolved at decode time using the `__typename` field:
 
 ```elixir
-defgql :search, """
+defgql :search, ~GQL"""
 query Search($q: String!) {
   search(query: $q) {
     ... on User { name }
