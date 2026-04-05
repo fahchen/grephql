@@ -9,5 +9,7 @@ defmodule Grephql.Schema.InputValue do
     field :description, String.t()
     field :type, TypeRef.t(), enforce: true
     field :default_value, String.t()
+    field :is_deprecated, boolean(), default: false
+    field :deprecation_reason, String.t()
   end
 end
