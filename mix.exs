@@ -1,17 +1,25 @@
 defmodule Grephql.MixProject do
   use Mix.Project
 
+  @version "0.1.0"
+  @source_url "https://github.com/fahchen/grephql"
+
   def project do
     [
       app: :grephql,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       compilers: [:yecc] ++ Mix.compilers(),
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       aliases: aliases(),
-      dialyzer: dialyzer()
+      dialyzer: dialyzer(),
+      description: description(),
+      package: package(),
+      docs: docs(),
+      name: "Grephql",
+      source_url: @source_url
     ]
   end
 
@@ -21,7 +29,6 @@ defmodule Grephql.MixProject do
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger]
@@ -31,7 +38,6 @@ defmodule Grephql.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:nimble_parsec, "~> 1.4", runtime: false},
@@ -43,7 +49,28 @@ defmodule Grephql.MixProject do
       {:plug, "~> 1.0", only: :test},
       {:mimic, "~> 2.3", only: :test},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.35", only: :dev, runtime: false}
+    ]
+  end
+
+  defp description do
+    "Compile-time GraphQL client for Elixir. Validates queries at compilation, generates typed Ecto embedded schemas, and executes via Req."
+  end
+
+  defp package do
+    [
+      licenses: ["MIT"],
+      links: %{"GitHub" => @source_url},
+      files: ~w(lib src/*.yrl .formatter.exs mix.exs README.md LICENSE NOTICE CHANGELOG.md)
+    ]
+  end
+
+  defp docs do
+    [
+      main: "Grephql",
+      source_ref: "v#{@version}",
+      source_url: @source_url
     ]
   end
 
