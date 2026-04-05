@@ -16,7 +16,7 @@ defmodule Grephql.TypeMapper do
     - `ID` → `:string`
 
   Custom scalars map to user-provided `Ecto.Type` modules via the `scalar_types` config.
-  Custom scalars override built-in defaults. Unknown scalars raise `ArgumentError`.
+  Custom scalars override built-in defaults. Unknown scalars raise `CompileError`.
   """
 
   alias Grephql.Schema.TypeRef
@@ -84,8 +84,8 @@ defmodule Grephql.TypeMapper do
   defp resolve_scalar(name, scalar_types) do
     with :error <- Map.fetch(scalar_types, name),
          :error <- Map.fetch(@builtin_scalars, name) do
-      raise ArgumentError,
-            "unknown scalar type #{inspect(name)}, configure it via scalar_types"
+      raise CompileError,
+        description: "unknown scalar type #{inspect(name)}, configure it via scalar_types"
     else
       {:ok, type} -> type
     end

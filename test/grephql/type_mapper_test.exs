@@ -60,10 +60,10 @@ defmodule Grephql.TypeMapperTest do
                TypeMapper.resolve(type_ref, scalar_types)
     end
 
-    test "unknown scalar raises ArgumentError" do
+    test "unknown scalar raises CompileError" do
       type_ref = non_null(scalar("JSON"))
 
-      assert_raise ArgumentError, ~r/unknown scalar type "JSON"/, fn ->
+      assert_raise CompileError, ~r/unknown scalar type "JSON"/, fn ->
         TypeMapper.resolve(type_ref, %{})
       end
     end
