@@ -21,6 +21,7 @@ defmodule Grephql.TypeGenerator do
   Ecto Type handles `__typename`-based dispatch during deserialization.
   """
 
+  alias Grephql.GeneratorHelpers
   alias Grephql.Language.Field, as: QueryField
   alias Grephql.Schema
   alias Grephql.TypeMapper
@@ -199,16 +200,13 @@ defmodule Grephql.TypeGenerator do
 
       # Regular object: use embeds_one/embeds_many
       [_nested_module | _rest] = nested_modules ->
-        typed_opts = embed_typed_opts(kind, resolved)
+        typed_opts = GeneratorHelpers.embed_typed_opts(kind, resolved)
         {{kind, atom_name, nested_module, [typed: typed_opts]}, nested_modules}
     end
   end
 
-  defp embed_typed_opts(:embeds_one, %{nullable: true}), do: [null: true]
-  defp embed_typed_opts(_kind, _resolved), do: []
-
   defp create_embedded_schema(module_name, field_defs) do
-    field_asts = Enum.map(field_defs, &field_def_to_ast/1)
+    field_asts = Enum.map(field_defs, &GeneratorHelpers.field_def_to_ast/1)
 
     Module.create(
       module_name,
@@ -221,10 +219,6 @@ defmodule Grephql.TypeGenerator do
       end,
       Macro.Env.location(__ENV__)
     )
-  end
-
-  defp field_def_to_ast({kind, name, type_or_schema, opts}) do
-    quote do: unquote(kind)(unquote(name), unquote(type_or_schema), unquote(opts))
   end
 
   defp field_name(%QueryField{alias: alias_name}) when is_binary(alias_name), do: alias_name
