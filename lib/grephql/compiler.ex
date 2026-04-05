@@ -16,7 +16,10 @@ defmodule Grephql.Compiler do
 
   # Dialyzer cannot trace callers of compile!/3 because it is only invoked
   # inside `quote` blocks at macro expansion time, not at runtime.
-  @dialyzer [{:no_return, compile!: 3}, {:no_contracts, compile!: 3}]
+  @dialyzer [
+    {:no_return, compile!: 3, compile_document!: 4},
+    {:no_contracts, compile!: 3, compile_document!: 4}
+  ]
 
   @doc """
   Compiles a GraphQL query string into a `%Query{}` struct.
@@ -27,6 +30,18 @@ defmodule Grephql.Compiler do
   @spec compile!(String.t(), Schema.t(), [option()]) :: Query.t()
   def compile!(query_string, schema, opts) do
     document = parse!(query_string)
+    compile_document!(document, query_string, schema, opts)
+  end
+
+  @doc """
+  Compiles a pre-parsed document into a `%Query{}` struct.
+
+  Same as `compile!/3` but accepts an already-parsed document,
+  avoiding a redundant parse when the caller has already parsed the query.
+  """
+  @spec compile_document!(Grephql.Language.Document.t(), String.t(), Schema.t(), [option()]) ::
+          Query.t()
+  def compile_document!(document, query_string, schema, opts) do
     operation = extract_operation!(document)
     validate!(document, schema)
 
