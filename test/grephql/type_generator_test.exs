@@ -1,6 +1,24 @@
 defmodule Grephql.TypeGeneratorTest do
   use ExUnit.Case, async: true
 
+  # These modules are dynamically defined by TypeGenerator.generate/3 at test
+  # runtime, so the compiler cannot see them when compiling this test file.
+  @compile {:no_warn_undefined,
+            [
+              Grephql.Test.Alias.GetUser.User,
+              Grephql.Test.AutoTypename.GetNode.Node.User,
+              Grephql.Test.Isolation.GetUser.User,
+              Grephql.Test.Isolation.ListUsers.User,
+              Grephql.Test.ListEmbed.GetUser.User,
+              Grephql.Test.Nested.GetUser.User,
+              Grephql.Test.NoDupTypename.GetNode.Node.User,
+              Grephql.Test.NoPK.GetUser.User,
+              Grephql.Test.NonNull.GetUser.User,
+              Grephql.Test.Union.Search.Search.Post,
+              Grephql.Test.Union.Search.Search.User,
+              Grephql.Test.UnionField.Search
+            ]}
+
   alias Grephql.Schema.Field, as: SchemaField
   alias Grephql.Schema.Type
   alias Grephql.Schema.TypeRef
