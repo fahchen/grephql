@@ -1,0 +1,55 @@
+name: Setup Development Environment
+description: Install mise tools and restore dependency caches
+
+outputs:
+  erlang-version:
+    description: "Erlang/OTP version"
+    value: ${{ steps.tool-versions.outputs.erlang }}
+  elixir-version:
+    description: "Elixir version"
+    value: ${{ steps.tool-versions.outputs.elixir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install tools via mise
+      uses: jdx/mise-action@v3
+      with:
+        install: true
+        cache: true
+
+    - name: Output tool versions
+      id: tool-versions
+      shell: bash
+      run: |
+        while IFS=' ' read -r tool version; do
+          [[ -z "$tool" || "$tool" =~ ^# ]] && continue
+          echo "$tool=$version" >> $GITHUB_OUTPUT
+        done < .tool-versions
+
+    - name: Install Hex package manager
+      shell: bash
+      run: |
+        mix local.hex --force
+        mix local.rebar --force
+
+    - name: Restore Mix dependencies
+      id: mix-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps
+          _build
+        key: mix-${{ runner.os }}-${{ steps.tool-versions.outputs.erlang }}-${{ steps.tool-versions.outputs.elixir }}-${{ env.MIX_ENV || 'dev' }}-${{ hashFiles('**/mix.lock') }}
+        restore-keys: |
+          mix-${{ runner.os }}-${{ steps.tool-versions.outputs.erlang }}-${{ steps.tool-versions.outputs.elixir }}-${{ env.MIX_ENV || 'dev' }}-
+
+    - name: Install Mix dependencies
+      if: steps.mix-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: mix deps.get
+
+    - name: Compile Mix dependencies
+      if: steps.mix-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: mix deps.compile
