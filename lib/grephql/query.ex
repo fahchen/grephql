@@ -13,6 +13,7 @@ defmodule Grephql.Query do
     field :document, String.t(), enforce: true
     field :operation_name, String.t()
     field :result_module, module(), enforce: true
+    field :variables_module, module()
     field :input_modules, [module()], default: []
     field :client_module, module(), enforce: true
     field :has_variables?, boolean(), default: false

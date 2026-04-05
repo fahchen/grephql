@@ -55,11 +55,13 @@ defmodule Grephql.Compiler do
 
     output_modules = TypeGenerator.generate(operation, schema, generator_opts)
     input_modules = InputTypeGenerator.generate(operation, schema, generator_opts)
+    variables_module = InputTypeGenerator.generate_variables(operation, schema, generator_opts)
 
     %Query{
       document: query_string,
       operation_name: operation.name,
       result_module: hd(output_modules),
+      variables_module: variables_module,
       input_modules: input_modules,
       client_module: client_module,
       has_variables?: operation.variable_definitions != []

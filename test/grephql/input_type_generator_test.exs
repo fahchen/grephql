@@ -1,6 +1,28 @@
 defmodule Grephql.InputTypeGeneratorTest do
   use ExUnit.Case, async: true
 
+  # Suppress warnings for modules created at runtime by InputTypeGenerator
+  @compile {:no_warn_undefined,
+            [
+              Grephql.Test.Input.Basic.Inputs.CreateUserInput,
+              Grephql.Test.Input.Build.Inputs.CreateUserInput,
+              Grephql.Test.Input.Required.Inputs.CreateUserInput,
+              Grephql.Test.Input.Nullable.Inputs.CreateUserInput,
+              Grephql.Test.Input.Nested.Inputs.CreateUserInput,
+              Grephql.Test.Input.Nested.Inputs.AddressInput,
+              Grephql.Test.Input.NestedBuild.Inputs.CreateUserInput,
+              Grephql.Test.Input.Dedup.Inputs.SharedInput,
+              Grephql.Test.Var.Scalar.GetUser.Variables,
+              Grephql.Test.Var.Required.GetUser.Variables,
+              Grephql.Test.Var.Camel.GetUser.Variables,
+              Grephql.Test.Var.Embed.Inputs.CreateUserInput,
+              Grephql.Test.Var.Embed.CreateUser.Variables,
+              Grephql.Test.Var.Mixed.Inputs.CreateUserInput,
+              Grephql.Test.Var.Mixed.CreateUser.Variables,
+              Grephql.Test.Var.Dump.Inputs.CreateUserInput,
+              Grephql.Test.Var.Dump.CreateUser.Variables
+            ]}
+
   alias Grephql.InputTypeGenerator
   alias Grephql.Schema.Field, as: SchemaField
   alias Grephql.Schema.InputValue
@@ -168,6 +190,161 @@ defmodule Grephql.InputTypeGeneratorTest do
         )
 
       assert modules == []
+    end
+  end
+
+  describe "generate_variables/3" do
+    test "generates Variables struct with scalar fields" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!("query GetUser($id: ID!) { user(id: $id) { name } }")
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: Grephql.Test.Var.Scalar,
+          function_name: :get_user,
+          scalar_types: %{}
+        )
+
+      assert variables_module == Grephql.Test.Var.Scalar.GetUser.Variables
+
+      fields = variables_module.__schema__(:fields)
+      assert :id in fields
+    end
+
+    test "build/1 validates required scalar variables" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!("query GetUser($id: ID!) { user(id: $id) { name } }")
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: Grephql.Test.Var.Required,
+          function_name: :get_user,
+          scalar_types: %{}
+        )
+
+      assert {:ok, vars} = variables_module.build(%{id: "123"})
+      assert vars.id == "123"
+
+      assert {:error, changeset} = variables_module.build(%{})
+      assert "can't be blank" in errors_on(changeset, :id)
+    end
+
+    test "returns nil for operations without variables" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!("query { user(id: \"1\") { name } }")
+
+      assert nil ==
+               InputTypeGenerator.generate_variables(operation, schema,
+                 client_module: Grephql.Test.Var.NoVars,
+                 function_name: :get_user,
+                 scalar_types: %{}
+               )
+    end
+
+    test "uses source mapping for camelCase variable names" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!("query GetUser($userId: ID!) { user(id: $userId) { name } }")
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: Grephql.Test.Var.Camel,
+          function_name: :get_user,
+          scalar_types: %{}
+        )
+
+      assert {:ok, vars} = variables_module.build(%{user_id: "123"})
+      assert vars.user_id == "123"
+
+      dumped = Ecto.embedded_dump(vars, :json)
+      assert dumped[:userId] == "123"
+    end
+
+    test "embeds input object variables" do
+      schema = schema_with_input()
+
+      operation =
+        parse!(
+          "mutation CreateUser($input: CreateUserInput!) { createUser(input: $input) { name } }"
+        )
+
+      InputTypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.Var.Embed,
+        scalar_types: %{}
+      )
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: Grephql.Test.Var.Embed,
+          function_name: :create_user,
+          scalar_types: %{}
+        )
+
+      assert variables_module == Grephql.Test.Var.Embed.CreateUser.Variables
+      assert :input in variables_module.__schema__(:embeds)
+
+      assert {:ok, vars} =
+               variables_module.build(%{input: %{name: "Alice", email: "a@b.com"}})
+
+      assert vars.input.name == "Alice"
+    end
+
+    test "mixes scalar and input object variables" do
+      schema = schema_with_input()
+
+      operation =
+        parse!(
+          "mutation CreateUser($id: ID!, $input: CreateUserInput!) { createUser(input: $input) { name } }"
+        )
+
+      InputTypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.Var.Mixed,
+        scalar_types: %{}
+      )
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: Grephql.Test.Var.Mixed,
+          function_name: :create_user,
+          scalar_types: %{}
+        )
+
+      fields = variables_module.__schema__(:fields)
+      embeds = variables_module.__schema__(:embeds)
+      assert :id in fields
+      assert :input in embeds
+
+      assert {:ok, vars} =
+               variables_module.build(%{id: "1", input: %{name: "Alice"}})
+
+      assert vars.id == "1"
+      assert vars.input.name == "Alice"
+    end
+
+    test "embedded_dump serializes correctly for GraphQL" do
+      schema = schema_with_input()
+
+      operation =
+        parse!(
+          "mutation CreateUser($input: CreateUserInput!) { createUser(input: $input) { name } }"
+        )
+
+      InputTypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.Var.Dump,
+        scalar_types: %{}
+      )
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: Grephql.Test.Var.Dump,
+          function_name: :create_user,
+          scalar_types: %{}
+        )
+
+      {:ok, vars} = variables_module.build(%{input: %{name: "Alice", email: "a@b.com"}})
+      dumped = Ecto.embedded_dump(vars, :json)
+
+      assert dumped[:input][:name] == "Alice"
+      assert dumped[:input][:email] == "a@b.com"
     end
   end
 
