@@ -170,7 +170,8 @@ defmodule Grephql.TypeGenerator do
 
       ecto_type ->
         typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
-        {{:field, atom_name, ecto_type, [typed: typed_opts]}, []}
+        source_opt = GeneratorHelpers.source_opt(atom_name, field_name)
+        {{:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}, []}
     end
   end
 
@@ -191,17 +192,19 @@ defmodule Grephql.TypeGenerator do
     result =
       generate_selections(field.selection_set.selections, type_name, nested_module, context)
 
+    source_opt = GeneratorHelpers.source_opt(atom_name, field_name)
+
     case result do
       # Union/interface: use parameterized type field instead of embed
       {union_module, nested_modules} ->
         ecto_type = if kind == :embeds_many, do: {:array, union_module}, else: union_module
         typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
-        {{:field, atom_name, ecto_type, [typed: typed_opts]}, nested_modules}
+        {{:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}, nested_modules}
 
       # Regular object: use embeds_one/embeds_many
       [_nested_module | _rest] = nested_modules ->
         typed_opts = GeneratorHelpers.embed_typed_opts(kind, resolved)
-        {{kind, atom_name, nested_module, [typed: typed_opts]}, nested_modules}
+        {{kind, atom_name, nested_module, [{:typed, typed_opts} | source_opt]}, nested_modules}
     end
   end
 

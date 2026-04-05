@@ -50,7 +50,6 @@ defmodule Grephql do
   defmacro __using__(opts) do
     otp_app = Keyword.fetch!(opts, :otp_app)
     source = Keyword.fetch!(opts, :source)
-    scalars = Keyword.get(opts, :scalars, %{})
     use_config = Keyword.take(opts, @use_config_keys)
 
     file_source? = is_binary(source) and not Loader.json_content?(source)
@@ -71,13 +70,18 @@ defmodule Grephql do
         end
       end
 
+    # scalars from opts are already AST (may contain {:__aliases__, ...} nodes
+    # for module references). Pass through without Macro.escape so they
+    # evaluate correctly in the caller's compile context.
+    scalars_ast = Keyword.get(opts, :scalars, Macro.escape(%{}))
+
     quote do
       import Grephql.Macros
 
       unquote(external_resource_ast)
 
       @grephql_otp_app unquote(otp_app)
-      @grephql_scalars unquote(Macro.escape(scalars))
+      @grephql_scalars unquote(scalars_ast)
       @grephql_use_config unquote(use_config)
       @grephql_schema Grephql.__load_schema__(unquote(source), __ENV__.file)
 

@@ -49,6 +49,9 @@ defmodule Grephql.Types.Enum do
       def type, do: :string
 
       @impl Ecto.Type
+      def embed_as(_format), do: :dump
+
+      @impl Ecto.Type
       def cast(value) when is_binary(value) do
         Map.fetch(@string_to_atom, value)
       end
