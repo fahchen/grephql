@@ -134,6 +134,18 @@ defmodule Grephql.ClientModuleTest do
     end
   end
 
+  describe "source file validation" do
+    test "raises CompileError when schema file does not exist" do
+      assert_raise CompileError, ~r/schema file not found/, fn ->
+        defmodule MissingSchemaClient do
+          use Grephql,
+            otp_app: :grephql,
+            source: "nonexistent/schema.json"
+        end
+      end
+    end
+  end
+
   describe "schema caching" do
     test "persistent_term caches schema across calls" do
       schema1 = Grephql.__load_schema__("../support/schemas/minimal.json", __ENV__.file)

@@ -18,10 +18,16 @@ defmodule Grephql do
   ## Options
 
     * `:otp_app` (required) — the OTP application for runtime config lookup
-    * `:source` (required) — path to a schema JSON file, or an inline JSON string
+    * `:source` (required) — path to a schema JSON file (relative to the caller file), or an inline JSON string
     * `:scalars` — custom scalar type mappings (default: `%{}`)
     * `:endpoint` — default GraphQL endpoint URL
-    * `:req_options` — default Req options, supports middleware/plugins including headers (keyword list)
+    * `:req_options` — default Req options passed directly to `Req.new/1` (keyword list).
+      Supports all Req options including middleware/plugins. Common examples:
+
+      - Headers: `req_options: [headers: [authorization: "Bearer token"]]`
+      - Timeouts: `req_options: [receive_timeout: 30_000]`
+      - Custom plugins: `req_options: [plug: {MyPlug, opts}]`
+      - Testing with `req_test`: `req_options: [plug: {Req.Test, MyApp.GitHub}]`
   """
 
   alias Grephql.Query
@@ -36,6 +42,15 @@ defmodule Grephql do
     use_config = Keyword.take(opts, @use_config_keys)
 
     file_source? = is_binary(source) and not Loader.json_content?(source)
+
+    if file_source? do
+      absolute = Path.expand(source, Path.dirname(__CALLER__.file))
+
+      unless File.exists?(absolute) do
+        raise CompileError,
+          description: "schema file not found: #{absolute} (resolved from #{source})"
+      end
+    end
 
     external_resource_ast =
       if file_source? do
