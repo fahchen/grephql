@@ -125,7 +125,7 @@ defmodule Grephql do
   Options override runtime config which overrides compile-time defaults.
   """
   @spec execute(Query.t(), struct() | map(), keyword()) ::
-          {:ok, Result.t()} | {:error, Req.Response.t()}
+          {:ok, Result.t()} | {:error, Req.Response.t() | Exception.t()}
   def execute(query, variables \\ %{}, opts \\ [])
 
   def execute(%Query{} = query, variables, opts) do
@@ -144,18 +144,18 @@ defmodule Grephql do
     body =
       if query.operation_name, do: Map.put(body, :operationName, query.operation_name), else: body
 
-    response =
-      [url: endpoint, json: body]
-      |> Req.new()
-      |> Req.merge(req_options)
-      |> Req.post!()
-
-    case response.status do
-      status when status >= 200 and status <= 299 ->
+    case [url: endpoint, json: body]
+         |> Req.new()
+         |> Req.merge(req_options)
+         |> Req.post() do
+      {:ok, %{status: status} = response} when status >= 200 and status <= 299 ->
         decode_response(response.body, query.result_module)
 
-      _other ->
+      {:ok, response} ->
         {:error, response}
+
+      {:error, exception} ->
+        {:error, exception}
     end
   end
 
