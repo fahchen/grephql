@@ -48,7 +48,7 @@ defmodule Grephql.TypeGenerator do
 
     # Module names derived from schema at compile time
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    base_module = Module.concat([client_module, camelize(function_name), Result])
+    base_module = Module.concat([client_module, GeneratorHelpers.camelize(function_name), Result])
 
     root_type_name = Helpers.root_type_name(schema, operation.operation)
     context = {schema, scalar_types}
@@ -118,7 +118,7 @@ defmodule Grephql.TypeGenerator do
 
         # Fragment type names from schema, bounded set
         # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-        fragment_module = Module.concat(parent_module, camelize(type_name))
+        fragment_module = Module.concat(parent_module, GeneratorHelpers.camelize(type_name))
 
         fragment_modules =
           generate_object_schema(merged_selections, type_name, fragment_module, context)
@@ -186,7 +186,7 @@ defmodule Grephql.TypeGenerator do
        ) do
     # Nested module names from schema field paths
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    nested_module = Module.concat(parent_module, camelize(field_name))
+    nested_module = Module.concat(parent_module, GeneratorHelpers.camelize(field_name))
 
     result =
       generate_selections(field.selection_set.selections, type_name, nested_module, context)
@@ -223,7 +223,4 @@ defmodule Grephql.TypeGenerator do
 
   defp field_name(%QueryField{alias: alias_name}) when is_binary(alias_name), do: alias_name
   defp field_name(%QueryField{name: name}), do: name
-
-  defp camelize(name) when is_atom(name), do: name |> Atom.to_string() |> Macro.camelize()
-  defp camelize(name) when is_binary(name), do: Macro.camelize(name)
 end

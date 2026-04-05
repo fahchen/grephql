@@ -19,7 +19,9 @@ defmodule Grephql.InputTypeGenerator do
   alias Grephql.TypeMapper
   alias Grephql.Validator.Helpers
 
-  @type option() :: {:client_module, module()} | {:scalar_types, map()}
+  alias Grephql.Schema.TypeRef
+
+  @type option() :: {:client_module, module()} | {:function_name, atom()} | {:scalar_types, map()}
 
   @doc """
   Generates input type modules for all input types referenced by
@@ -45,6 +47,113 @@ defmodule Grephql.InputTypeGenerator do
     operation.variable_definitions
     |> collect_input_type_names(schema)
     |> Enum.flat_map(&generate_input_type(&1, context))
+  end
+
+  @doc """
+  Generates a Variables struct for an operation's variable definitions.
+
+  Returns the Variables module name, or `nil` if the operation has no variables.
+  Variable field names are snake_cased with `source:` mapping to the original
+  GraphQL variable name for correct serialization via `Ecto.embedded_dump/2`.
+
+  ## Options
+
+    - `:client_module` — the parent client module
+    - `:function_name` — the defgql function name (for module path)
+    - `:scalar_types` — custom scalar type mappings (default: `%{}`)
+  """
+  @spec generate_variables(
+          Grephql.Language.OperationDefinition.t(),
+          Schema.t(),
+          [option()]
+        ) :: module() | nil
+  def generate_variables(operation, _schema, _opts) when operation.variable_definitions == [] do
+    nil
+  end
+
+  def generate_variables(operation, schema, opts) do
+    client_module = Keyword.fetch!(opts, :client_module)
+    function_name = Keyword.fetch!(opts, :function_name)
+    scalar_types = Keyword.get(opts, :scalar_types, %{})
+
+    # Module names derived from schema at compile time
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    inputs_module = Module.concat(client_module, "Inputs")
+    # Module names derived from schema at compile time
+    # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
+    variables_module =
+      Module.concat([client_module, GeneratorHelpers.camelize(function_name), Variables])
+
+    context = {schema, scalar_types, inputs_module}
+
+    {field_defs, embed_names, required_names} =
+      Enum.reduce(operation.variable_definitions, {[], [], []}, fn var_def,
+                                                                   {defs, embeds, reqs} ->
+        var_name = var_def.variable.name
+        type_ref = language_type_to_type_ref(var_def.type, schema)
+        resolved = TypeMapper.resolve(type_ref, scalar_types)
+
+        # Variable names from query, bounded set
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        atom_name = var_name |> Macro.underscore() |> String.to_atom()
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        source_atom = String.to_atom(var_name)
+
+        req = if resolved.nullable, do: reqs, else: [atom_name | reqs]
+
+        build_variable_field(
+          atom_name,
+          source_atom,
+          resolved,
+          context,
+          {defs, embeds, req}
+        )
+      end)
+
+    {field_defs, cast_fields, embed_names, required_names} =
+      GeneratorHelpers.prepare_schema_fields(field_defs, embed_names, required_names)
+
+    create_input_schema(variables_module, field_defs, cast_fields, embed_names, required_names)
+
+    variables_module
+  end
+
+  defp build_variable_field(atom_name, source_atom, resolved, context, {defs, embeds, reqs}) do
+    source_opt = if atom_name != source_atom, do: [source: source_atom], else: []
+
+    case resolved.ecto_type do
+      {:object, nested_type_name} ->
+        {field_def, _new_modules} =
+          build_input_embed(:embeds_one, atom_name, nested_type_name, resolved, context)
+
+        {[field_def | defs], [atom_name | embeds], reqs}
+
+      {:array, {:object, nested_type_name}} ->
+        {field_def, _new_modules} =
+          build_input_embed(:embeds_many, atom_name, nested_type_name, resolved, context)
+
+        {[field_def | defs], [atom_name | embeds], reqs}
+
+      ecto_type ->
+        typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
+        field_def = {:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}
+        {[field_def | defs], embeds, reqs}
+    end
+  end
+
+  defp language_type_to_type_ref(%NonNullType{type: inner}, schema) do
+    %TypeRef{kind: :non_null, of_type: language_type_to_type_ref(inner, schema)}
+  end
+
+  defp language_type_to_type_ref(%ListType{type: inner}, schema) do
+    %TypeRef{kind: :list, of_type: language_type_to_type_ref(inner, schema)}
+  end
+
+  defp language_type_to_type_ref(%NamedType{name: name}, schema) do
+    case Schema.get_type(schema, name) do
+      {:ok, type} -> %TypeRef{kind: type.kind, name: name}
+      :error -> %TypeRef{kind: :scalar, name: name}
+    end
   end
 
   defp collect_input_type_names(variable_definitions, schema) do
@@ -87,10 +196,8 @@ defmodule Grephql.InputTypeGenerator do
         build_input_field(atom_name, input_value, resolved, context, acc)
       end)
 
-    field_defs = :lists.reverse(field_defs)
-    embed_names = :lists.reverse(embed_names)
-    required_names = :lists.reverse(required_names)
-    cast_fields = for {:field, name, _type, _opts} <- field_defs, do: name
+    {field_defs, cast_fields, embed_names, required_names} =
+      GeneratorHelpers.prepare_schema_fields(field_defs, embed_names, required_names)
 
     create_input_schema(module, field_defs, cast_fields, embed_names, required_names)
 
