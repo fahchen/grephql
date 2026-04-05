@@ -30,6 +30,7 @@ Do not commit if `mix precommit` fails. Fix all issues first.
 - Semantic commit messages: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`
 - Small commits: one logical change per commit, not multiple unrelated changes bundled together
 - Submit changes as PRs, not direct commits to main
+- PR title goes into changelog: must be descriptive, specific, and reflect the main change (e.g., "fix: handle network errors in execute/3" not "fix: various fixes")
 
 ## Dependencies
 
