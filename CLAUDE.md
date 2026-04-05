@@ -28,6 +28,7 @@ Do not commit if `mix precommit` fails. Fix all issues first.
 - Credo disables: never disable credo at file level or for an entire rule. Only use inline disables (`credo:disable-for-next-line` or `credo:disable-for-lines:N`) with a reason comment on the line above explaining why
 - Run `/simplify` before every commit to review code for reuse, quality, and efficiency
 - Semantic commit messages: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`
+- Small commits: one logical change per commit, not multiple unrelated changes bundled together
 - Submit changes as PRs, not direct commits to main
 
 ## Dependencies
