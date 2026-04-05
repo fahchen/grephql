@@ -22,7 +22,7 @@ defmodule Grephql.DefgqlTest do
     end
 
     test "generates output type modules" do
-      user = struct(WithVariables.GetUser.User, name: "Alice", email: "a@b.com")
+      user = struct(WithVariables.GetUser.Result.User, name: "Alice", email: "a@b.com")
       assert user.name == "Alice"
       assert user.email == "a@b.com"
     end
@@ -125,7 +125,7 @@ defmodule Grephql.DefgqlTest do
       assert query.operation_name == "GetUser"
       assert query.has_variables? == true
       assert query.client_module == QueryInspect
-      assert query.result_module == QueryInspect.GetUser
+      assert query.result_module == QueryInspect.GetUser.Result
     end
   end
 end

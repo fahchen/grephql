@@ -21,7 +21,7 @@ defmodule Grephql.SigilTest do
     test "derives function_name from operation name" do
       query = BasicQuery.query_struct()
       assert query.operation_name == "GetUser"
-      assert query.result_module == BasicQuery.GetUser
+      assert query.result_module == BasicQuery.GetUser.Result
     end
 
     test "detects variables" do
@@ -29,7 +29,7 @@ defmodule Grephql.SigilTest do
     end
 
     test "generates output type modules" do
-      user = struct(BasicQuery.GetUser.User, name: "Alice", email: "a@b.com")
+      user = struct(BasicQuery.GetUser.Result.User, name: "Alice", email: "a@b.com")
       assert user.name == "Alice"
       assert user.email == "a@b.com"
     end
@@ -108,11 +108,11 @@ defmodule Grephql.SigilTest do
     test "supports module attribute interpolation" do
       query = InterpolatedQuery.query_struct()
       assert query.operation_name == "GetUser"
-      assert query.result_module == InterpolatedQuery.GetUser
+      assert query.result_module == InterpolatedQuery.GetUser.Result
     end
 
     test "generates types from interpolated fields" do
-      user = struct(InterpolatedQuery.GetUser.User, name: "Alice", email: "a@b.com")
+      user = struct(InterpolatedQuery.GetUser.Result.User, name: "Alice", email: "a@b.com")
       assert user.name == "Alice"
       assert user.email == "a@b.com"
     end

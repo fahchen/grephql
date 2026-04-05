@@ -7,9 +7,9 @@ defmodule Grephql.TypeGenerator do
 
   ## Naming convention
 
-  Output types follow per-query path naming:
+  Output types follow per-query path naming under a `Result` namespace:
 
-      ClientModule.FunctionName.FieldName.NestedField...
+      ClientModule.FunctionName.Result.FieldName.NestedField...
 
   Field aliases override both struct field names and module path segments.
 
@@ -48,7 +48,7 @@ defmodule Grephql.TypeGenerator do
 
     # Module names derived from schema at compile time
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    base_module = Module.concat([client_module, camelize(function_name)])
+    base_module = Module.concat([client_module, camelize(function_name), Result])
 
     root_type_name = Helpers.root_type_name(schema, operation.operation)
     context = {schema, scalar_types}
