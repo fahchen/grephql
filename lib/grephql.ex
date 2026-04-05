@@ -110,7 +110,8 @@ defmodule Grephql do
 
   Options override runtime config which overrides compile-time defaults.
   """
-  @spec execute(Query.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  @spec execute(Query.t(), struct() | map(), keyword()) ::
+          {:ok, Grephql.Result.t()} | {:error, Req.Response.t() | :not_implemented}
   def execute(query, variables \\ %{}, opts \\ [])
 
   def execute(%Query{} = _query, _variables, _opts) do

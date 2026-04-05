@@ -241,6 +241,7 @@ defmodule Grephql.InputTypeGenerator do
 
   defp create_input_schema(module_name, field_defs, cast_fields, embed_names, required_names) do
     field_asts = Enum.map(field_defs, &GeneratorHelpers.field_def_to_ast/1)
+    params_type_ast = GeneratorHelpers.build_params_type_ast(field_defs, required_names)
     changeset_body = changeset_body_ast(cast_fields, embed_names, required_names)
 
     Module.create(
@@ -248,6 +249,8 @@ defmodule Grephql.InputTypeGenerator do
       quote do
         use Grephql.EmbeddedSchema
         import Ecto.Changeset
+
+        @type params() :: unquote(params_type_ast)
 
         typed_embedded_schema do
           (unquote_splicing(field_asts))
