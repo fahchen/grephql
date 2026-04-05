@@ -56,4 +56,16 @@ defmodule Grephql.Schema.LoaderTest do
       assert {:ok, %Schema{}} = Loader.load(json)
     end
   end
+
+  describe "load!/1" do
+    test "returns schema on success" do
+      assert %Schema{query_type: "Query"} = Loader.load!(@minimal_introspection)
+    end
+
+    test "raises on error" do
+      assert_raise RuntimeError, ~r/no such file or directory/, fn ->
+        Loader.load!("/nonexistent/path.json")
+      end
+    end
+  end
 end
