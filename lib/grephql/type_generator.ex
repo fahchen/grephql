@@ -138,7 +138,7 @@ defmodule Grephql.TypeGenerator do
           field_name |> Macro.underscore() |> String.to_atom()
 
         {:ok, schema_field} = Schema.get_field(schema, parent_type_name, field.name)
-        resolved = TypeMapper.resolve(schema_field.type, scalar_types)
+        resolved = TypeMapper.resolve(schema_field.type, schema, scalar_types)
 
         {field_def, new_modules, new_asts} =
           build_field_def(field, atom_name, field_name, resolved, parent_module, context)
@@ -225,7 +225,9 @@ defmodule Grephql.TypeGenerator do
       ecto_type ->
         typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
         source_opt = GeneratorHelpers.source_opt(atom_name, field_name)
-        {{:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}, [], []}
+        enum_opts = GeneratorHelpers.enum_opts(resolved)
+        opts = [{:typed, typed_opts} | source_opt] ++ enum_opts
+        {{:field, atom_name, ecto_type, opts}, [], []}
     end
   end
 

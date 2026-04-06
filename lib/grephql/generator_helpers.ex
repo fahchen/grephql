@@ -33,6 +33,14 @@ defmodule Grephql.GeneratorHelpers do
   def embed_typed_opts(_kind, _resolved), do: []
 
   @doc """
+  Builds extra field opts for enum types (`:values` for `Grephql.Types.Enum`).
+  Returns `[]` for non-enum types.
+  """
+  @spec enum_opts(Grephql.TypeMapper.resolve_result()) :: keyword()
+  def enum_opts(%{enum_values: values}) when is_list(values), do: [values: values]
+  def enum_opts(_resolved), do: []
+
+  @doc """
   Builds a quoted `@type params()` map literal from field definitions.
 
   Generates `%{required(:name) => String.t(), optional(:email) => String.t() | nil}`.

@@ -100,7 +100,7 @@ defmodule Grephql.InputTypeGenerator do
         fn var_def, {defs, embeds, reqs, collect_acc} ->
           var_name = var_def.variable.name
           type_ref = language_type_to_type_ref(var_def.type, schema)
-          resolved = TypeMapper.resolve(type_ref, scalar_types)
+          resolved = TypeMapper.resolve(type_ref, schema, scalar_types)
 
           # Variable names from query, bounded set
           # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
@@ -172,7 +172,11 @@ defmodule Grephql.InputTypeGenerator do
 
       ecto_type ->
         typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
-        field_def = {:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}
+        enum_opts = GeneratorHelpers.enum_opts(resolved)
+
+        field_def =
+          {:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt] ++ enum_opts}
+
         {[field_def | defs], embeds, reqs, collect_acc}
     end
   end
@@ -246,7 +250,7 @@ defmodule Grephql.InputTypeGenerator do
   defp collect_module(
          module,
          type,
-         {_schema, scalar_types, _inputs_module} = context,
+         {schema, scalar_types, _inputs_module} = context,
          collect_acc
        ) do
     {field_defs, embed_names, required_names, collect_acc} =
@@ -257,7 +261,7 @@ defmodule Grephql.InputTypeGenerator do
         # Input field names from GraphQL schema, bounded set
         # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
         atom_name = input_value.name |> Macro.underscore() |> String.to_atom()
-        resolved = TypeMapper.resolve(input_value.type, scalar_types)
+        resolved = TypeMapper.resolve(input_value.type, schema, scalar_types)
         collect_input_field(atom_name, input_value, resolved, context, {defs, embeds, reqs}, cacc)
       end)
 
