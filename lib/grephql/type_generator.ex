@@ -223,7 +223,7 @@ defmodule Grephql.TypeGenerator do
         )
 
       ecto_type ->
-        typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
+        typed_opts = GeneratorHelpers.scalar_typed_opts(resolved)
         source_opt = GeneratorHelpers.source_opt(atom_name, field_name)
         enum_opts = GeneratorHelpers.enum_opts(resolved)
         opts = [{:typed, typed_opts} | source_opt] ++ enum_opts

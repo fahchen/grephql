@@ -171,7 +171,7 @@ defmodule Grephql.InputTypeGenerator do
         )
 
       ecto_type ->
-        typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
+        typed_opts = GeneratorHelpers.scalar_typed_opts(resolved)
         enum_opts = GeneratorHelpers.enum_opts(resolved)
 
         field_def =

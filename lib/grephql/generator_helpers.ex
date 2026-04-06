@@ -41,6 +41,37 @@ defmodule Grephql.GeneratorHelpers do
   def enum_opts(_resolved), do: []
 
   @doc """
+  Builds `typed:` options for a scalar field, including enum type override.
+  """
+  @spec scalar_typed_opts(Grephql.TypeMapper.resolve_result()) :: keyword()
+  def scalar_typed_opts(resolved) do
+    typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
+
+    case resolved.enum_values do
+      values when is_list(values) ->
+        Keyword.put(typed_opts, :type, enum_type_ast(values))
+
+      _ ->
+        typed_opts
+    end
+  end
+
+  @doc """
+  Builds a quoted union type AST from enum values for use in `typed: [type: ...]`.
+
+  Given `["OPEN", "CLOSED"]`, returns AST for `:open | :closed`.
+  """
+  @spec enum_type_ast([String.t()]) :: Macro.t()
+  def enum_type_ast(values) when is_list(values) do
+    values
+    |> Enum.map(fn val -> val |> Macro.underscore() |> String.to_atom() end)
+    |> List.foldr(nil, fn
+      atom_val, nil -> atom_val
+      atom_val, acc -> {:|, [], [atom_val, acc]}
+    end)
+  end
+
+  @doc """
   Builds a quoted `@type params()` map literal from field definitions.
 
   Generates `%{required(:name) => String.t(), optional(:email) => String.t() | nil}`.
@@ -59,8 +90,13 @@ defmodule Grephql.GeneratorHelpers do
   end
 
   defp field_def_to_type_ast({:field, field_name, ecto_type, opts}) do
-    type_ast = ecto_type |> ecto_type_to_type_ast() |> maybe_nullable(opts)
-    {field_name, type_ast}
+    base_type =
+      case get_in(opts, [:typed, :type]) do
+        nil -> ecto_type_to_type_ast(ecto_type)
+        custom_type -> custom_type
+      end
+
+    {field_name, maybe_nullable(base_type, opts)}
   end
 
   defp field_def_to_type_ast({:embeds_one, name, schema_module, opts}) do
