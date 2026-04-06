@@ -12,6 +12,7 @@ Compile-time GraphQL client for Elixir. Parses and validates queries during comp
 - **Typed variables** — Input validation via Ecto changesets with generated `params()` type
 - **Zero runtime parsing** — All GraphQL parsing happens at compile time
 - **Req integration** — Full access to Req's middleware/plugin system, including `Req.Test` for testing
+- **Auto-generated docs** — `defgql` functions include `@doc` with variables, types, and generated modules
 
 ## Installation
 
@@ -29,16 +30,12 @@ end
 
 ### 1. Download your schema
 
-Use the built-in Mix task to download your GraphQL schema via introspection:
-
 ```bash
 mix grephql.download_schema \
   --endpoint https://api.example.com/graphql \
   --output priv/schemas/schema.json \
   --header "Authorization: Bearer token123"
 ```
-
-This sends an introspection query, validates the response, and saves it as JSON.
 
 ### 2. Define a client module
 
@@ -69,8 +66,6 @@ defmodule MyApp.GitHub do
 end
 ```
 
-`defgql` parses and validates the query at compile time, generates typed response/variable modules, and defines a function you can call at runtime.
-
 ### 3. Call the generated functions
 
 ```elixir
@@ -93,9 +88,57 @@ end
 result.data.viewer.login
 ```
 
+## Macros
+
+### `defgql` / `defgqlp`
+
+Defines a public (or private) GraphQL query function. At compile time: parses, validates, generates typed modules, and defines a callable function.
+
+```elixir
+# Public — generates def get_user/2
+defgql :get_user, ~GQL"""
+  query GetUser($id: ID!) {
+    user(id: $id) { name }
+  }
+"""
+
+# Private — generates defp get_user/2
+defgqlp :get_user, ~GQL"""
+  query GetUser($id: ID!) {
+    user(id: $id) { name }
+  }
+"""
+```
+
+`defgql` functions automatically include `@doc` with operation info, variable table, and all generated module names.
+
+### `deffragment`
+
+Defines a reusable named fragment. Fragments are validated at compile time and automatically appended to queries that reference them via `...FragmentName`.
+
+```elixir
+deffragment :user_fields, ~GQL"""
+  fragment UserFields on User {
+    name
+    email
+    createdAt
+  }
+"""
+
+defgql :get_user, ~GQL"""
+  query GetUser($id: ID!) {
+    user(id: $id) {
+      ...UserFields
+    }
+  }
+"""
+```
+
+The fragment generates a typed module at `Client.Fragments.UserFields`.
+
 ## Configuration
 
-Configuration is resolved in order (later wins): compile-time defaults -> runtime config -> `execute/3` opts.
+Configuration is resolved in order (later wins): compile-time defaults -> runtime config -> per-call opts.
 
 ### Compile-time (in `use`)
 
@@ -212,11 +255,9 @@ Enum.each(result.data.search, fn
 end)
 ```
 
-## Generated Module Naming
+## Generated Modules
 
-`defgql` generates typed modules at compile time. Here are the naming rules:
-
-Given `defgql :get_user` inside `MyApp.GitHub`:
+Each `defgql` generates typed Ecto embedded schema modules at compile time. Given `defgql :get_user` inside `MyApp.GitHub`:
 
 | Type | Pattern | Example |
 |------|---------|---------|
@@ -229,11 +270,12 @@ Given `defgql :get_user` inside `MyApp.GitHub`:
 
 ### Naming rules
 
-- Function name is CamelCased: `:get_user` → `GetUser`
-- Struct field names are snake_cased: `userName` → `:user_name`
-- Field aliases override both field name and module path: `author: user { ... }` → field `:author`, module `...Result.Author`
+- Function name is CamelCased: `:get_user` -> `GetUser`
+- Struct field names are snake_cased: `userName` -> `:user_name`
+- Field aliases override both field name and module path: `author: user { ... }` -> field `:author`, module `...Result.Author`
 - Input types are shared across queries under `Client.Inputs.*`
 - Variables are per-query under `Client.FnName.Variables`
+- Fragment modules live under `Client.Fragments.*`
 
 ### Example
 
@@ -241,12 +283,19 @@ Given `defgql :get_user` inside `MyApp.GitHub`:
 defmodule MyApp.GitHub do
   use Grephql, otp_app: :my_app, source: "schema.json"
 
+  deffragment :post_fields, ~GQL"""
+    fragment PostFields on Post {
+      title
+      body
+    }
+  """
+
   defgql :get_user, ~GQL"""
     query GetUser($id: ID!) {
       author: user(id: $id) {
         name
         posts {
-          title
+          ...PostFields
         }
       }
     }
@@ -254,10 +303,11 @@ defmodule MyApp.GitHub do
 end
 
 # Generated modules:
-# MyApp.GitHub.GetUser.Result         — %{author: Author.t()}
-# MyApp.GitHub.GetUser.Result.Author  — %{name: String.t(), posts: [Posts.t()]}
-# MyApp.GitHub.GetUser.Result.Author.Posts — %{title: String.t()}
-# MyApp.GitHub.GetUser.Variables      — %{id: String.t()}
+# MyApp.GitHub.Fragments.PostFields         — %{title: String.t(), body: String.t()}
+# MyApp.GitHub.GetUser.Result               — %{author: Author.t()}
+# MyApp.GitHub.GetUser.Result.Author        — %{name: String.t(), posts: [Posts.t()]}
+# MyApp.GitHub.GetUser.Result.Author.Posts   — %{title: String.t(), body: String.t()}
+# MyApp.GitHub.GetUser.Variables            — %{id: String.t()}
 ```
 
 ## Testing
