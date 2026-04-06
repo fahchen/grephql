@@ -62,7 +62,7 @@ defmodule Grephql.TypeGenerator do
     {result, module_asts} =
       collect_selections(operation.selection_set.selections, root_type_name, base_module, context)
 
-    GeneratorHelpers.create_modules_parallel(module_asts)
+    GeneratorHelpers.create_modules(module_asts)
 
     unwrap_module_names(result)
   end
@@ -84,7 +84,7 @@ defmodule Grephql.TypeGenerator do
     {_result, module_asts} =
       collect_selections(fragment.selection_set.selections, type_name, base_module, context)
 
-    GeneratorHelpers.create_modules_parallel(module_asts)
+    GeneratorHelpers.create_modules(module_asts)
 
     base_module
   end

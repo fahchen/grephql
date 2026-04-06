@@ -105,22 +105,28 @@ defmodule Grephql.GeneratorHelpers do
   end
 
   @doc """
-  Creates multiple modules in parallel using `Task.async_stream`.
+  Creates multiple modules from `{module_name, quoted_ast}` tuples.
 
-  Takes a list of `{module_name, quoted_ast}` tuples and calls
-  `Module.create/3` concurrently. Module creation order does not matter
-  since Ecto embeds only reference child modules by atom name.
+  Uses `Kernel.ParallelCompiler.pmap/2` so that spawned processes
+  can resolve dependencies via `Code.ensure_compiled/1` and the Mix
+  compiler tracks the generated `.beam` files. Falls back to sequential
+  creation outside a compiler session (tests, scripts, iex).
   """
-  @spec create_modules_parallel([{module(), Macro.t()}]) :: :ok
-  def create_modules_parallel(module_asts) do
+  @spec create_modules([{module(), Macro.t()}]) :: :ok
+  def create_modules(module_asts) do
     location = Macro.Env.location(__ENV__)
+    create_fn = fn {mod, ast} -> Module.create(mod, ast, location) end
 
-    module_asts
-    |> Task.async_stream(
-      fn {mod, ast} -> Module.create(mod, ast, location) end,
-      ordered: false
-    )
-    |> Stream.run()
+    try do
+      Kernel.ParallelCompiler.pmap(module_asts, create_fn)
+    rescue
+      # pmap/2 raises when no compiler session is active or when the
+      # session is interrupted (e.g. inside capture_io in tests).
+      _error in [ArgumentError, MatchError] ->
+        Enum.each(module_asts, create_fn)
+    end
+
+    :ok
   end
 
   @doc """

@@ -51,7 +51,7 @@ defmodule Grephql.InputTypeGenerator do
         collect_input_type(type_name, context, collect_acc)
       end)
 
-    GeneratorHelpers.create_modules_parallel(module_asts)
+    GeneratorHelpers.create_modules(module_asts)
 
     modules
   end
@@ -134,7 +134,7 @@ defmodule Grephql.InputTypeGenerator do
         required_names
       )
 
-    GeneratorHelpers.create_modules_parallel([variables_ast | nested_asts])
+    GeneratorHelpers.create_modules([variables_ast | nested_asts])
 
     variables_module
   end
