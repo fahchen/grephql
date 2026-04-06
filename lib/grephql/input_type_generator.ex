@@ -44,9 +44,16 @@ defmodule Grephql.InputTypeGenerator do
     inputs_module = Module.concat(client_module, "Inputs")
     context = {schema, scalar_types, inputs_module}
 
-    operation.variable_definitions
-    |> collect_input_type_names(schema)
-    |> Enum.flat_map(&generate_input_type(&1, context))
+    {modules, module_asts, _seen} =
+      operation.variable_definitions
+      |> collect_input_type_names(schema)
+      |> Enum.reduce({[], [], MapSet.new()}, fn type_name, collect_acc ->
+        collect_input_type(type_name, context, collect_acc)
+      end)
+
+    GeneratorHelpers.create_modules(module_asts)
+
+    modules
   end
 
   @doc """
@@ -86,59 +93,110 @@ defmodule Grephql.InputTypeGenerator do
 
     context = {schema, scalar_types, inputs_module}
 
-    {field_defs, embed_names, required_names} =
-      Enum.reduce(operation.variable_definitions, {[], [], []}, fn var_def,
-                                                                   {defs, embeds, reqs} ->
-        var_name = var_def.variable.name
-        type_ref = language_type_to_type_ref(var_def.type, schema)
-        resolved = TypeMapper.resolve(type_ref, scalar_types)
+    {field_defs, embed_names, required_names, {_mods, nested_asts, _seen}} =
+      Enum.reduce(
+        operation.variable_definitions,
+        {[], [], [], {[], [], MapSet.new()}},
+        fn var_def, {defs, embeds, reqs, collect_acc} ->
+          var_name = var_def.variable.name
+          type_ref = language_type_to_type_ref(var_def.type, schema)
+          resolved = TypeMapper.resolve(type_ref, schema, scalar_types)
 
-        # Variable names from query, bounded set
-        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-        atom_name = var_name |> Macro.underscore() |> String.to_atom()
-        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-        source_atom = String.to_atom(var_name)
+          # Variable names from query, bounded set
+          # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+          atom_name = var_name |> Macro.underscore() |> String.to_atom()
+          # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+          source_atom = String.to_atom(var_name)
 
-        req = if resolved.nullable, do: reqs, else: [atom_name | reqs]
+          req = if resolved.nullable, do: reqs, else: [atom_name | reqs]
+          source_opt = if atom_name != source_atom, do: [source: source_atom], else: []
 
-        build_variable_field(
-          atom_name,
-          source_atom,
-          resolved,
-          context,
-          {defs, embeds, req}
-        )
-      end)
+          build_input_field_def(
+            atom_name,
+            resolved,
+            source_opt,
+            context,
+            {defs, embeds, req},
+            collect_acc
+          )
+        end
+      )
 
     {field_defs, cast_fields, embed_names, required_names} =
       GeneratorHelpers.prepare_schema_fields(field_defs, embed_names, required_names)
 
-    create_input_schema(variables_module, field_defs, cast_fields, embed_names, required_names)
+    variables_ast =
+      build_input_schema_ast(
+        variables_module,
+        field_defs,
+        cast_fields,
+        embed_names,
+        required_names
+      )
+
+    GeneratorHelpers.create_modules([variables_ast | nested_asts])
 
     variables_module
   end
 
-  defp build_variable_field(atom_name, source_atom, resolved, context, {defs, embeds, reqs}) do
-    source_opt = if atom_name != source_atom, do: [source: source_atom], else: []
-
+  defp build_input_field_def(
+         atom_name,
+         resolved,
+         source_opt,
+         context,
+         {defs, embeds, reqs},
+         collect_acc
+       ) do
     case resolved.ecto_type do
       {:object, nested_type_name} ->
-        {field_def, _new_modules} =
-          build_input_embed(:embeds_one, atom_name, nested_type_name, resolved, context)
-
-        {[field_def | defs], [atom_name | embeds], reqs}
+        collect_embed(
+          :embeds_one,
+          atom_name,
+          nested_type_name,
+          resolved,
+          context,
+          {defs, embeds, reqs},
+          collect_acc
+        )
 
       {:array, {:object, nested_type_name}} ->
-        {field_def, _new_modules} =
-          build_input_embed(:embeds_many, atom_name, nested_type_name, resolved, context)
-
-        {[field_def | defs], [atom_name | embeds], reqs}
+        collect_embed(
+          :embeds_many,
+          atom_name,
+          nested_type_name,
+          resolved,
+          context,
+          {defs, embeds, reqs},
+          collect_acc
+        )
 
       ecto_type ->
-        typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
-        field_def = {:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}
-        {[field_def | defs], embeds, reqs}
+        typed_opts = GeneratorHelpers.scalar_typed_opts(resolved)
+        enum_opts = GeneratorHelpers.enum_opts(resolved)
+
+        field_def =
+          {:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt] ++ enum_opts}
+
+        {[field_def | defs], embeds, reqs, collect_acc}
     end
+  end
+
+  defp collect_embed(
+         kind,
+         atom_name,
+         nested_type_name,
+         resolved,
+         context,
+         {defs, embeds, reqs},
+         collect_acc
+       ) do
+    collect_acc = collect_input_type(nested_type_name, context, collect_acc)
+    {_schema, _scalar_types, inputs_module} = context
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    nested_module = Module.concat(inputs_module, Macro.camelize(nested_type_name))
+    typed_opts = GeneratorHelpers.embed_typed_opts(kind, resolved)
+    field_def = {kind, atom_name, nested_module, [typed: typed_opts]}
+    {[field_def | defs], [atom_name | embeds], reqs, collect_acc}
   end
 
   defp language_type_to_type_ref(%NonNullType{type: inner}, schema) do
@@ -172,82 +230,78 @@ defmodule Grephql.InputTypeGenerator do
   defp unwrap_language_type(%ListType{type: inner}), do: unwrap_language_type(inner)
   defp unwrap_language_type(%NonNullType{type: inner}), do: unwrap_language_type(inner)
 
-  defp generate_input_type(type_name, {schema, _scalar_types, inputs_module} = context) do
+  defp collect_input_type(
+         type_name,
+         {schema, _scalar_types, inputs_module} = context,
+         {mods, asts, seen}
+       ) do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     module = Module.concat(inputs_module, Macro.camelize(type_name))
 
-    if Code.ensure_loaded?(module) do
-      []
+    if MapSet.member?(seen, module) or Code.ensure_loaded?(module) do
+      {mods, asts, seen}
     else
+      seen = MapSet.put(seen, module)
       {:ok, type} = Schema.get_type(schema, type_name)
-      generate_module(module, type, context)
+      collect_module(module, type, context, {mods, asts, seen})
     end
   end
 
-  defp generate_module(module, type, {_schema, scalar_types, _inputs_module} = context) do
-    {field_defs, embed_names, required_names, nested_modules} =
+  defp collect_module(
+         module,
+         type,
+         {schema, scalar_types, _inputs_module} = context,
+         collect_acc
+       ) do
+    {field_defs, embed_names, required_names, collect_acc} =
       type.input_fields
       |> Enum.sort_by(fn {name, _input_value} -> name end)
-      |> Enum.reduce({[], [], [], []}, fn {_name, input_value}, acc ->
+      |> Enum.reduce({[], [], [], collect_acc}, fn {_name, input_value},
+                                                   {defs, embeds, reqs, cacc} ->
         # Input field names from GraphQL schema, bounded set
         # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
         atom_name = input_value.name |> Macro.underscore() |> String.to_atom()
-        resolved = TypeMapper.resolve(input_value.type, scalar_types)
-        build_input_field(atom_name, input_value, resolved, context, acc)
+        resolved = TypeMapper.resolve(input_value.type, schema, scalar_types)
+        collect_input_field(atom_name, input_value, resolved, context, {defs, embeds, reqs}, cacc)
       end)
 
     {field_defs, cast_fields, embed_names, required_names} =
       GeneratorHelpers.prepare_schema_fields(field_defs, embed_names, required_names)
 
-    create_input_schema(module, field_defs, cast_fields, embed_names, required_names)
+    module_ast =
+      build_input_schema_ast(module, field_defs, cast_fields, embed_names, required_names)
 
-    [module | List.flatten(:lists.reverse(nested_modules))]
+    {mods, asts, seen} = collect_acc
+    {[module | mods], [module_ast | asts], seen}
   end
 
-  defp build_input_field(atom_name, input_value, resolved, context, {defs, embeds, reqs, nested}) do
+  defp collect_input_field(
+         atom_name,
+         input_value,
+         resolved,
+         context,
+         {defs, embeds, reqs},
+         collect_acc
+       ) do
     req = if Helpers.required?(input_value), do: [atom_name], else: []
-
     source_opt = GeneratorHelpers.source_opt(atom_name, input_value.name)
 
-    case resolved.ecto_type do
-      {:object, nested_type_name} ->
-        {field_def, new_modules} =
-          build_input_embed(:embeds_one, atom_name, nested_type_name, resolved, context)
-
-        {[field_def | defs], [atom_name | embeds], req ++ reqs, [new_modules | nested]}
-
-      {:array, {:object, nested_type_name}} ->
-        {field_def, new_modules} =
-          build_input_embed(:embeds_many, atom_name, nested_type_name, resolved, context)
-
-        {[field_def | defs], [atom_name | embeds], req ++ reqs, [new_modules | nested]}
-
-      ecto_type ->
-        typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
-        field_def = {:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}
-        {[field_def | defs], embeds, req ++ reqs, nested}
-    end
+    build_input_field_def(
+      atom_name,
+      resolved,
+      source_opt,
+      context,
+      {defs, embeds, req ++ reqs},
+      collect_acc
+    )
   end
 
-  defp build_input_embed(kind, atom_name, nested_type_name, resolved, context) do
-    new_modules = generate_input_type(nested_type_name, context)
-    {_schema, _scalar_types, inputs_module} = context
-
-    # Nested input module names from schema, bounded set
-    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    nested_module = Module.concat(inputs_module, Macro.camelize(nested_type_name))
-
-    typed_opts = GeneratorHelpers.embed_typed_opts(kind, resolved)
-    {{kind, atom_name, nested_module, [typed: typed_opts]}, new_modules}
-  end
-
-  defp create_input_schema(module_name, field_defs, cast_fields, embed_names, required_names) do
+  defp build_input_schema_ast(module_name, field_defs, cast_fields, embed_names, required_names) do
     field_asts = Enum.map(field_defs, &GeneratorHelpers.field_def_to_ast/1)
     params_type_ast = GeneratorHelpers.build_params_type_ast(field_defs, required_names)
     changeset_body = changeset_body_ast(cast_fields, embed_names, required_names)
 
-    Module.create(
-      module_name,
+    ast =
       quote do
         use Grephql.EmbeddedSchema
         import Ecto.Changeset
@@ -275,9 +329,9 @@ defmodule Grephql.InputTypeGenerator do
           |> changeset(params)
           |> apply_action(:build)
         end
-      end,
-      Macro.Env.location(__ENV__)
-    )
+      end
+
+    {module_name, ast}
   end
 
   defp changeset_body_ast(cast_fields, embed_names, required_names) do

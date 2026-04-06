@@ -274,10 +274,11 @@ defmodule Grephql.TypeGeneratorTest do
       )
 
       # search field should be a regular field (parameterized type), not an embed
-      embeds = Grephql.Test.UnionField.Search.Result.__schema__(:embeds)
+      result_module = Module.safe_concat(Grephql.Test.UnionField.Search, Result)
+      embeds = result_module.__schema__(:embeds)
       refute :search in embeds
 
-      fields = Grephql.Test.UnionField.Search.Result.__schema__(:fields)
+      fields = result_module.__schema__(:fields)
       assert :search in fields
     end
 

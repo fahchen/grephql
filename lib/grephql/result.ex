@@ -19,7 +19,7 @@ defmodule Grephql.Result do
   typed_structor do
     parameter :data_type
 
-    field :data, data_type | nil
+    field :data, data_type
     field :errors, [Error.t()], default: []
   end
 

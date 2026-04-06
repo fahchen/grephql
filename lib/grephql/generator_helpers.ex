@@ -16,25 +16,70 @@ defmodule Grephql.GeneratorHelpers do
     end
   end
 
-  @doc false
   @spec field_def_to_ast({atom(), atom(), term(), keyword()}) :: Macro.t()
   def field_def_to_ast({kind, name, type_or_schema, opts}) do
     quote do: unquote(kind)(unquote(name), unquote(type_or_schema), unquote(opts))
   end
 
-  @doc false
   @spec camelize(atom()) :: String.t()
   def camelize(name) when is_atom(name), do: name |> Atom.to_string() |> Macro.camelize()
 
-  @doc false
   @spec camelize(String.t()) :: String.t()
   def camelize(name) when is_binary(name), do: Macro.camelize(name)
 
-  @doc false
   @spec embed_typed_opts(:embeds_one | :embeds_many, Grephql.TypeMapper.resolve_result()) ::
           keyword()
   def embed_typed_opts(:embeds_one, %{nullable: true}), do: [null: true]
   def embed_typed_opts(_kind, _resolved), do: []
+
+  @doc """
+  Builds extra field opts for enum types (`:values` for `Grephql.Types.Enum`).
+  Returns `[]` for non-enum types.
+  """
+  @spec enum_opts(Grephql.TypeMapper.resolve_result()) :: keyword()
+  def enum_opts(%{enum_values: values}) when is_list(values), do: [values: values]
+  def enum_opts(_resolved), do: []
+
+  @doc """
+  Builds `typed:` options for a scalar field, including enum type override.
+  """
+  @spec scalar_typed_opts(Grephql.TypeMapper.resolve_result()) :: keyword()
+  def scalar_typed_opts(resolved) do
+    typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
+
+    case resolved.enum_values do
+      values when is_list(values) ->
+        type_ast = enum_type_ast(values, inner_nullable: resolved.inner_nullable)
+        Keyword.put(typed_opts, :type, type_ast)
+
+      _no_enum ->
+        typed_opts
+    end
+  end
+
+  @doc """
+  Builds a quoted union type AST from enum values for use in `typed: [type: ...]`.
+
+  Given `["OPEN", "CLOSED"]`, returns AST for `:open | :closed`.
+  When `inner_nullable: true`, appends `| nil` (for list elements like `[Role]`).
+  """
+  @spec enum_type_ast([String.t()], keyword()) :: Macro.t()
+  def enum_type_ast(values, opts \\ []) when is_list(values) do
+    # Enum values from the schema are compile-time constants, not runtime user input
+    atoms =
+      Enum.map(values, fn val ->
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        val |> Macro.underscore() |> String.to_atom()
+      end)
+
+    base =
+      List.foldr(atoms, nil, fn
+        atom_val, nil -> atom_val
+        atom_val, acc -> {:|, [], [atom_val, acc]}
+      end)
+
+    if opts[:inner_nullable], do: {:|, [], [base, nil]}, else: base
+  end
 
   @doc """
   Builds a quoted `@type params()` map literal from field definitions.
@@ -55,8 +100,13 @@ defmodule Grephql.GeneratorHelpers do
   end
 
   defp field_def_to_type_ast({:field, field_name, ecto_type, opts}) do
-    type_ast = ecto_type |> ecto_type_to_type_ast() |> maybe_nullable(opts)
-    {field_name, type_ast}
+    base_type =
+      case get_in(opts, [:typed, :type]) do
+        nil -> ecto_type_to_type_ast(ecto_type)
+        custom_type -> custom_type
+      end
+
+    {field_name, maybe_nullable(base_type, opts)}
   end
 
   defp field_def_to_type_ast({:embeds_one, name, schema_module, opts}) do
@@ -85,7 +135,6 @@ defmodule Grephql.GeneratorHelpers do
     end
   end
 
-  @doc false
   @spec ecto_type_to_type_ast(Grephql.TypeMapper.ecto_type()) :: Macro.t()
   def ecto_type_to_type_ast(:string), do: quote(do: String.t())
   def ecto_type_to_type_ast(:integer), do: quote(do: integer())
@@ -99,6 +148,31 @@ defmodule Grephql.GeneratorHelpers do
 
   def ecto_type_to_type_ast(module) when is_atom(module) do
     quote(do: unquote(module).t())
+  end
+
+  @doc """
+  Creates multiple modules from `{module_name, quoted_ast}` tuples.
+
+  Uses `Kernel.ParallelCompiler.pmap/2` so that spawned processes
+  can resolve dependencies via `Code.ensure_compiled/1` and the Mix
+  compiler tracks the generated `.beam` files. Falls back to sequential
+  creation outside a compiler session (tests, scripts, iex).
+  """
+  @spec create_modules([{module(), Macro.t()}]) :: :ok
+  def create_modules(module_asts) do
+    location = Macro.Env.location(__ENV__)
+    create_fn = fn {mod, ast} -> Module.create(mod, ast, location) end
+
+    try do
+      Kernel.ParallelCompiler.pmap(module_asts, create_fn)
+    rescue
+      # pmap/2 raises when no compiler session is active or when the
+      # session is interrupted (e.g. inside capture_io in tests).
+      _error in [ArgumentError, MatchError] ->
+        Enum.each(module_asts, create_fn)
+    end
+
+    :ok
   end
 
   @doc """

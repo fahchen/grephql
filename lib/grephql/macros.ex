@@ -294,7 +294,7 @@ defmodule Grephql.Macros do
             variables_module: variables_module
           ] do
       @spec unquote(name)(unquote(variables_module).params(), keyword()) ::
-              {:ok, Grephql.Result.t(unquote(result_module))}
+              {:ok, Grephql.Result.t(unquote(result_module).t())}
               | {:error, Ecto.Changeset.t()}
               | {:error, Req.Response.t()}
     end
@@ -304,7 +304,7 @@ defmodule Grephql.Macros do
   defmacro __define_spec_without_vars__(name, result_module) do
     quote bind_quoted: [name: name, result_module: result_module] do
       @spec unquote(name)(keyword()) ::
-              {:ok, Grephql.Result.t(unquote(result_module))}
+              {:ok, Grephql.Result.t(unquote(result_module).t())}
               | {:error, Req.Response.t()}
     end
   end
