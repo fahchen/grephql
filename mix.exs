@@ -15,6 +15,7 @@ defmodule Grephql.MixProject do
       deps: deps(),
       aliases: aliases(),
       dialyzer: dialyzer(),
+      test_coverage: test_coverage(),
       description: description(),
       package: package(),
       docs: docs(),
@@ -121,6 +122,12 @@ defmodule Grephql.MixProject do
         "dialyzer",
         "test"
       ]
+    ]
+  end
+
+  defp test_coverage do
+    [
+      ignore_modules: [Grephql.Parser, :grephql_parser]
     ]
   end
 
