@@ -361,8 +361,8 @@ mix grephql.download_schema --endpoint URL --output PATH [--header "Key: Value"]
 
 ## Requirements
 
-- Elixir ~> 1.19
-- Erlang/OTP 27+
+- Elixir ~> 1.15
+- Erlang/OTP 24+
 
 ## License
 
