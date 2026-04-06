@@ -94,16 +94,13 @@ defmodule Grephql.Test.Response.UserWithDeepPosts do
   end
 end
 
-# Enum type must be defined before schema that references it
-Grephql.Types.Enum.define(Grephql.Test.Response.RoleEnum, ["ADMIN", "USER", "GUEST"])
-
 defmodule Grephql.Test.Response.UserWithRole do
   @moduledoc false
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
     field :name, :string, typed: [null: false]
-    field :role, Grephql.Test.Response.RoleEnum, typed: [null: true]
+    field :role, Grephql.Types.Enum, values: ["ADMIN", "USER", "GUEST"], typed: [null: true]
   end
 end
 

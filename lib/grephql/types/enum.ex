@@ -12,12 +12,6 @@ defmodule Grephql.Types.Enum do
       field :role, Grephql.Types.Enum, values: ["ADMIN", "USER", "GUEST"]
 
   Ecto calls `init/1` automatically with the field options.
-
-  ## Programmatic definition
-
-      Grephql.Types.Enum.define(MyApp.Enums.Role, ["ADMIN", "USER", "GUEST"])
-
-  Creates a standalone module wrapping this parameterized type.
   """
 
   use Ecto.ParameterizedType
@@ -100,45 +94,4 @@ defmodule Grephql.Types.Enum do
 
   @impl Ecto.ParameterizedType
   def embed_as(_format, _params), do: :dump
-
-  @doc """
-  Defines a standalone Ecto Type module wrapping this parameterized type.
-
-  Useful when you need a module name for `scalar_types` configuration.
-
-      Grephql.Types.Enum.define(MyApp.Enums.Role, ["ADMIN", "USER", "GUEST"])
-  """
-  @spec define(module(), [String.t()]) :: {:module, module(), binary(), term()}
-  def define(module_name, values) when is_atom(module_name) and is_list(values) do
-    Module.create(
-      module_name,
-      define_body(values),
-      Macro.Env.location(__ENV__)
-    )
-  end
-
-  defp define_body(values) do
-    quote do
-      use Ecto.Type
-
-      @params Grephql.Types.Enum.init(values: unquote(values))
-
-      @type t() :: atom()
-
-      @impl Ecto.Type
-      def type, do: :string
-
-      @impl Ecto.Type
-      def embed_as(_format), do: :dump
-
-      @impl Ecto.Type
-      def cast(value), do: Grephql.Types.Enum.cast(value, @params)
-
-      @impl Ecto.Type
-      def dump(value), do: Grephql.Types.Enum.dump(value, &Ecto.Type.dump/2, @params)
-
-      @impl Ecto.Type
-      def load(value), do: Grephql.Types.Enum.load(value, &Ecto.Type.load/2, @params)
-    end
-  end
 end

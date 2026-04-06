@@ -485,7 +485,7 @@ defmodule Grephql.Lexer do
     {rest, [{token_atom, line_and_column(loc, byte_offset, length(value))}], context}
   end
 
-  def line_and_column({line, line_offset}, byte_offset, column_correction) do
+  defp line_and_column({line, line_offset}, byte_offset, column_correction) do
     column = byte_offset - line_offset - column_correction + 1
     {line, column}
   end
