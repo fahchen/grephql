@@ -36,6 +36,58 @@ defmodule Grephql.Macros do
   end
 
   @doc false
+  @spec __build_doc__(Grephql.Query.t()) :: String.t()
+  def __build_doc__(%Grephql.Query{} = query) do
+    [doc_header(query), doc_variables(query.variable_docs), doc_modules(query)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n\n")
+  end
+
+  defp doc_header(query) do
+    op_type = query.operation_type
+    op_name = query.operation_name
+
+    if op_name do
+      "Executes the `#{op_name}` GraphQL #{op_type}."
+    else
+      "Executes a GraphQL #{op_type}."
+    end
+  end
+
+  defp doc_variables([]), do: nil
+
+  defp doc_variables(variable_docs) do
+    rows =
+      Enum.map_join(variable_docs, "\n", fn var ->
+        req = if var.required, do: "required", else: "optional"
+        "| `#{var.name}` | `#{var.type}` | #{req} |"
+      end)
+
+    """
+    ## Variables
+
+    | Name | Type | |
+    |------|------|-|
+    #{rows}\
+    """
+  end
+
+  defp doc_modules(query) do
+    lines =
+      [
+        {"- `#{inspect(query.result_module)}` — result type", true},
+        {"- `#{inspect(query.variables_module)}` — variables type", query.variables_module != nil}
+        | Enum.map(query.input_modules, fn mod ->
+            {"- `#{inspect(mod)}` — input type", true}
+          end)
+      ]
+      |> Enum.filter(&elem(&1, 1))
+      |> Enum.map_join("\n", &elem(&1, 0))
+
+    "## Generated Modules\n\n" <> lines
+  end
+
+  @doc false
   @spec __resolve_fragments__(String.t(), [{atom(), Grephql.Compiler.fragment_entry()}]) ::
           {String.t(), %{String.t() => Grephql.Compiler.fragment_entry()}}
   def __resolve_fragments__(query_str, fragment_pairs) do
@@ -197,7 +249,11 @@ defmodule Grephql.Macros do
   end
 
   defp build_function_ast(kind, func_name) do
+    doc_ast = if kind == :def, do: quote(do: @doc(Grephql.Macros.__build_doc__(@grephql_query)))
+
     quote do
+      unquote(doc_ast)
+
       if @grephql_query.has_variables? do
         Grephql.Macros.__define_spec_with_vars__(
           unquote(func_name),

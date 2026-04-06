@@ -3,6 +3,9 @@ defmodule Grephql.Compiler do
 
   alias Grephql.InputTypeGenerator
   alias Grephql.Language.Fragment
+  alias Grephql.Language.ListType
+  alias Grephql.Language.NamedType
+  alias Grephql.Language.NonNullType
   alias Grephql.Language.OperationDefinition
   alias Grephql.Parser
   alias Grephql.Query
@@ -84,11 +87,13 @@ defmodule Grephql.Compiler do
     %Query{
       document: query_string,
       operation_name: operation.name,
+      operation_type: Atom.to_string(operation.operation),
       result_module: hd(output_modules),
       variables_module: variables_module,
       input_modules: input_modules,
       client_module: client_module,
-      has_variables?: operation.variable_definitions != []
+      has_variables?: operation.variable_definitions != [],
+      variable_docs: build_variable_docs(operation.variable_definitions)
     }
   end
 
@@ -151,6 +156,20 @@ defmodule Grephql.Compiler do
         raise CompileError, description: multiple_message
     end
   end
+
+  defp build_variable_docs(variable_definitions) do
+    Enum.map(variable_definitions, fn var_def ->
+      %{
+        name: var_def.variable.name,
+        type: type_to_string(var_def.type),
+        required: match?(%NonNullType{}, var_def.type)
+      }
+    end)
+  end
+
+  defp type_to_string(%NamedType{name: name}), do: name
+  defp type_to_string(%ListType{type: inner}), do: "[#{type_to_string(inner)}]"
+  defp type_to_string(%NonNullType{type: inner}), do: "#{type_to_string(inner)}!"
 
   defp raise_on_errors!(:ok, _label), do: :ok
 
