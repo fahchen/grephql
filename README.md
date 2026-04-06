@@ -212,6 +212,54 @@ Enum.each(result.data.search, fn
 end)
 ```
 
+## Generated Module Naming
+
+`defgql` generates typed modules at compile time. Here are the naming rules:
+
+Given `defgql :get_user` inside `MyApp.GitHub`:
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Result | `Client.FnName.Result.Field...` | `MyApp.GitHub.GetUser.Result.User` |
+| Nested field | `...Result.Field.NestedField` | `MyApp.GitHub.GetUser.Result.User.Posts` |
+| Variables | `Client.FnName.Variables` | `MyApp.GitHub.GetUser.Variables` |
+| Input types | `Client.Inputs.TypeName` | `MyApp.GitHub.Inputs.CreateUserInput` |
+| Fragment | `Client.Fragments.Name` | `MyApp.GitHub.Fragments.UserFields` |
+| Union variant | `...Result.Field.TypeName` | `MyApp.GitHub.Search.Result.Search.User` |
+
+### Naming rules
+
+- Function name is CamelCased: `:get_user` → `GetUser`
+- Struct field names are snake_cased: `userName` → `:user_name`
+- Field aliases override both field name and module path: `author: user { ... }` → field `:author`, module `...Result.Author`
+- Input types are shared across queries under `Client.Inputs.*`
+- Variables are per-query under `Client.FnName.Variables`
+
+### Example
+
+```elixir
+defmodule MyApp.GitHub do
+  use Grephql, otp_app: :my_app, source: "schema.json"
+
+  defgql :get_user, ~GQL"""
+    query GetUser($id: ID!) {
+      author: user(id: $id) {
+        name
+        posts {
+          title
+        }
+      }
+    }
+  """
+end
+
+# Generated modules:
+# MyApp.GitHub.GetUser.Result         — %{author: Author.t()}
+# MyApp.GitHub.GetUser.Result.Author  — %{name: String.t(), posts: [Posts.t()]}
+# MyApp.GitHub.GetUser.Result.Author.Posts — %{title: String.t()}
+# MyApp.GitHub.GetUser.Variables      — %{id: String.t()}
+```
+
 ## Testing
 
 Use `Req.Test` to stub HTTP responses without any network calls:
