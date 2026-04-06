@@ -51,7 +51,7 @@ defmodule Grephql.GeneratorHelpers do
       values when is_list(values) ->
         Keyword.put(typed_opts, :type, enum_type_ast(values))
 
-      _ ->
+      _no_enum ->
         typed_opts
     end
   end
@@ -64,6 +64,8 @@ defmodule Grephql.GeneratorHelpers do
   @spec enum_type_ast([String.t()]) :: Macro.t()
   def enum_type_ast(values) when is_list(values) do
     values
+    # Enum values from the schema are compile-time constants, not runtime user input
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     |> Enum.map(fn val -> val |> Macro.underscore() |> String.to_atom() end)
     |> List.foldr(nil, fn
       atom_val, nil -> atom_val
