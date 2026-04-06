@@ -20,6 +20,7 @@ defmodule Grephql.Query do
     field :operation_name, String.t()
     field :operation_type, String.t(), enforce: true
     field :result_module, module(), enforce: true
+    field :result_modules, [module()], default: []
     field :variables_module, module()
     field :input_modules, [module()], default: []
     field :client_module, module(), enforce: true

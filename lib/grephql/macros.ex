@@ -38,7 +38,9 @@ defmodule Grephql.Macros do
   @doc false
   @spec __build_doc__(Grephql.Query.t()) :: String.t()
   def __build_doc__(%Grephql.Query{} = query) do
-    [doc_header(query), doc_variables(query.variable_docs), doc_modules(query)]
+    prefix = inspect(query.client_module) <> "."
+
+    [doc_header(query), doc_variables(query.variable_docs), doc_modules(query, prefix)]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n\n")
   end
@@ -72,19 +74,30 @@ defmodule Grephql.Macros do
     """
   end
 
-  defp doc_modules(query) do
-    lines =
-      [
-        {"- `#{inspect(query.result_module)}` — result type", true},
-        {"- `#{inspect(query.variables_module)}` — variables type", query.variables_module != nil}
-        | Enum.map(query.input_modules, fn mod ->
-            {"- `#{inspect(mod)}` — input type", true}
-          end)
-      ]
-      |> Enum.filter(&elem(&1, 1))
-      |> Enum.map_join("\n", &elem(&1, 0))
+  defp doc_modules(query, prefix) do
+    short = &short_module(&1, prefix)
 
-    "## Generated Modules\n\n" <> lines
+    result_lines = Enum.map(query.result_modules, &"- `#{short.(&1)}`")
+
+    vars_lines =
+      if query.variables_module,
+        do: ["- `#{short.(query.variables_module)}`"],
+        else: []
+
+    input_lines = Enum.map(query.input_modules, &"- `#{short.(&1)}`")
+
+    all_lines = result_lines ++ vars_lines ++ input_lines
+
+    "## Generated Modules\n\n" <> Enum.join(all_lines, "\n")
+  end
+
+  defp short_module(module, prefix) do
+    full = inspect(module)
+
+    case String.split_at(full, String.length(prefix)) do
+      {^prefix, rest} -> ~s|#{"\#{__MODULE__}."}#{rest}|
+      _other -> full
+    end
   end
 
   @doc false

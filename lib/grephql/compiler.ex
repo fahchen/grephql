@@ -89,6 +89,7 @@ defmodule Grephql.Compiler do
       operation_name: operation.name,
       operation_type: Atom.to_string(operation.operation),
       result_module: hd(output_modules),
+      result_modules: output_modules,
       variables_module: variables_module,
       input_modules: input_modules,
       client_module: client_module,

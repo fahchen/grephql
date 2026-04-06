@@ -4,15 +4,18 @@ defmodule Grephql.MacrosTest do
   alias Grephql.Macros
   alias Grephql.Query
 
+  @client MyApp.GitHub
+
   describe "__build_doc__/1" do
-    test "query with variables" do
+    test "query with variables and nested modules" do
       query = %Query{
         document: "query GetUser($id: ID!) { user(id: $id) { name } }",
         operation_name: "GetUser",
         operation_type: "query",
-        result_module: MyApp.GetUser.Result,
-        variables_module: MyApp.GetUser.Variables,
-        client_module: MyApp.Client,
+        result_module: MyApp.GitHub.GetUser.Result,
+        result_modules: [MyApp.GitHub.GetUser.Result, MyApp.GitHub.GetUser.Result.User],
+        variables_module: MyApp.GitHub.GetUser.Variables,
+        client_module: @client,
         has_variables?: true,
         variable_docs: [
           %{name: "id", type: "ID!", required: true}
@@ -23,24 +26,26 @@ defmodule Grephql.MacrosTest do
 
       assert doc =~ "Executes the `GetUser` GraphQL query."
       assert doc =~ "| `id` | `ID!` | required |"
-      assert doc =~ "`MyApp.GetUser.Result` — result type"
-      assert doc =~ "`MyApp.GetUser.Variables` — variables type"
+      assert doc =~ ~s|`\#{__MODULE__}.GetUser.Result`|
+      assert doc =~ ~s|`\#{__MODULE__}.GetUser.Result.User`|
+      assert doc =~ ~s|`\#{__MODULE__}.GetUser.Variables`|
     end
 
     test "query without variables" do
       query = %Query{
         document: "query { users { name } }",
         operation_type: "query",
-        result_module: MyApp.ListUsers.Result,
-        client_module: MyApp.Client
+        result_module: MyApp.GitHub.ListUsers.Result,
+        result_modules: [MyApp.GitHub.ListUsers.Result],
+        client_module: @client
       }
 
       doc = Macros.__build_doc__(query)
 
       assert doc =~ "Executes a GraphQL query."
       refute doc =~ "## Variables"
-      assert doc =~ "`MyApp.ListUsers.Result` — result type"
-      refute doc =~ "variables type"
+      assert doc =~ ~s|`\#{__MODULE__}.ListUsers.Result`|
+      refute doc =~ "Variables`"
     end
 
     test "mutation with input types" do
@@ -49,10 +54,11 @@ defmodule Grephql.MacrosTest do
           "mutation CreateUser($input: CreateUserInput!) { createUser(input: $input) { id } }",
         operation_name: "CreateUser",
         operation_type: "mutation",
-        result_module: MyApp.CreateUser.Result,
-        variables_module: MyApp.CreateUser.Variables,
-        input_modules: [MyApp.Inputs.CreateUserInput],
-        client_module: MyApp.Client,
+        result_module: MyApp.GitHub.CreateUser.Result,
+        result_modules: [MyApp.GitHub.CreateUser.Result],
+        variables_module: MyApp.GitHub.CreateUser.Variables,
+        input_modules: [MyApp.GitHub.Inputs.CreateUserInput],
+        client_module: @client,
         has_variables?: true,
         variable_docs: [
           %{name: "input", type: "CreateUserInput!", required: true}
@@ -62,16 +68,17 @@ defmodule Grephql.MacrosTest do
       doc = Macros.__build_doc__(query)
 
       assert doc =~ "Executes the `CreateUser` GraphQL mutation."
-      assert doc =~ "`MyApp.Inputs.CreateUserInput` — input type"
+      assert doc =~ ~s|`\#{__MODULE__}.Inputs.CreateUserInput`|
     end
 
     test "multiple variables with mixed nullability" do
       query = %Query{
         document: "query($id: ID!, $name: String) { user(id: $id) { name } }",
         operation_type: "query",
-        result_module: MyApp.Search.Result,
-        variables_module: MyApp.Search.Variables,
-        client_module: MyApp.Client,
+        result_module: MyApp.GitHub.Search.Result,
+        result_modules: [MyApp.GitHub.Search.Result],
+        variables_module: MyApp.GitHub.Search.Variables,
+        client_module: @client,
         has_variables?: true,
         variable_docs: [
           %{name: "id", type: "ID!", required: true},
@@ -83,6 +90,28 @@ defmodule Grephql.MacrosTest do
 
       assert doc =~ "| `id` | `ID!` | required |"
       assert doc =~ "| `name` | `String` | optional |"
+    end
+
+    test "lists deeply nested result modules" do
+      query = %Query{
+        document: "query { user { name posts { title author { name } } } }",
+        operation_type: "query",
+        result_module: MyApp.GitHub.GetUser.Result,
+        result_modules: [
+          MyApp.GitHub.GetUser.Result,
+          MyApp.GitHub.GetUser.Result.User,
+          MyApp.GitHub.GetUser.Result.User.Posts,
+          MyApp.GitHub.GetUser.Result.User.Posts.Author
+        ],
+        client_module: @client
+      }
+
+      doc = Macros.__build_doc__(query)
+
+      assert doc =~ ~s|`\#{__MODULE__}.GetUser.Result`|
+      assert doc =~ ~s|`\#{__MODULE__}.GetUser.Result.User`|
+      assert doc =~ ~s|`\#{__MODULE__}.GetUser.Result.User.Posts`|
+      assert doc =~ ~s|`\#{__MODULE__}.GetUser.Result.User.Posts.Author`|
     end
   end
 end
