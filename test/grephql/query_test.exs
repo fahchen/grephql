@@ -7,6 +7,7 @@ defmodule Grephql.QueryTest do
     test "creates with required fields" do
       query = %Query{
         document: "query { user { name } }",
+        operation_type: "query",
         result_module: MyApp.GetUser,
         client_module: MyApp.Client
       }
@@ -19,6 +20,7 @@ defmodule Grephql.QueryTest do
     test "defaults optional fields" do
       query = %Query{
         document: "query { user { name } }",
+        operation_type: "query",
         result_module: MyApp.GetUser,
         client_module: MyApp.Client
       }
@@ -32,6 +34,7 @@ defmodule Grephql.QueryTest do
       query = %Query{
         document: "query GetUser($id: ID!) { user(id: $id) { name } }",
         operation_name: "GetUser",
+        operation_type: "query",
         result_module: MyApp.GetUser,
         input_modules: [MyApp.Inputs.CreateUserInput],
         client_module: MyApp.Client,
