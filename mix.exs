@@ -1,7 +1,7 @@
 defmodule Grephql.MixProject do
   use Mix.Project
 
-  @version "0.3.0"
+  @version "0.4.0"
   @source_url "https://github.com/fahchen/grephql"
 
   def project do
