@@ -153,23 +153,28 @@ defmodule Grephql.GeneratorHelpers do
   @doc """
   Creates multiple modules from `{module_name, quoted_ast}` tuples.
 
-  Uses `Kernel.ParallelCompiler.pmap/2` so that spawned processes
-  can resolve dependencies via `Code.ensure_compiled/1` and the Mix
-  compiler tracks the generated `.beam` files. Falls back to sequential
-  creation outside a compiler session (tests, scripts, iex).
+  Uses `Kernel.ParallelCompiler.pmap/2` (Elixir 1.16+) so that spawned
+  processes can resolve dependencies via `Code.ensure_compiled/1` and the
+  Mix compiler tracks the generated `.beam` files. Falls back to sequential
+  creation on older Elixir versions or outside a compiler session.
   """
   @spec create_modules([{module(), Macro.t()}]) :: :ok
   def create_modules(module_asts) do
     location = Macro.Env.location(__ENV__)
     create_fn = fn {mod, ast} -> Module.create(mod, ast, location) end
 
-    try do
-      Kernel.ParallelCompiler.pmap(module_asts, create_fn)
-    rescue
-      # pmap/2 raises when no compiler session is active or when the
-      # session is interrupted (e.g. inside capture_io in tests).
-      _error in [ArgumentError, MatchError] ->
-        Enum.each(module_asts, create_fn)
+    # Remove function_exported? guard when dropping Elixir 1.15 support
+    if function_exported?(Kernel.ParallelCompiler, :pmap, 2) do
+      try do
+        Kernel.ParallelCompiler.pmap(module_asts, create_fn)
+      rescue
+        # pmap/2 raises when no compiler session is active or when the
+        # session is interrupted (e.g. inside capture_io in tests).
+        _error in [ArgumentError, MatchError] ->
+          Enum.each(module_asts, create_fn)
+      end
+    else
+      Enum.each(module_asts, create_fn)
     end
 
     :ok
