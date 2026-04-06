@@ -21,6 +21,19 @@ defmodule Grephql.Validator.Rules.FragmentsTest do
     end
   end
 
+  describe "fragment type condition kind" do
+    test "fragment on scalar type fails" do
+      query = """
+      query { user(id: "1") { name } }
+      fragment BadFrag on String { length }
+      """
+
+      ctx = validate(query)
+      assert [error] = errors(ctx)
+      assert error.message =~ "fragment \"BadFrag\" cannot be defined on scalar type \"String\""
+    end
+  end
+
   describe "type condition applicability" do
     test "same type passes" do
       ctx = validate(~s|query { user(id: "1") { ... on User { name } } }|)
