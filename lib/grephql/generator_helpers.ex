@@ -16,21 +16,17 @@ defmodule Grephql.GeneratorHelpers do
     end
   end
 
-  @doc false
   @spec field_def_to_ast({atom(), atom(), term(), keyword()}) :: Macro.t()
   def field_def_to_ast({kind, name, type_or_schema, opts}) do
     quote do: unquote(kind)(unquote(name), unquote(type_or_schema), unquote(opts))
   end
 
-  @doc false
   @spec camelize(atom()) :: String.t()
   def camelize(name) when is_atom(name), do: name |> Atom.to_string() |> Macro.camelize()
 
-  @doc false
   @spec camelize(String.t()) :: String.t()
   def camelize(name) when is_binary(name), do: Macro.camelize(name)
 
-  @doc false
   @spec embed_typed_opts(:embeds_one | :embeds_many, Grephql.TypeMapper.resolve_result()) ::
           keyword()
   def embed_typed_opts(:embeds_one, %{nullable: true}), do: [null: true]
@@ -85,7 +81,6 @@ defmodule Grephql.GeneratorHelpers do
     end
   end
 
-  @doc false
   @spec ecto_type_to_type_ast(Grephql.TypeMapper.ecto_type()) :: Macro.t()
   def ecto_type_to_type_ast(:string), do: quote(do: String.t())
   def ecto_type_to_type_ast(:integer), do: quote(do: integer())
@@ -99,6 +94,25 @@ defmodule Grephql.GeneratorHelpers do
 
   def ecto_type_to_type_ast(module) when is_atom(module) do
     quote(do: unquote(module).t())
+  end
+
+  @doc """
+  Creates multiple modules in parallel using `Task.async_stream`.
+
+  Takes a list of `{module_name, quoted_ast}` tuples and calls
+  `Module.create/3` concurrently. Module creation order does not matter
+  since Ecto embeds only reference child modules by atom name.
+  """
+  @spec create_modules_parallel([{module(), Macro.t()}]) :: :ok
+  def create_modules_parallel(module_asts) do
+    location = Macro.Env.location(__ENV__)
+
+    module_asts
+    |> Task.async_stream(
+      fn {mod, ast} -> Module.create(mod, ast, location) end,
+      ordered: false
+    )
+    |> Stream.run()
   end
 
   @doc """

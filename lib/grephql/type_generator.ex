@@ -59,7 +59,12 @@ defmodule Grephql.TypeGenerator do
     root_type_name = Helpers.root_type_name(schema, operation.operation)
     context = {schema, scalar_types, fragments}
 
-    generate_selections(operation.selection_set.selections, root_type_name, base_module, context)
+    {result, module_asts} =
+      collect_selections(operation.selection_set.selections, root_type_name, base_module, context)
+
+    GeneratorHelpers.create_modules_parallel(module_asts)
+
+    unwrap_module_names(result)
   end
 
   @doc """
@@ -76,26 +81,27 @@ defmodule Grephql.TypeGenerator do
     type_name = fragment.type_condition.name
     context = {schema, scalar_types, %{}}
 
-    generate_selections(fragment.selection_set.selections, type_name, base_module, context)
+    {_result, module_asts} =
+      collect_selections(fragment.selection_set.selections, type_name, base_module, context)
+
+    GeneratorHelpers.create_modules_parallel(module_asts)
 
     base_module
   end
 
-  defp generate_selections(selections, parent_type_name, parent_module, context) do
+  # Collects module ASTs without creating them. Returns:
+  #   - For objects: {[module_name, ...], [{mod, ast}, ...]}
+  #   - For unions:  {{union_module, [module_name, ...]}, [{mod, ast}, ...]}
+  defp collect_selections(selections, parent_type_name, parent_module, context) do
     selections = expand_fragment_spreads(selections, context)
     {shared_fields, inline_fragments} = Enum.split_with(selections, &match?(%QueryField{}, &1))
 
     case inline_fragments do
       [] ->
-        generate_object_schema(shared_fields, parent_type_name, parent_module, context)
+        collect_object_schema(shared_fields, parent_type_name, parent_module, context)
 
       _fragments ->
-        generate_union_schemas(
-          shared_fields,
-          inline_fragments,
-          parent_module,
-          context
-        )
+        collect_union_schemas(shared_fields, inline_fragments, parent_module, context)
     end
   end
 
@@ -115,14 +121,15 @@ defmodule Grephql.TypeGenerator do
     end)
   end
 
-  defp generate_object_schema(
+  defp collect_object_schema(
          fields,
          parent_type_name,
          parent_module,
          {schema, scalar_types, _fragments} = context
        ) do
-    {field_defs, nested_modules} =
-      Enum.reduce(fields, {[], []}, fn %QueryField{} = field, {defs_acc, mods_acc} ->
+    {field_defs, nested_modules, nested_asts} =
+      Enum.reduce(fields, {[], [], []}, fn %QueryField{} = field,
+                                           {defs_acc, mods_acc, asts_acc} ->
         field_name = field_name(field)
 
         # Field names from GraphQL schema, bounded set
@@ -133,28 +140,26 @@ defmodule Grephql.TypeGenerator do
         {:ok, schema_field} = Schema.get_field(schema, parent_type_name, field.name)
         resolved = TypeMapper.resolve(schema_field.type, scalar_types)
 
-        {field_def, new_modules} =
+        {field_def, new_modules, new_asts} =
           build_field_def(field, atom_name, field_name, resolved, parent_module, context)
 
-        {[field_def | defs_acc], [new_modules | mods_acc]}
+        {[field_def | defs_acc], [new_modules | mods_acc], [new_asts | asts_acc]}
       end)
 
     field_defs = :lists.reverse(field_defs)
-    create_embedded_schema(parent_module, field_defs)
+    parent_ast = build_embedded_schema_ast(parent_module, field_defs)
 
-    [parent_module | List.flatten(:lists.reverse(nested_modules))]
+    module_names = [parent_module | List.flatten(:lists.reverse(nested_modules))]
+    all_asts = [parent_ast | List.flatten(:lists.reverse(nested_asts))]
+
+    {module_names, all_asts}
   end
 
-  defp generate_union_schemas(
-         shared_fields,
-         inline_fragments,
-         parent_module,
-         context
-       ) do
+  defp collect_union_schemas(shared_fields, inline_fragments, parent_module, context) do
     shared_fields = ensure_typename(shared_fields)
 
-    {typename_to_module, all_modules} =
-      Enum.reduce(inline_fragments, {%{}, []}, fn fragment, {type_map, mods_acc} ->
+    {typename_to_module, all_modules, all_asts} =
+      Enum.reduce(inline_fragments, {%{}, [], []}, fn fragment, {type_map, mods_acc, asts_acc} ->
         type_name = fragment.type_condition.name
         merged_selections = shared_fields ++ fragment.selection_set.selections
 
@@ -162,18 +167,25 @@ defmodule Grephql.TypeGenerator do
         # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
         fragment_module = Module.concat(parent_module, GeneratorHelpers.camelize(type_name))
 
-        fragment_modules =
-          generate_object_schema(merged_selections, type_name, fragment_module, context)
+        {fragment_modules, fragment_asts} =
+          collect_object_schema(merged_selections, type_name, fragment_module, context)
 
-        {Map.put(type_map, type_name, fragment_module), [fragment_modules | mods_acc]}
+        {Map.put(type_map, type_name, fragment_module), [fragment_modules | mods_acc],
+         [fragment_asts | asts_acc]}
       end)
 
     # Union type module names derived from schema at compile time
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     union_module = Module.concat(parent_module, "Union")
+
+    # Union modules must be created eagerly because Ecto's __field__
+    # validates parameterized type modules exist at schema compile time.
     Grephql.Types.Union.define(union_module, typename_to_module)
 
-    {union_module, List.flatten(:lists.reverse(all_modules))}
+    flat_modules = List.flatten(:lists.reverse(all_modules))
+    flat_asts = List.flatten(:lists.reverse(all_asts))
+
+    {{union_module, flat_modules}, flat_asts}
   end
 
   defp ensure_typename(shared_fields) do
@@ -213,7 +225,7 @@ defmodule Grephql.TypeGenerator do
       ecto_type ->
         typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
         source_opt = GeneratorHelpers.source_opt(atom_name, field_name)
-        {{:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}, []}
+        {{:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}, [], []}
     end
   end
 
@@ -231,8 +243,8 @@ defmodule Grephql.TypeGenerator do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     nested_module = Module.concat(parent_module, GeneratorHelpers.camelize(field_name))
 
-    result =
-      generate_selections(field.selection_set.selections, type_name, nested_module, context)
+    {result, nested_asts} =
+      collect_selections(field.selection_set.selections, type_name, nested_module, context)
 
     source_opt = GeneratorHelpers.source_opt(atom_name, field_name)
 
@@ -241,30 +253,37 @@ defmodule Grephql.TypeGenerator do
       {union_module, nested_modules} ->
         ecto_type = if kind == :embeds_many, do: {:array, union_module}, else: union_module
         typed_opts = if resolved.nullable, do: [null: true], else: [null: false]
-        {{:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}, nested_modules}
+
+        {{:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt]}, nested_modules,
+         nested_asts}
 
       # Regular object: use embeds_one/embeds_many
       [_nested_module | _rest] = nested_modules ->
         typed_opts = GeneratorHelpers.embed_typed_opts(kind, resolved)
-        {{kind, atom_name, nested_module, [{:typed, typed_opts} | source_opt]}, nested_modules}
+
+        {{kind, atom_name, nested_module, [{:typed, typed_opts} | source_opt]}, nested_modules,
+         nested_asts}
     end
   end
 
-  defp create_embedded_schema(module_name, field_defs) do
+  defp build_embedded_schema_ast(module_name, field_defs) do
     field_asts = Enum.map(field_defs, &GeneratorHelpers.field_def_to_ast/1)
 
-    Module.create(
-      module_name,
+    ast =
       quote do
         use Grephql.EmbeddedSchema
 
         typed_embedded_schema do
           (unquote_splicing(field_asts))
         end
-      end,
-      Macro.Env.location(__ENV__)
-    )
+      end
+
+    {module_name, ast}
   end
+
+  # Extracts module name list from collect result
+  defp unwrap_module_names({_union_module, modules}), do: modules
+  defp unwrap_module_names(modules) when is_list(modules), do: modules
 
   defp field_name(%QueryField{alias: alias_name}) when is_binary(alias_name), do: alias_name
   defp field_name(%QueryField{name: name}), do: name
