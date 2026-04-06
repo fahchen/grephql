@@ -3,24 +3,11 @@ defmodule Grephql.IntegrationTest do
 
   alias Grephql.Result
 
-  # Define enum types before the client module that references them
-  Grephql.Types.Enum.define(Grephql.IntegrationTest.Enums.Role, ["ADMIN", "USER", "GUEST"])
-
-  Grephql.Types.Enum.define(Grephql.IntegrationTest.Enums.PostStatus, [
-    "DRAFT",
-    "PUBLISHED",
-    "ARCHIVED"
-  ])
-
   defmodule Client do
     use Grephql,
       otp_app: :grephql,
       source: "support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql",
-      scalars: %{
-        "Role" => Grephql.IntegrationTest.Enums.Role,
-        "PostStatus" => Grephql.IntegrationTest.Enums.PostStatus
-      }
+      endpoint: "https://api.example.com/graphql"
 
     defgql(:get_user, """
     query GetUser($id: ID!) {

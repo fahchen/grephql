@@ -5,13 +5,6 @@ defmodule Grephql.Types.Union do
   Dispatches to the correct embedded schema module based on the
   `__typename` field in the JSON map.
 
-  ## Usage
-
-      Grephql.Types.Union.define(MyApp.SearchUnion, %{
-        "User" => MyApp.Search.User,
-        "Post" => MyApp.Search.Post
-      })
-
   The generated module implements `Ecto.ParameterizedType` and uses
   `embed_as: :dump` so that `Ecto.embedded_load/3` calls `load/3`,
   which reads `__typename` and delegates to the matched module via
@@ -21,8 +14,8 @@ defmodule Grephql.Types.Union do
   @doc """
   Defines a parameterized Ecto Type module for a GraphQL union/interface.
 
-  `typename_to_module` maps GraphQL `__typename` strings to their
-  corresponding embedded schema modules.
+  Called by the type generator at compile time. `typename_to_module` maps
+  GraphQL `__typename` strings to their corresponding embedded schema modules.
   """
   @spec define(module(), %{String.t() => module()}) :: {:module, module(), binary(), term()}
   def define(module_name, typename_to_module)

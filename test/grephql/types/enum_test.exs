@@ -92,16 +92,4 @@ defmodule Grephql.Types.EnumTest do
       assert {:ok, "FooBar"} = EnumType.dump(:foo_bar, &Ecto.Type.dump/2, params)
     end
   end
-
-  describe "define/2" do
-    test "creates a standalone module wrapping the parameterized type" do
-      EnumType.define(Grephql.Test.StatusEnum, ["ACTIVE", "INACTIVE"])
-
-      assert {:ok, :active} = Grephql.Test.StatusEnum.cast("ACTIVE")
-      assert {:ok, :active} = Grephql.Test.StatusEnum.cast("active")
-      assert {:ok, "INACTIVE"} = Grephql.Test.StatusEnum.dump(:inactive)
-      assert {:ok, :active} = Grephql.Test.StatusEnum.load("ACTIVE")
-      assert {:ok, :active} = Grephql.Test.StatusEnum.load("active")
-    end
-  end
 end
