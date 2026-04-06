@@ -163,6 +163,7 @@ defmodule Grephql.GeneratorHelpers do
     location = Macro.Env.location(__ENV__)
     create_fn = fn {mod, ast} -> Module.create(mod, ast, location) end
 
+    # Remove function_exported? guard when dropping Elixir 1.15 support
     if function_exported?(Kernel.ParallelCompiler, :pmap, 2) do
       try do
         Kernel.ParallelCompiler.pmap(module_asts, create_fn)
