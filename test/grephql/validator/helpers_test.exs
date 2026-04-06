@@ -12,6 +12,62 @@ defmodule Grephql.Validator.HelpersTest do
   alias Grephql.Schema.TypeRef
   alias Grephql.Validator.Helpers
 
+  alias Grephql.Language.ListValue
+  alias Grephql.Language.ObjectValue
+  alias Grephql.Test.SchemaHelper
+
+  describe "unwrap_type/1" do
+    test "returns nil for nil input" do
+      assert Helpers.unwrap_type(nil) == nil
+    end
+
+    test "returns named type ref unchanged" do
+      ref = %TypeRef{kind: :scalar, name: "String"}
+      assert Helpers.unwrap_type(ref) == ref
+    end
+
+    test "unwraps non_null wrapper" do
+      inner = %TypeRef{kind: :scalar, name: "String"}
+      ref = %TypeRef{kind: :non_null, of_type: inner}
+      assert Helpers.unwrap_type(ref) == inner
+    end
+
+    test "unwraps nested non_null > list > object" do
+      inner = %TypeRef{kind: :object, name: "User"}
+      ref = %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :list, of_type: inner}}
+      assert Helpers.unwrap_type(ref) == inner
+    end
+  end
+
+  describe "root_type_name/2" do
+    test "returns subscription type name" do
+      schema = SchemaHelper.build_schema(subscription_type: "Subscription")
+      assert Helpers.root_type_name(schema, :subscription) == "Subscription"
+    end
+
+    test "returns nil when subscription type is not set" do
+      schema = SchemaHelper.build_schema()
+      assert Helpers.root_type_name(schema, :subscription) == nil
+    end
+  end
+
+  describe "unwrap_list_type/1" do
+    test "returns inner type from list" do
+      inner = %TypeRef{kind: :scalar, name: "String"}
+      assert Helpers.unwrap_list_type(%TypeRef{kind: :list, of_type: inner}) == inner
+    end
+
+    test "unwraps non_null wrapping a list" do
+      inner = %TypeRef{kind: :scalar, name: "String"}
+      ref = %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :list, of_type: inner}}
+      assert Helpers.unwrap_list_type(ref) == inner
+    end
+
+    test "returns nil for non-list type" do
+      assert Helpers.unwrap_list_type(%TypeRef{kind: :scalar, name: "String"}) == nil
+    end
+  end
+
   describe "variable?/1" do
     test "returns true for Variable" do
       assert Helpers.variable?(%Variable{name: "id"})
@@ -62,6 +118,16 @@ defmodule Grephql.Validator.HelpersTest do
       enum = %EnumValue{value: "ACTIVE"}
       assert Helpers.compatible_value?(enum, "Status")
       assert Helpers.compatible_value?(enum, "Role")
+    end
+
+    test "ListValue is compatible with any type" do
+      list = %ListValue{values: []}
+      assert Helpers.compatible_value?(list, "String")
+    end
+
+    test "ObjectValue is compatible with any type" do
+      obj = %ObjectValue{fields: []}
+      assert Helpers.compatible_value?(obj, "SomeInput")
     end
   end
 

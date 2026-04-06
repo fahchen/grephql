@@ -31,6 +31,14 @@ defmodule Grephql.Validator.Rules.ValuesTest do
     end
   end
 
+  describe "enum value on non-enum type" do
+    test "enum value passed to scalar arg produces no error from values rule" do
+      # EnumValue on a String type — the _other branch in validate_value
+      ctx = validate(~s|query { user(id: SOME_ENUM) { name } }|)
+      assert errors(ctx) == []
+    end
+  end
+
   describe "non-enum values" do
     test "string argument is not checked as enum" do
       ctx = validate(~s|query { user(id: "1") { name } }|)

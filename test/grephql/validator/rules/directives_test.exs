@@ -66,6 +66,46 @@ defmodule Grephql.Validator.Rules.DirectivesTest do
       assert [error] = location_errors
       assert error.message =~ "directive \"@skip\" is not allowed on query operations"
     end
+
+    test "directive on invalid mutation location shows mutation label" do
+      schema =
+        SchemaHelper.build_schema(
+          mutation_type: "Mutation",
+          types:
+            Map.merge(SchemaHelper.default_types(), %{
+              "Mutation" => %Grephql.Schema.Type{
+                kind: :object,
+                name: "Mutation",
+                fields: %{
+                  "doThing" => %Grephql.Schema.Field{
+                    name: "doThing",
+                    type: %Grephql.Schema.TypeRef{kind: :scalar, name: "Boolean"},
+                    args: %{}
+                  }
+                }
+              }
+            }),
+          directives: default_directives()
+        )
+
+      doc = parse!(~s|mutation @skip(if: true) { doThing }|)
+      ctx = Directives.validate(doc, %Context{schema: schema})
+      location_errors = Enum.filter(errors(ctx), &(&1.message =~ "not allowed"))
+      assert [error] = location_errors
+      assert error.message =~ "not allowed on mutation operations"
+    end
+
+    test "directive on fragment definition shows fragment definition label" do
+      query = """
+      query { user(id: "1") { ...UserFrag } }
+      fragment UserFrag on User @skip(if: true) { name }
+      """
+
+      ctx = validate(query)
+      location_errors = Enum.filter(errors(ctx), &(&1.message =~ "not allowed"))
+      assert [error] = location_errors
+      assert error.message =~ "not allowed on fragment definitions"
+    end
   end
 
   describe "directive uniqueness" do
