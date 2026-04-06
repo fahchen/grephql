@@ -49,7 +49,8 @@ defmodule Grephql.GeneratorHelpers do
 
     case resolved.enum_values do
       values when is_list(values) ->
-        Keyword.put(typed_opts, :type, enum_type_ast(values))
+        type_ast = enum_type_ast(values, inner_nullable: resolved.inner_nullable)
+        Keyword.put(typed_opts, :type, type_ast)
 
       _no_enum ->
         typed_opts
@@ -60,17 +61,24 @@ defmodule Grephql.GeneratorHelpers do
   Builds a quoted union type AST from enum values for use in `typed: [type: ...]`.
 
   Given `["OPEN", "CLOSED"]`, returns AST for `:open | :closed`.
+  When `inner_nullable: true`, appends `| nil` (for list elements like `[Role]`).
   """
-  @spec enum_type_ast([String.t()]) :: Macro.t()
-  def enum_type_ast(values) when is_list(values) do
-    values
+  @spec enum_type_ast([String.t()], keyword()) :: Macro.t()
+  def enum_type_ast(values, opts \\ []) when is_list(values) do
     # Enum values from the schema are compile-time constants, not runtime user input
-    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    |> Enum.map(fn val -> val |> Macro.underscore() |> String.to_atom() end)
-    |> List.foldr(nil, fn
-      atom_val, nil -> atom_val
-      atom_val, acc -> {:|, [], [atom_val, acc]}
-    end)
+    atoms =
+      Enum.map(values, fn val ->
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        val |> Macro.underscore() |> String.to_atom()
+      end)
+
+    base =
+      List.foldr(atoms, nil, fn
+        atom_val, nil -> atom_val
+        atom_val, acc -> {:|, [], [atom_val, acc]}
+      end)
+
+    if opts[:inner_nullable], do: {:|, [], [base, nil]}, else: base
   end
 
   @doc """

@@ -179,6 +179,88 @@ defmodule Grephql.TypeMapperTest do
                TypeMapper.resolve(type_ref, @no_schema, %{})
     end
 
+    test "[Role!]! — list of non-null enums preserves enum_values" do
+      schema = schema_with_enum("Role", ["ADMIN", "USER", "GUEST"])
+      type_ref = non_null(list(non_null(enum_ref("Role"))))
+
+      assert %{
+               ecto_type: {:array, Grephql.Types.Enum},
+               nullable: false,
+               enum_values: ["ADMIN", "USER", "GUEST"],
+               inner_nullable: false
+             } = TypeMapper.resolve(type_ref, schema, %{})
+    end
+
+    test "[Role!] — nullable list of non-null enums" do
+      schema = schema_with_enum("Role", ["ADMIN", "USER"])
+      type_ref = list(non_null(enum_ref("Role")))
+
+      assert %{
+               ecto_type: {:array, Grephql.Types.Enum},
+               nullable: true,
+               enum_values: ["ADMIN", "USER"],
+               inner_nullable: false
+             } = TypeMapper.resolve(type_ref, schema, %{})
+    end
+
+    test "[Status]! — non-null list of nullable enums" do
+      schema = schema_with_enum("Status", ["ACTIVE", "INACTIVE"])
+      type_ref = non_null(list(enum_ref("Status")))
+
+      assert %{
+               ecto_type: {:array, Grephql.Types.Enum},
+               nullable: false,
+               enum_values: ["ACTIVE", "INACTIVE"],
+               inner_nullable: true
+             } = TypeMapper.resolve(type_ref, schema, %{})
+    end
+
+    test "[Status] — nullable list of nullable enums" do
+      schema = schema_with_enum("Status", ["ACTIVE", "INACTIVE"])
+      type_ref = list(enum_ref("Status"))
+
+      assert %{
+               ecto_type: {:array, Grephql.Types.Enum},
+               nullable: true,
+               enum_values: ["ACTIVE", "INACTIVE"],
+               inner_nullable: true
+             } = TypeMapper.resolve(type_ref, schema, %{})
+    end
+
+    test "[User!]! — inner_nullable is false for non-null objects" do
+      type_ref = non_null(list(non_null(object("User"))))
+
+      assert %{inner_nullable: false} = TypeMapper.resolve(type_ref, @no_schema, %{})
+    end
+
+    test "[User]! — inner_nullable is true for nullable objects" do
+      type_ref = non_null(list(object("User")))
+
+      assert %{inner_nullable: true} = TypeMapper.resolve(type_ref, @no_schema, %{})
+    end
+
+    test "[String!]! — inner_nullable is false for non-null scalars" do
+      type_ref = non_null(list(non_null(scalar("String"))))
+
+      assert %{inner_nullable: false} = TypeMapper.resolve(type_ref, @no_schema, %{})
+    end
+
+    test "[String] — inner_nullable is true for nullable scalars" do
+      type_ref = list(scalar("String"))
+
+      assert %{inner_nullable: true} = TypeMapper.resolve(type_ref, @no_schema, %{})
+    end
+
+    test "non-list types have inner_nullable nil" do
+      type_ref = non_null(scalar("String"))
+      assert %{inner_nullable: nil} = TypeMapper.resolve(type_ref, @no_schema, %{})
+
+      assert %{inner_nullable: nil} = TypeMapper.resolve(object("User"), @no_schema, %{})
+
+      schema = schema_with_enum("Role", ["ADMIN"])
+      assert %{inner_nullable: nil} = TypeMapper.resolve(enum_ref("Role"), schema, %{})
+    end
+
     test "[String!]! — list of non-null scalars" do
       type_ref = non_null(list(non_null(scalar("String"))))
 

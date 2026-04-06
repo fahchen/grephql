@@ -72,7 +72,8 @@ defmodule Grephql.TypeMapper do
   @type resolve_result() :: %{
           ecto_type: ecto_type(),
           nullable: boolean(),
-          enum_values: [String.t()] | nil
+          enum_values: [String.t()] | nil,
+          inner_nullable: boolean() | nil
         }
 
   @doc """
@@ -99,7 +100,13 @@ defmodule Grephql.TypeMapper do
   end
 
   defp resolve_inner(%TypeRef{kind: :list, of_type: inner}, schema, scalar_types) do
-    default_result({:array, resolve(inner, schema, scalar_types).ecto_type})
+    resolved = resolve(inner, schema, scalar_types)
+
+    %{
+      default_result({:array, resolved.ecto_type})
+      | enum_values: resolved.enum_values,
+        inner_nullable: resolved.nullable
+    }
   end
 
   defp resolve_inner(%TypeRef{kind: :scalar, name: name}, _schema, scalar_types) do
@@ -116,7 +123,7 @@ defmodule Grephql.TypeMapper do
   end
 
   defp default_result(ecto_type) do
-    %{ecto_type: ecto_type, nullable: true, enum_values: nil}
+    %{ecto_type: ecto_type, nullable: true, enum_values: nil, inner_nullable: nil}
   end
 
   defp resolve_scalar(name, scalar_types) do
@@ -138,7 +145,7 @@ defmodule Grephql.TypeMapper do
       :error ->
         {:ok, type} = Schema.get_type(schema, name)
         values = Enum.map(type.enum_values, & &1.name)
-        %{ecto_type: Grephql.Types.Enum, nullable: true, enum_values: values}
+        %{default_result(Grephql.Types.Enum) | enum_values: values}
     end
   end
 end
