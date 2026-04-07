@@ -44,6 +44,33 @@ defmodule Grephql.GeneratorHelpersTest do
     end
   end
 
+  describe "build_params_type_ast/2" do
+    test "field with custom type override uses that type" do
+      custom_type = quote(do: :open | :closed)
+      field_defs = [{:field, :status, :string, [typed: [type: custom_type, null: false]]}]
+      ast = GeneratorHelpers.build_params_type_ast(field_defs, [:status])
+      {:%{}, [], [{key, type}]} = ast
+      assert {:required, [], [:status]} = key
+      # Should use the custom type, not String.t()
+      assert type == custom_type
+    end
+
+    test "embeds_many field generates list type" do
+      field_defs = [{:embeds_many, :posts, MyApp.Post, [typed: [null: false]]}]
+      ast = GeneratorHelpers.build_params_type_ast(field_defs, [:posts])
+      {:%{}, [], [{_key, type}]} = ast
+      # Should be [MyApp.Post.params()]
+      assert Macro.to_string(type) =~ "MyApp.Post.params()"
+    end
+
+    test "nullable field wraps type with nil" do
+      field_defs = [{:field, :name, :string, [typed: [null: true]]}]
+      ast = GeneratorHelpers.build_params_type_ast(field_defs, [])
+      {:%{}, [], [{key, _type}]} = ast
+      assert {:optional, [], [:name]} = key
+    end
+  end
+
   describe "scalar_typed_opts/1" do
     test "non-null enum field without inner_nullable" do
       resolved = %{nullable: false, enum_values: ["A", "B"], inner_nullable: nil}

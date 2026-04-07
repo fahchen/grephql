@@ -316,6 +316,93 @@ defmodule Grephql.Validator.Rules.DeprecationTest do
     })
   end
 
+  describe "deprecated enum value in list argument" do
+    test "deprecated enum value in list produces warning" do
+      types = types_with_deprecated_enum_list()
+      ctx = validate("query { usersByRoles(roles: [ADMIN, GUEST]) { name } }", types: types)
+      assert [warning] = warnings(ctx)
+      assert warning.message =~ "enum value \"GUEST\" is deprecated: no longer supported"
+    end
+
+    test "non-deprecated enum values in list produce no warning" do
+      types = types_with_deprecated_enum_list()
+      ctx = validate("query { usersByRoles(roles: [ADMIN, USER]) { name } }", types: types)
+      assert warnings(ctx) == []
+    end
+  end
+
+  describe "deprecation reason formatting" do
+    test "empty string deprecation reason omits suffix" do
+      types = types_with_deprecated_field_empty_reason()
+      ctx = validate(~s|query { user(id: "1") { email } }|, types: types)
+      assert [warning] = warnings(ctx)
+      assert warning.message == "field \"email\" on \"User\" is deprecated"
+    end
+  end
+
+  defp types_with_deprecated_field_empty_reason do
+    Map.merge(SchemaHelper.default_types(), %{
+      "User" => %Type{
+        kind: :object,
+        name: "User",
+        fields: %{
+          "id" => %SchemaField{
+            name: "id",
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+          },
+          "name" => %SchemaField{
+            name: "name",
+            type: %TypeRef{kind: :scalar, name: "String"}
+          },
+          "email" => %SchemaField{
+            name: "email",
+            type: %TypeRef{kind: :scalar, name: "String"},
+            is_deprecated: true,
+            deprecation_reason: ""
+          }
+        }
+      }
+    })
+  end
+
+  defp types_with_deprecated_enum_list do
+    Map.merge(SchemaHelper.default_types(), %{
+      "Role" => %Type{
+        kind: :enum,
+        name: "Role",
+        enum_values: [
+          %SchemaEnumValue{name: "ADMIN"},
+          %SchemaEnumValue{name: "USER"},
+          %SchemaEnumValue{
+            name: "GUEST",
+            is_deprecated: true,
+            deprecation_reason: "no longer supported"
+          }
+        ]
+      },
+      "Query" => %Type{
+        kind: :object,
+        name: "Query",
+        fields:
+          Map.merge(SchemaHelper.default_types()["Query"].fields, %{
+            "usersByRoles" => %SchemaField{
+              name: "usersByRoles",
+              type: %TypeRef{kind: :list, of_type: %TypeRef{kind: :object, name: "User"}},
+              args: %{
+                "roles" => %InputValue{
+                  name: "roles",
+                  type: %TypeRef{
+                    kind: :list,
+                    of_type: %TypeRef{kind: :enum, name: "Role"}
+                  }
+                }
+              }
+            }
+          })
+      }
+    })
+  end
+
   defp types_with_deprecated_enum do
     Map.merge(SchemaHelper.default_types(), %{
       "Role" => %Type{

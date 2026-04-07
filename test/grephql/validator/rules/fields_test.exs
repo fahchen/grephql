@@ -30,6 +30,39 @@ defmodule Grephql.Validator.Rules.FieldsTest do
       ctx = validate("query { user { __typename name } }")
       assert errors(ctx) == []
     end
+
+    test "__type introspection field passes" do
+      ctx = validate(~s|query { __type(name: "User") { name } }|)
+      assert errors(ctx) == []
+    end
+
+    test "__schema introspection field passes" do
+      ctx = validate("query { __schema { queryType { name } } }")
+      assert errors(ctx) == []
+    end
+  end
+
+  describe "input type as output field" do
+    test "input object type used as output field type fails" do
+      types =
+        Map.merge(SchemaHelper.default_types(), %{
+          "CreateUserInput" => %Type{kind: :input_object, name: "CreateUserInput"},
+          "Query" => %Type{
+            kind: :object,
+            name: "Query",
+            fields: %{
+              "broken" => %SchemaField{
+                name: "broken",
+                type: %TypeRef{kind: :input_object, name: "CreateUserInput"}
+              }
+            }
+          }
+        })
+
+      ctx = validate("query { broken }", types: types)
+      assert [error] = errors(ctx)
+      assert error.message =~ "input type cannot be used as an output field type"
+    end
   end
 
   describe "scalar sub-selection" do
