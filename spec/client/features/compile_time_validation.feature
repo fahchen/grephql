@@ -88,10 +88,11 @@ Feature: Compile-time GraphQL validation
 
   Rule: Empty selection sets are invalid
 
-    Scenario: Empty selection set raises compile error
+    Scenario: Empty selection set raises parse error
       Given a schema with type "User"
       When the developer writes ~GQL with "query { user { } }"
-      Then a compile error is raised indicating empty selection set
+      Then a compile error is raised with a parse error before "}"
+      # Note: the parser grammar requires at least one selection, so this is caught at parse time
 
   # --- Argument Validation ---
 
@@ -282,6 +283,23 @@ Feature: Compile-time GraphQL validation
       When the developer writes ~GQL referencing a "CustomFoo" field
       Then a compile error is raised indicating "CustomFoo" has no configured mapping
 
+  # --- Error Locations ---
+
+  Rule: Validation errors include line and column positions within the GraphQL string
+
+    Scenario: Error points to the offending field's line and column
+      Given a schema with type "User" having fields "name" and "email"
+      When the developer writes a multi-line ~GQL with "nonExistent" on line 3, column 5
+      Then the compile error message includes "(3:5)" indicating the position in the GraphQL string
+
+  Rule: Error positions are offset by the caller's Elixir source line
+
+    Scenario: Error line is offset by the defgql call site line
+      Given a defgql call on line 50 of an Elixir file
+      And the GraphQL string has an error on line 3
+      Then the compile error points to line 53 (50 + 3) in the Elixir file
+      And the column remains relative to the GraphQL string
+
   # --- Deprecation Warnings ---
 
   Rule: Deprecated fields produce compile warnings
@@ -290,12 +308,21 @@ Feature: Compile-time GraphQL validation
       Given a schema where field "oldEmail" on type "User" is deprecated with reason "use email instead"
       When the developer writes ~GQL with "query { user { oldEmail } }"
       Then a compile warning is emitted indicating "oldEmail" on "User" is deprecated with reason "use email instead"
+      And the warning includes the line and column position of "oldEmail"
       And the module compiles successfully
 
     Scenario: Non-deprecated fields produce no warning
       Given a schema where field "email" on type "User" is not deprecated
       When the developer writes ~GQL with "query { user { email } }"
       Then no deprecation warning is emitted
+
+  Rule: Deprecated arguments produce compile warnings
+
+    Scenario: Using a deprecated argument emits a compile warning
+      Given a schema where argument "legacyId" on field "user" is deprecated with reason "use id instead"
+      When the developer writes ~GQL with "query { user(legacyId: \"old\") { name } }"
+      Then a compile warning is emitted indicating "legacyId" is deprecated with reason "use id instead"
+      And the module compiles successfully
 
   Rule: Deprecated enum values produce compile warnings
 
@@ -304,3 +331,43 @@ Feature: Compile-time GraphQL validation
       When the developer writes ~GQL with a literal enum value "LEGACY"
       Then a compile warning is emitted indicating "LEGACY" on "Status" is deprecated with reason "use INACTIVE"
       And the module compiles successfully
+
+    Scenario: Deprecated enum value in a list argument emits a compile warning
+      Given a schema enum "Role" where value "GUEST" is deprecated
+      And a field accepts argument "roles" of type "[Role]"
+      When the developer writes ~GQL with "query { usersByRoles(roles: [ADMIN, GUEST]) { name } }"
+      Then a compile warning is emitted for the deprecated "GUEST" value
+
+  Rule: Deprecated input object fields produce compile warnings
+
+    Scenario: Using a deprecated input field emits a compile warning
+      Given a schema input "CreateUserInput" where field "nickname" is deprecated with reason "use displayName"
+      When the developer writes ~GQL with an inline input literal containing "nickname"
+      Then a compile warning is emitted indicating "nickname" on "CreateUserInput" is deprecated with reason "use displayName"
+      And the module compiles successfully
+
+    Scenario: Deprecated nested input field emits a compile warning
+      Given a schema input "ProfileInput" where field "oldAvatar" is deprecated
+      And "ProfileInput" is nested inside another input type
+      When the developer writes ~GQL with an inline input literal containing "oldAvatar"
+      Then a compile warning is emitted for the deprecated "oldAvatar" field
+
+  Rule: Deprecation reason is optional
+
+    Scenario: Deprecated field without reason emits warning without suffix
+      Given a schema where field "email" on type "User" is deprecated without a reason
+      When the developer writes ~GQL with "query { user { email } }"
+      Then a compile warning is emitted indicating "email" on "User" is deprecated
+      And the warning message does not include a reason suffix
+
+    Scenario: Deprecated field with empty string reason omits suffix
+      Given a schema where field "email" on type "User" is deprecated with reason ""
+      When the developer writes ~GQL with "query { user { email } }"
+      Then a compile warning is emitted indicating "email" on "User" is deprecated
+      And the warning message does not include a reason suffix
+
+    Scenario: Deprecated argument without reason emits warning without suffix
+      Given a schema where argument "legacyId" on field "user" is deprecated without a reason
+      When the developer writes ~GQL with "query { user(legacyId: \"old\") { name } }"
+      Then a compile warning is emitted indicating "legacyId" is deprecated
+      And the warning message does not include a reason suffix

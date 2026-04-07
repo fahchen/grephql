@@ -47,3 +47,26 @@ Feature: Client module configuration
     Scenario: endpoint is a runtime option
       Given runtime config sets endpoint to "https://api.example.com/graphql"
       Then the endpoint is resolved at runtime when queries are executed
+
+  Rule: Req options are passed through to the HTTP client
+
+    Scenario: Compile-time req_options are used as defaults
+      Given a client module configured with req_options: [receive_timeout: 30_000]
+      When a query is executed without per-call opts
+      Then Req uses the compile-time receive_timeout
+
+    Scenario: Runtime config req_options override compile-time defaults
+      Given a client module configured with req_options: [receive_timeout: 30_000]
+      And runtime config sets req_options: [receive_timeout: 60_000]
+      When a query is executed
+      Then Req uses the runtime config receive_timeout
+
+    Scenario: Per-call req_options override runtime config
+      Given runtime config sets req_options: [receive_timeout: 30_000]
+      When a query is executed with req_options: [receive_timeout: 5_000]
+      Then Req uses the per-call receive_timeout
+
+    Scenario: Req.Test plug is supported for testing
+      Given runtime config sets req_options: [plug: {Req.Test, MyApp.GitHub}]
+      When a query is executed
+      Then Req routes the request through the test plug instead of making a real HTTP call
