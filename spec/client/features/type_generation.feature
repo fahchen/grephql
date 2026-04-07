@@ -30,6 +30,12 @@ Feature: GraphQL to Elixir type generation
         | MyApp.UserService.GetUser.Result.User.Posts                 |
         | MyApp.UserService.GetUser.Result.User.Posts.Author          |
 
+    Scenario: Field aliases use the alias name for struct field and module path
+      Given a client module MyApp.UserService
+      When the developer defines defgql :get_user with "query($id: ID!) { author: user(id: $id) { name } }"
+      Then the generated struct is MyApp.UserService.GetUser.Result.Author
+      And the struct field is :author (snake_cased from the alias)
+
     Scenario: Different queries for same type get independent structs
       Given a client module MyApp.UserService
       And defgql :get_user selects "name email" on User

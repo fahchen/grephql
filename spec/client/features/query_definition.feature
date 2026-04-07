@@ -34,6 +34,19 @@ Feature: GraphQL query definition and execution
       Then the query is compiled and a function create_user/2 is generated
       And the ~GQL sigil content can be formatted by mix format
 
+    Scenario: ~GQL formatter plugin auto-formats GraphQL strings
+      Given a .formatter.exs with plugins: [Grephql.Formatter] (or import_deps: [:grephql])
+      When the developer runs mix format on a file containing a ~GQL heredoc
+      Then the GraphQL content inside ~GQL is pretty-printed with proper indentation
+      And inline ~GQL sigils (single-line) are left unchanged
+
+  Rule: defgql auto-generates @doc with operation info
+
+    Scenario: Generated function includes @doc
+      Given a client module with a valid schema
+      When the developer defines defgql :get_user with a query that has variables
+      Then the generated function includes @doc with the operation name, variable table, types, and generated module names
+
   Rule: Grephql.execute takes query, variables, and optional opts (opts defaults to [])
 
     Scenario: Execute with variables and no options
@@ -97,6 +110,14 @@ Feature: GraphQL query definition and execution
       And path is a list of strings and integers or nil
       And locations is a list of %{line: integer, column: integer} or nil
       And extensions is a map or nil
+
+  Rule: Field aliases map to the alias name in the response struct
+
+    Scenario: Aliased field uses alias as struct field name and module segment
+      Given a client module MyApp.UserService
+      When the developer defines defgql :get_user with "query($id: ID!) { author: user(id: $id) { name } }"
+      Then the result struct has field :author (not :user)
+      And the generated module is MyApp.UserService.GetUser.Result.Author (not .User)
 
   Rule: Endpoint can be overridden at call site
 
