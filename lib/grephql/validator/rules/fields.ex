@@ -35,7 +35,7 @@ defmodule Grephql.Validator.Rules.Fields do
             Context.add_error(
               ctx,
               "field \"#{field.name}\" does not exist on type \"#{type_name}\"",
-              line: Helpers.loc_line(field)
+              field
             )
         end
 
@@ -43,7 +43,7 @@ defmodule Grephql.Validator.Rules.Fields do
         Context.add_error(
           ctx,
           "type \"#{type_name}\" is not defined in the schema",
-          line: Helpers.loc_line(field)
+          field
         )
     end
   end
@@ -59,7 +59,7 @@ defmodule Grephql.Validator.Rules.Fields do
     Context.add_error(
       ctx,
       "field \"#{field.name}\" is a scalar and cannot have sub-selections",
-      line: Helpers.loc_line(field)
+      field
     )
   end
 
@@ -69,7 +69,7 @@ defmodule Grephql.Validator.Rules.Fields do
     Context.add_error(
       ctx,
       "field \"#{field.name}\" is an enum and cannot have sub-selections",
-      line: Helpers.loc_line(field)
+      field
     )
   end
 
@@ -80,7 +80,7 @@ defmodule Grephql.Validator.Rules.Fields do
     Context.add_error(
       ctx,
       "field \"#{field.name}\" is an object type and requires a sub-selection",
-      line: Helpers.loc_line(field)
+      field
     )
   end
 
@@ -93,7 +93,7 @@ defmodule Grephql.Validator.Rules.Fields do
     Context.add_error(
       ctx,
       "input type cannot be used as an output field type for \"#{field.name}\"",
-      line: Helpers.loc_line(field)
+      field
     )
   end
 

@@ -85,7 +85,7 @@ defmodule Grephql.Validator.Rules.Directives do
         |> check_arg_types(dir, schema_directive)
 
       :error ->
-        Context.add_error(ctx, "unknown directive \"@#{dir.name}\"", line: Helpers.loc_line(dir))
+        Context.add_error(ctx, "unknown directive \"@#{dir.name}\"", dir)
     end
   end
 
@@ -96,7 +96,7 @@ defmodule Grephql.Validator.Rules.Directives do
       Context.add_error(
         ctx,
         "directive \"@#{dir.name}\" is not allowed on #{location_label(location)}",
-        line: Helpers.loc_line(dir)
+        dir
       )
     end
   end
@@ -121,7 +121,7 @@ defmodule Grephql.Validator.Rules.Directives do
         Context.add_error(
           acc,
           "argument \"#{arg.name}\" is not defined on directive \"@#{dir.name}\"",
-          line: Helpers.loc_line(arg)
+          arg
         )
       end
     end)
@@ -135,7 +135,7 @@ defmodule Grephql.Validator.Rules.Directives do
         Context.add_error(
           acc,
           "required argument \"#{name}\" is missing on directive \"@#{dir.name}\"",
-          line: Helpers.loc_line(dir)
+          dir
         )
       else
         acc
@@ -155,7 +155,7 @@ defmodule Grephql.Validator.Rules.Directives do
       Context.add_error(
         ctx,
         "type mismatch for argument \"#{arg.name}\" on directive \"@#{directive_name}\"",
-        line: Helpers.loc_line(arg)
+        arg
       )
     else
       _no_mismatch -> ctx

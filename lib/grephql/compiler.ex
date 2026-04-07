@@ -66,7 +66,8 @@ defmodule Grephql.Compiler do
 
     raise_on_errors!(
       Validator.validate(document, schema, caller_env),
-      "GraphQL validation errors"
+      "GraphQL validation errors",
+      caller_env
     )
 
     client_module = Keyword.fetch!(opts, :client_module)
@@ -123,7 +124,8 @@ defmodule Grephql.Compiler do
 
     raise_on_errors!(
       Validator.validate_fragment(document, schema, caller_env),
-      "GraphQL fragment validation errors"
+      "GraphQL fragment validation errors",
+      caller_env
     )
 
     client_module = Keyword.fetch!(opts, :client_module)
@@ -172,10 +174,11 @@ defmodule Grephql.Compiler do
   defp type_to_string(%ListType{type: inner}), do: "[#{type_to_string(inner)}]"
   defp type_to_string(%NonNullType{type: inner}), do: "#{type_to_string(inner)}!"
 
-  defp raise_on_errors!(:ok, _label), do: :ok
+  defp raise_on_errors!(:ok, _label, _caller_env), do: :ok
 
-  defp raise_on_errors!({:error, errors}, label) do
-    messages = Enum.map_join(errors, "\n  ", & &1.message)
+  defp raise_on_errors!({:error, errors}, label, caller_env) do
+    line_offset = Grephql.Validator.Helpers.caller_line_offset(caller_env)
+    messages = Enum.map_join(errors, "\n  ", &Grephql.Validator.Error.format(&1, line_offset))
     raise CompileError, description: "#{label}:\n  #{messages}"
   end
 end

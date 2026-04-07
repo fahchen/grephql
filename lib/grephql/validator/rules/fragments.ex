@@ -39,14 +39,14 @@ defmodule Grephql.Validator.Rules.Fragments do
         Context.add_error(
           ctx,
           "fragment \"#{frag.name}\" cannot be defined on #{kind} type \"#{type_name}\"",
-          line: Helpers.loc_line(frag)
+          frag
         )
 
       :error ->
         Context.add_error(
           ctx,
           "type \"#{type_name}\" in fragment \"#{frag.name}\" does not exist in the schema",
-          line: Helpers.loc_line(frag)
+          frag
         )
     end
   end
@@ -88,7 +88,7 @@ defmodule Grephql.Validator.Rules.Fragments do
         Context.add_error(
           ctx,
           "type \"#{type_name}\" in type condition does not exist in the schema",
-          line: Helpers.loc_line(frag)
+          frag
         )
     end
   end
@@ -102,7 +102,7 @@ defmodule Grephql.Validator.Rules.Fragments do
       Context.add_error(
         ctx,
         "type \"#{type_name}\" is not applicable to \"#{parent_type}\"",
-        line: Helpers.loc_line(frag)
+        frag
       )
     end
   end

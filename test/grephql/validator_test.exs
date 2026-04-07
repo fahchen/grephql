@@ -3,6 +3,7 @@ defmodule Grephql.ValidatorTest do
 
   alias Grephql.Test.SchemaHelper
   alias Grephql.Validator
+  alias Grephql.Validator.Error
 
   describe "validate/2" do
     test "returns :ok for a valid query" do
@@ -41,69 +42,56 @@ defmodule Grephql.ValidatorTest do
     end
   end
 
-  describe "deprecation warnings" do
-    test "emits warnings without caller_env" do
-      types =
-        Map.merge(SchemaHelper.default_types(), %{
-          "User" => %Grephql.Schema.Type{
-            kind: :object,
-            name: "User",
-            fields: %{
-              "name" => %Grephql.Schema.Field{
-                name: "name",
-                type: %Grephql.Schema.TypeRef{kind: :scalar, name: "String"}
-              },
-              "email" => %Grephql.Schema.Field{
-                name: "email",
-                type: %Grephql.Schema.TypeRef{kind: :scalar, name: "String"},
-                is_deprecated: true,
-                deprecation_reason: "use contactEmail"
-              }
-            }
+  describe "error formatting with caller_env offset" do
+    test "error on non-first line has correct raw line/column" do
+      schema = SchemaHelper.build_schema()
+
+      doc =
+        parse!("""
+        query {
+          user(id: "1") {
+            nonExistent
           }
-        })
+        }
+        """)
 
-      schema = SchemaHelper.build_schema(types: types)
-      doc = parse!(~s|query { user(id: "1") { email } }|)
-
-      output =
-        ExUnit.CaptureIO.capture_io(:stderr, fn ->
-          assert :ok = Validator.validate(doc, schema)
-        end)
-
-      assert output =~ "deprecated"
+      assert {:error, [error]} = Validator.validate(doc, schema)
+      assert error.line == 3
+      assert error.column == 5
     end
 
-    test "emits warnings with caller_env" do
-      types =
-        Map.merge(SchemaHelper.default_types(), %{
-          "User" => %Grephql.Schema.Type{
-            kind: :object,
-            name: "User",
-            fields: %{
-              "name" => %Grephql.Schema.Field{
-                name: "name",
-                type: %Grephql.Schema.TypeRef{kind: :scalar, name: "String"}
-              },
-              "email" => %Grephql.Schema.Field{
-                name: "email",
-                type: %Grephql.Schema.TypeRef{kind: :scalar, name: "String"},
-                is_deprecated: true,
-                deprecation_reason: "use contactEmail"
-              }
-            }
+    test "Error.format with offset adds caller_env.line to error line" do
+      schema = SchemaHelper.build_schema()
+
+      doc =
+        parse!("""
+        query {
+          user(id: "1") {
+            nonExistent
           }
-        })
+        }
+        """)
 
-      schema = SchemaHelper.build_schema(types: types)
-      doc = parse!(~s|query { user(id: "1") { email } }|)
+      assert {:error, [error]} = Validator.validate(doc, schema)
+      # line 3 + offset 50 = 53, column unchanged
+      assert Error.format(error, 50) ==
+               "(53:5) field \"nonExistent\" does not exist on type \"User\""
+    end
 
-      output =
-        ExUnit.CaptureIO.capture_io(:stderr, fn ->
-          assert :ok = Validator.validate(doc, schema, __ENV__)
-        end)
+    test "Error.format without offset uses raw line" do
+      schema = SchemaHelper.build_schema()
 
-      assert output =~ "deprecated"
+      doc =
+        parse!("""
+        query {
+          user(id: "1") {
+            nonExistent
+          }
+        }
+        """)
+
+      assert {:error, [error]} = Validator.validate(doc, schema)
+      assert Error.format(error) == "(3:5) field \"nonExistent\" does not exist on type \"User\""
     end
   end
 

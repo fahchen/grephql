@@ -37,7 +37,7 @@ defmodule Grephql.Validator.Rules.Arguments do
         Context.add_error(
           acc,
           "argument \"#{arg.name}\" is not defined on field \"#{field.name}\"",
-          line: Helpers.loc_line(arg)
+          arg
         )
       end
     end)
@@ -51,7 +51,7 @@ defmodule Grephql.Validator.Rules.Arguments do
         Context.add_error(
           acc,
           "required argument \"#{name}\" is missing on field \"#{field.name}\"",
-          line: Helpers.loc_line(field)
+          field
         )
       else
         acc
@@ -67,11 +67,7 @@ defmodule Grephql.Validator.Rules.Arguments do
         acc
 
       {name, [_first | _rest]}, acc ->
-        Context.add_error(
-          acc,
-          "duplicate argument \"#{name}\" on field \"#{field.name}\"",
-          line: Helpers.loc_line(field)
-        )
+        Context.add_error(acc, "duplicate argument \"#{name}\" on field \"#{field.name}\"", field)
     end)
   end
 
@@ -87,7 +83,7 @@ defmodule Grephql.Validator.Rules.Arguments do
       Context.add_error(
         ctx,
         "type mismatch for argument \"#{arg.name}\" on field \"#{field_name}\"",
-        line: Helpers.loc_line(arg)
+        arg
       )
     else
       _no_mismatch -> ctx

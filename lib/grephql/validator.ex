@@ -5,6 +5,7 @@ defmodule Grephql.Validator do
   alias Grephql.Schema
   alias Grephql.Validator.Context
   alias Grephql.Validator.Error
+  alias Grephql.Validator.Helpers
   alias Grephql.Validator.Rules
 
   @rules [
@@ -53,11 +54,15 @@ defmodule Grephql.Validator do
   end
 
   defp finalize(ctx, caller_env) do
-    errors = Context.errors_by_severity(ctx, :error)
-    warnings = Context.errors_by_severity(ctx, :warning)
+    line_offset = Helpers.caller_line_offset(caller_env)
+
+    {errors, warnings} =
+      ctx
+      |> Context.errors()
+      |> Enum.split_with(&(&1.severity == :error))
 
     for warning <- warnings do
-      emit_warning(warning.message, caller_env)
+      emit_warning(Error.format(warning, line_offset), caller_env)
     end
 
     case errors do

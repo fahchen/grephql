@@ -53,7 +53,7 @@ defmodule Grephql.Language.EnumValue do
 
   typed_structor do
     field :value, String.t()
-    field :loc, map(), default: %{line: nil}
+    field :loc, map(), default: %{line: nil, column: nil}
   end
 end
 

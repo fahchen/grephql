@@ -52,7 +52,7 @@ defmodule Grephql.Validator.Rules.Variables do
         Context.add_error(
           acc,
           "variable \"$#{name}\" is defined but not used",
-          line: Helpers.loc_line(var_def)
+          var_def
         )
       end
     end)
@@ -66,7 +66,7 @@ defmodule Grephql.Validator.Rules.Variables do
         Context.add_error(
           acc,
           "variable \"$#{var.name}\" is used but not defined",
-          line: Helpers.loc_line(var)
+          var
         )
       end
     end)
@@ -159,7 +159,7 @@ defmodule Grephql.Validator.Rules.Variables do
       Context.add_error(
         ctx,
         "variable \"$#{var_name}\" of type \"#{var_type_str}\" is not compatible with argument \"#{arg.name}\" of type \"#{arg_type_str}\"",
-        line: Helpers.loc_line(arg)
+        arg
       )
     end
   end

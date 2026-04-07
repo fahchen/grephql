@@ -36,8 +36,8 @@ defmodule Grephql.Validator.Rules.Deprecation do
     Context.add_error(
       ctx,
       "field \"#{field.name}\" on \"#{type_name}\" is deprecated#{reason}",
-      severity: :warning,
-      line: Helpers.loc_line(field)
+      field,
+      severity: :warning
     )
   end
 
@@ -63,8 +63,8 @@ defmodule Grephql.Validator.Rules.Deprecation do
     Context.add_error(
       ctx,
       "argument \"#{arg.name}\" is deprecated#{reason}",
-      severity: :warning,
-      line: Helpers.loc_line(arg)
+      arg,
+      severity: :warning
     )
   end
 
@@ -119,10 +119,7 @@ defmodule Grephql.Validator.Rules.Deprecation do
           message = ~s(input field "#{field.name}" on "#{type.name}" is deprecated#{reason})
 
           acc
-          |> Context.add_error(message,
-            severity: :warning,
-            line: Helpers.loc_line(field)
-          )
+          |> Context.add_error(message, field, severity: :warning)
           |> check_deprecated_value(field.value, input_value.type)
 
         {:ok, input_value} ->
@@ -142,8 +139,8 @@ defmodule Grephql.Validator.Rules.Deprecation do
         Context.add_error(
           ctx,
           "enum value \"#{enum_val.value}\" is deprecated#{reason}",
-          severity: :warning,
-          line: Helpers.loc_line(enum_val)
+          enum_val,
+          severity: :warning
         )
 
       _other ->

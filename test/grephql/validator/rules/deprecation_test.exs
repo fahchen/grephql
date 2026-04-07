@@ -16,13 +16,37 @@ defmodule Grephql.Validator.Rules.DeprecationTest do
       assert warnings(ctx) == []
     end
 
-    test "deprecated field produces warning" do
+    test "deprecated field produces warning with location" do
       types = types_with_deprecated_field()
       ctx = validate(~s|query { user(id: "1") { email } }|, types: types)
       assert [warning] = warnings(ctx)
 
       assert warning.message =~
                "field \"email\" on \"User\" is deprecated: use contactEmail instead"
+
+      assert warning.line == 1
+      assert warning.column == 25
+    end
+
+    test "deprecated field on non-first line reports correct location" do
+      types = types_with_deprecated_field()
+
+      ctx =
+        validate(
+          """
+          query {
+            user(id: "1") {
+              email
+            }
+          }
+          """,
+          types: types
+        )
+
+      assert [warning] = warnings(ctx)
+      assert warning.message =~ "field \"email\" on \"User\" is deprecated"
+      assert warning.line == 3
+      assert warning.column == 5
     end
 
     test "deprecated field without reason" do
@@ -40,11 +64,34 @@ defmodule Grephql.Validator.Rules.DeprecationTest do
       assert warnings(ctx) == []
     end
 
-    test "deprecated enum value produces warning" do
+    test "deprecated enum value produces warning with location" do
       types = types_with_deprecated_enum()
       ctx = validate("query { usersByRole(role: GUEST) { name } }", types: types)
       assert [warning] = warnings(ctx)
       assert warning.message =~ "enum value \"GUEST\" is deprecated: no longer supported"
+      assert warning.line == 1
+      assert warning.column == 27
+    end
+
+    test "deprecated enum value on non-first line reports correct location" do
+      types = types_with_deprecated_enum()
+
+      ctx =
+        validate(
+          """
+          query {
+            usersByRole(
+              role: GUEST
+            ) { name }
+          }
+          """,
+          types: types
+        )
+
+      assert [warning] = warnings(ctx)
+      assert warning.message =~ "enum value \"GUEST\" is deprecated"
+      assert warning.line == 3
+      assert warning.column == 11
     end
   end
 
@@ -55,11 +102,35 @@ defmodule Grephql.Validator.Rules.DeprecationTest do
       assert warnings(ctx) == []
     end
 
-    test "deprecated argument produces warning" do
+    test "deprecated argument produces warning with location" do
       types = types_with_deprecated_arg()
       ctx = validate(~s|query { user(id: "1", legacyId: "old") { name } }|, types: types)
       assert [warning] = warnings(ctx)
       assert warning.message =~ "argument \"legacyId\" is deprecated: use id instead"
+      assert warning.line == 1
+      assert warning.column == 23
+    end
+
+    test "deprecated argument on non-first line reports correct location" do
+      types = types_with_deprecated_arg()
+
+      ctx =
+        validate(
+          """
+          query {
+            user(
+              id: "1"
+              legacyId: "old"
+            ) { name }
+          }
+          """,
+          types: types
+        )
+
+      assert [warning] = warnings(ctx)
+      assert warning.message =~ "argument \"legacyId\" is deprecated"
+      assert warning.line == 4
+      assert warning.column == 5
     end
 
     test "deprecated argument without reason" do
@@ -82,6 +153,29 @@ defmodule Grephql.Validator.Rules.DeprecationTest do
         )
 
       assert warnings(ctx) == []
+    end
+
+    test "deprecated input field on non-first line reports correct location" do
+      types = types_with_deprecated_input_field()
+
+      ctx =
+        validate(
+          """
+          mutation {
+            createUser(input: {
+              name: "Alice"
+              nickname: "Ali"
+            }) { id }
+          }
+          """,
+          types: types,
+          mutation_type: "Mutation"
+        )
+
+      assert [warning] = warnings(ctx)
+      assert warning.message =~ "input field \"nickname\" on \"CreateUserInput\" is deprecated"
+      assert warning.line == 4
+      assert warning.column == 5
     end
 
     test "deprecated input field produces warning" do
