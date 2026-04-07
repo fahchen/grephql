@@ -165,7 +165,7 @@ Value -> block_string_value :  build_ast_node('StringValue',  #{'value' => extra
 Value -> string_value :  build_ast_node('StringValue',  #{'value' => extract_quoted_string_token('$1')}, extract_location('$1')).
 Value -> boolean_value : build_ast_node('BooleanValue', #{'value' => extract_boolean('$1')},             extract_location('$1')).
 Value -> null :          build_ast_node('NullValue',    #{},                 extract_location('$1')).
-Value -> EnumValue :     build_ast_node('EnumValue',    #{'value' => '$1'},  extract_location('$1')).
+Value -> EnumValue :     build_ast_node('EnumValue',    #{'value' => extract_binary('$1')},  extract_location('$1')).
 Value -> ListValue :     build_ast_node('ListValue',    #{'values' => '$1'}, extract_child_location('$1')).
 Value -> ObjectValue :   build_ast_node('ObjectValue',  #{'fields' => '$1'}, extract_child_location('$1')).
 
@@ -175,11 +175,11 @@ ValueConst -> block_string_value :  build_ast_node('StringValue',  #{'value' => 
 ValueConst -> string_value :  build_ast_node('StringValue',  #{'value' => extract_quoted_string_token('$1')}, extract_location('$1')).
 ValueConst -> boolean_value : build_ast_node('BooleanValue', #{'value' => extract_boolean('$1')},             extract_location('$1')).
 ValueConst -> null :          build_ast_node('NullValue',    #{},                 extract_location('$1')).
-ValueConst -> EnumValue :     build_ast_node('EnumValue',    #{'value' => '$1'},  extract_location('$1')).
+ValueConst -> EnumValue :     build_ast_node('EnumValue',    #{'value' => extract_binary('$1')},  extract_location('$1')).
 ValueConst -> ListValueConst :     build_ast_node('ListValue',    #{'values' => '$1'}, extract_child_location('$1')).
 ValueConst -> ObjectValueConst :   build_ast_node('ObjectValue',  #{'fields' => '$1'}, extract_child_location('$1')).
 
-EnumValue -> Name : extract_binary('$1').
+EnumValue -> Name : '$1'.
 
 ListValueConst -> '[' ']' : [].
 ListValueConst -> '[' ValuesConst ']' : '$2'.

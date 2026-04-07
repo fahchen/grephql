@@ -61,7 +61,7 @@ defmodule Grephql.Validator.Rules.InputObjects do
         Context.add_error(
           acc,
           "field \"#{field.name}\" is not defined on input type \"#{type.name}\"",
-          line: Helpers.loc_line(field)
+          field
         )
       end
     end)
@@ -75,7 +75,7 @@ defmodule Grephql.Validator.Rules.InputObjects do
         Context.add_error(
           acc,
           "required field \"#{name}\" is missing on input type \"#{type.name}\"",
-          line: Helpers.loc_line(obj)
+          obj
         )
       else
         acc

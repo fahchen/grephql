@@ -57,7 +57,7 @@ defmodule Grephql.Validator.Rules.Values do
       Context.add_error(
         ctx,
         "enum value \"#{enum_val.value}\" is not valid for type \"#{type.name}\"",
-        line: Helpers.loc_line(enum_val)
+        enum_val
       )
     end
   end

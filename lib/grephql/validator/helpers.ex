@@ -17,6 +17,15 @@ defmodule Grephql.Validator.Helpers do
   def loc_line(%{loc: %{line: line}}) when is_integer(line), do: line
   def loc_line(_node), do: nil
 
+  @spec loc_column(map()) :: non_neg_integer() | nil
+  def loc_column(%{loc: %{column: column}}) when is_integer(column), do: column
+  def loc_column(_node), do: nil
+
+  @doc false
+  @spec caller_line_offset(Macro.Env.t() | nil) :: non_neg_integer()
+  def caller_line_offset(%Macro.Env{line: line}) when is_integer(line), do: line
+  def caller_line_offset(_env), do: 0
+
   @spec root_type_name(Schema.t(), :query | :mutation | :subscription) :: String.t() | nil
   def root_type_name(%Schema{} = schema, :query), do: schema.query_type
   def root_type_name(%Schema{} = schema, :mutation), do: schema.mutation_type
