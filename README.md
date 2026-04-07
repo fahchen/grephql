@@ -7,7 +7,8 @@ Compile-time GraphQL client for Elixir. Parses and validates queries during comp
 
 ## Features
 
-- **Compile-time validation** — GraphQL syntax errors and schema mismatches caught at `mix compile`
+- **Compile-time validation** — GraphQL syntax errors and schema mismatches caught at `mix compile`, with line:column positions pointing into your Elixir source
+- **Deprecation warnings** — Fields, arguments, enum values, and input fields marked `@deprecated` emit compile-time warnings
 - **Typed responses** — Auto-generated Ecto embedded schemas for query results
 - **Typed variables** — Input validation via Ecto changesets with generated `params()` type
 - **Zero runtime parsing** — All GraphQL parsing happens at compile time
