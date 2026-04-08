@@ -315,6 +315,20 @@ defmodule Grephql.DeffragmentTest do
       end
     end
 
+    test "undefined fragment spread raises" do
+      assert_raise CompileError, ~r/undefined fragment spread: \.\.\.NonExistent/, fn ->
+        Code.compile_string("""
+        defmodule Grephql.Test.UndefinedSpread do
+          use Grephql,
+            otp_app: :grephql,
+            source: "test/support/schemas/minimal.json"
+
+          defgql :get_user, "query($id: ID!) { user(id: $id) { ...NonExistent } }"
+        end
+        """)
+      end
+    end
+
     test "fragment with invalid field raises" do
       assert_raise CompileError, ~r/does not exist on type/, fn ->
         Code.compile_string("""

@@ -106,6 +106,14 @@ defmodule Grephql.Macros do
   def __resolve_fragments__(query_str, fragment_entries) do
     fragment_map = build_fragment_map(fragment_entries)
 
+    all_spread_names = fragment_spread_names(query_str)
+    undefined = Enum.reject(all_spread_names, &Map.has_key?(fragment_map, &1))
+
+    if undefined != [] do
+      names = Enum.map_join(undefined, ", ", &"...#{&1}")
+      raise CompileError, description: "undefined fragment spread: #{names}"
+    end
+
     {_seen, used_names} = collect_spread_names(query_str, fragment_map, MapSet.new(), [])
     used_names = Enum.reverse(used_names)
 
