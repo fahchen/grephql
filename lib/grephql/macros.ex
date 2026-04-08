@@ -106,15 +106,15 @@ defmodule Grephql.Macros do
   def __resolve_fragments__(query_str, fragment_entries) do
     fragment_map = build_fragment_map(fragment_entries)
 
-    all_spread_names = fragment_spread_names(query_str)
-    undefined = Enum.reject(all_spread_names, &Map.has_key?(fragment_map, &1))
+    spread_names = fragment_spread_names(query_str)
+    undefined = Enum.reject(spread_names, &Map.has_key?(fragment_map, &1))
 
     if undefined != [] do
       names = Enum.map_join(undefined, ", ", &"...#{&1}")
       raise CompileError, description: "undefined fragment spread: #{names}"
     end
 
-    {_seen, used_names} = collect_spread_names(query_str, fragment_map, MapSet.new(), [])
+    {_seen, used_names} = resolve_spread_names(spread_names, fragment_map, MapSet.new(), [])
     used_names = Enum.reverse(used_names)
 
     appended = Enum.map_join(used_names, "\n", fn name -> fragment_map[name].source end)
@@ -134,28 +134,29 @@ defmodule Grephql.Macros do
   @fragment_spread_pattern ~r/\.\.\.\s*([_A-Za-z][_0-9A-Za-z]*)/
 
   # Dialyzer incorrectly flags MapSet as opaque in recursive calls
-  @spec collect_spread_names(String.t(), map(), MapSet.t(String.t()), [String.t()]) ::
+  @spec resolve_spread_names([String.t()], map(), MapSet.t(String.t()), [String.t()]) ::
           {MapSet.t(String.t()), [String.t()]}
-  @dialyzer {:no_opaque, collect_spread_names: 4}
-  defp collect_spread_names(source, fragment_map, seen, acc) do
-    Enum.reduce(fragment_spread_names(source), {seen, acc}, fn name, {seen_acc, acc_acc} ->
+  @dialyzer {:no_opaque, resolve_spread_names: 4}
+  defp resolve_spread_names(names, fragment_map, seen, acc) do
+    Enum.reduce(names, {seen, acc}, fn name, {seen_acc, acc_acc} ->
       if MapSet.member?(seen_acc, name) do
         {seen_acc, acc_acc}
       else
-        next_spread_names(name, fragment_map, seen_acc, acc_acc)
+        resolve_spread_name(name, fragment_map, seen_acc, acc_acc)
       end
     end)
   end
 
-  @spec next_spread_names(String.t(), map(), MapSet.t(String.t()), [String.t()]) ::
+  @spec resolve_spread_name(String.t(), map(), MapSet.t(String.t()), [String.t()]) ::
           {MapSet.t(String.t()), [String.t()]}
-  @dialyzer {:no_opaque, next_spread_names: 4}
-  defp next_spread_names(name, fragment_map, seen, acc) do
+  @dialyzer {:no_opaque, resolve_spread_name: 4}
+  defp resolve_spread_name(name, fragment_map, seen, acc) do
     seen = MapSet.put(seen, name)
 
     case Map.fetch(fragment_map, name) do
       {:ok, entry} ->
-        collect_spread_names(entry.source, fragment_map, seen, [name | acc])
+        nested_names = fragment_spread_names(entry.source)
+        resolve_spread_names(nested_names, fragment_map, seen, [name | acc])
 
       :error ->
         {seen, acc}
