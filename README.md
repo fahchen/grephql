@@ -115,10 +115,10 @@ defgqlp :get_user, ~GQL"""
 
 ### `deffragment`
 
-Defines a reusable named fragment. Fragments are validated at compile time and automatically appended to queries that reference them via `...FragmentName`.
+Defines a reusable named fragment. The fragment name comes from the GraphQL definition itself, so `deffragment` only takes the fragment string. Fragments are validated at compile time and automatically appended to queries that reference them via `...FragmentName`.
 
 ```elixir
-deffragment :user_fields, ~GQL"""
+deffragment ~GQL"""
   fragment UserFields on User {
     name
     email
@@ -136,6 +136,7 @@ defgql :get_user, ~GQL"""
 ```
 
 The fragment generates a typed module at `Client.Fragments.UserFields`.
+`defgql` only sees fragments defined before it in the module. If the same fragment name is defined multiple times before a query, the latest definition overrides earlier ones for that query.
 
 ## Configuration
 
@@ -284,7 +285,7 @@ Each `defgql` generates typed Ecto embedded schema modules at compile time. Give
 defmodule MyApp.GitHub do
   use Grephql, otp_app: :my_app, source: "schema.json"
 
-  deffragment :post_fields, ~GQL"""
+  deffragment ~GQL"""
     fragment PostFields on Post {
       title
       body

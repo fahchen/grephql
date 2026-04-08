@@ -1,6 +1,6 @@
 # Used by "mix format"
 grephql_locals = [
-  deffragment: 2,
+  deffragment: 1,
   defgql: 2,
   defgqlp: 2
 ]
