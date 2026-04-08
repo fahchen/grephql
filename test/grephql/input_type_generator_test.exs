@@ -11,6 +11,18 @@ defmodule Grephql.InputTypeGeneratorTest do
               Grephql.Test.Input.Nested.Inputs.CreateUserInput,
               Grephql.Test.Input.Nested.Inputs.AddressInput,
               Grephql.Test.Input.NestedBuild.Inputs.CreateUserInput,
+              Grephql.Test.Input.Deep.Inputs.CreateOrderInput,
+              Grephql.Test.Input.Deep.Inputs.OrderItemInput,
+              Grephql.Test.Input.Deep.Inputs.PriceInput,
+              Grephql.Test.Input.DeepBuild.Inputs.CreateOrderInput,
+              Grephql.Test.Input.DeepBuild.Inputs.OrderItemInput,
+              Grephql.Test.Input.DeepBuild.Inputs.PriceInput,
+              Grephql.Test.Input.DeepReq.Inputs.CreateOrderInput,
+              Grephql.Test.Input.DeepReq.Inputs.OrderItemInput,
+              Grephql.Test.Input.DeepReq.Inputs.PriceInput,
+              Grephql.Test.Input.DeepDump.Inputs.CreateOrderInput,
+              Grephql.Test.Input.DeepDump.Inputs.OrderItemInput,
+              Grephql.Test.Input.DeepDump.Inputs.PriceInput,
               Grephql.Test.Input.Dedup.Inputs.SharedInput,
               Grephql.Test.Var.Scalar.GetUser.Variables,
               Grephql.Test.Var.Required.GetUser.Variables,
@@ -161,6 +173,130 @@ defmodule Grephql.InputTypeGeneratorTest do
       assert struct.name == "Alice"
       assert struct.address.city == "NYC"
       assert struct.address.street == "123 Main St"
+    end
+  end
+
+  describe "deeply nested input types" do
+    test "generates 3-level deep input with list and enum" do
+      schema = schema_with_deep_input()
+
+      operation =
+        parse!(
+          "mutation CreateOrder($input: CreateOrderInput!) { createOrder(input: $input) { id } }"
+        )
+
+      modules =
+        InputTypeGenerator.generate(operation, schema,
+          client_module: Grephql.Test.Input.Deep,
+          scalar_types: %{}
+        )
+
+      assert Grephql.Test.Input.Deep.Inputs.CreateOrderInput in modules
+      assert Grephql.Test.Input.Deep.Inputs.OrderItemInput in modules
+      assert Grephql.Test.Input.Deep.Inputs.PriceInput in modules
+
+      # Level 1 → Level 2: embeds_many
+      assert :items in Grephql.Test.Input.Deep.Inputs.CreateOrderInput.__schema__(:embeds)
+
+      # Level 2 → Level 3: embeds_one
+      assert :price in Grephql.Test.Input.Deep.Inputs.OrderItemInput.__schema__(:embeds)
+    end
+
+    test "build/1 with 3-level deep nested input succeeds" do
+      schema = schema_with_deep_input()
+
+      operation =
+        parse!(
+          "mutation CreateOrder($input: CreateOrderInput!) { createOrder(input: $input) { id } }"
+        )
+
+      InputTypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.Input.DeepBuild,
+        scalar_types: %{}
+      )
+
+      assert {:ok, struct} =
+               Grephql.Test.Input.DeepBuild.Inputs.CreateOrderInput.build(%{
+                 note: "rush",
+                 items: [
+                   %{
+                     product_name: "Widget",
+                     quantity: 2,
+                     price: %{amount: "19.99", currency: "USD"}
+                   },
+                   %{
+                     product_name: "Gadget",
+                     quantity: 1,
+                     price: %{amount: "49.99", currency: "EUR"}
+                   }
+                 ]
+               })
+
+      assert struct.note == "rush"
+      assert length(struct.items) == 2
+
+      [first, second] = struct.items
+      assert first.product_name == "Widget"
+      assert first.quantity == 2
+      assert first.price.amount == "19.99"
+      assert first.price.currency == :usd
+
+      assert second.product_name == "Gadget"
+      assert second.price.currency == :eur
+    end
+
+    test "build/1 rejects missing required fields in deeply nested input" do
+      schema = schema_with_deep_input()
+
+      operation =
+        parse!(
+          "mutation CreateOrder($input: CreateOrderInput!) { createOrder(input: $input) { id } }"
+        )
+
+      InputTypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.Input.DeepReq,
+        scalar_types: %{}
+      )
+
+      assert {:error, changeset} =
+               Grephql.Test.Input.DeepReq.Inputs.CreateOrderInput.build(%{
+                 items: [%{quantity: 1, price: %{amount: "10"}}]
+               })
+
+      item_changeset = hd(changeset.changes.items)
+      assert "can't be blank" in errors_on(item_changeset, :product_name)
+
+      price_changeset = item_changeset.changes.price
+      assert "can't be blank" in errors_on(price_changeset, :currency)
+    end
+
+    test "dump/1 serializes deeply nested input to camelCase JSON" do
+      schema = schema_with_deep_input()
+
+      operation =
+        parse!(
+          "mutation CreateOrder($input: CreateOrderInput!) { createOrder(input: $input) { id } }"
+        )
+
+      InputTypeGenerator.generate(operation, schema,
+        client_module: Grephql.Test.Input.DeepDump,
+        scalar_types: %{}
+      )
+
+      {:ok, struct} =
+        Grephql.Test.Input.DeepDump.Inputs.CreateOrderInput.build(%{
+          note: "test",
+          items: [%{product_name: "A", quantity: 1, price: %{amount: "5", currency: "USD"}}]
+        })
+
+      dumped = Ecto.embedded_dump(struct, :json)
+      assert dumped[:note] == "test"
+
+      [item] = dumped[:items]
+      assert item[:productName] == "A"
+      assert item[:quantity] == 1
+      assert item[:price][:amount] == "5"
+      assert item[:price][:currency] == "USD"
     end
   end
 
@@ -525,6 +661,122 @@ defmodule Grephql.InputTypeGeneratorTest do
               type: %TypeRef{kind: :scalar, name: "String"}
             }
           }
+        }
+      })
+
+    SchemaHelper.build_schema(types: types, mutation_type: "Mutation")
+  end
+
+  defp schema_with_deep_input do
+    types =
+      Map.merge(SchemaHelper.default_types(), %{
+        "Mutation" => %Type{
+          kind: :object,
+          name: "Mutation",
+          fields: %{
+            "createOrder" => %SchemaField{
+              name: "createOrder",
+              type: %TypeRef{kind: :object, name: "Order"},
+              args: %{
+                "input" => %InputValue{
+                  name: "input",
+                  type: %TypeRef{
+                    kind: :non_null,
+                    of_type: %TypeRef{kind: :input_object, name: "CreateOrderInput"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Order" => %Type{
+          kind: :object,
+          name: "Order",
+          fields: %{
+            "id" => %SchemaField{
+              name: "id",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+            }
+          }
+        },
+        "CreateOrderInput" => %Type{
+          kind: :input_object,
+          name: "CreateOrderInput",
+          input_fields: %{
+            "note" => %InputValue{
+              name: "note",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            },
+            "items" => %InputValue{
+              name: "items",
+              type: %TypeRef{
+                kind: :non_null,
+                of_type: %TypeRef{
+                  kind: :list,
+                  of_type: %TypeRef{
+                    kind: :non_null,
+                    of_type: %TypeRef{kind: :input_object, name: "OrderItemInput"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "OrderItemInput" => %Type{
+          kind: :input_object,
+          name: "OrderItemInput",
+          input_fields: %{
+            "productName" => %InputValue{
+              name: "productName",
+              type: %TypeRef{
+                kind: :non_null,
+                of_type: %TypeRef{kind: :scalar, name: "String"}
+              }
+            },
+            "quantity" => %InputValue{
+              name: "quantity",
+              type: %TypeRef{
+                kind: :non_null,
+                of_type: %TypeRef{kind: :scalar, name: "Int"}
+              }
+            },
+            "price" => %InputValue{
+              name: "price",
+              type: %TypeRef{
+                kind: :non_null,
+                of_type: %TypeRef{kind: :input_object, name: "PriceInput"}
+              }
+            }
+          }
+        },
+        "PriceInput" => %Type{
+          kind: :input_object,
+          name: "PriceInput",
+          input_fields: %{
+            "amount" => %InputValue{
+              name: "amount",
+              type: %TypeRef{
+                kind: :non_null,
+                of_type: %TypeRef{kind: :scalar, name: "String"}
+              }
+            },
+            "currency" => %InputValue{
+              name: "currency",
+              type: %TypeRef{
+                kind: :non_null,
+                of_type: %TypeRef{kind: :enum, name: "Currency"}
+              }
+            }
+          }
+        },
+        "Currency" => %Type{
+          kind: :enum,
+          name: "Currency",
+          enum_values: [
+            %{name: "USD", is_deprecated: false, deprecation_reason: nil},
+            %{name: "EUR", is_deprecated: false, deprecation_reason: nil},
+            %{name: "JPY", is_deprecated: false, deprecation_reason: nil}
+          ]
         }
       })
 
