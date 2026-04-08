@@ -205,10 +205,6 @@ defmodule Grephql.Macros do
   end
 
   defp define_fragment(frag_str_ast) do
-    build_fragment_ast(frag_str_ast)
-  end
-
-  defp build_fragment_ast(frag_str_ast) do
     quote bind_quoted: [frag_str: frag_str_ast] do
       @grephql_fragments Grephql.Compiler.compile_fragment!(
                            frag_str,
