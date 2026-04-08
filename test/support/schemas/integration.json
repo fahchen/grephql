@@ -90,6 +90,21 @@
               "deprecationReason": null
             },
             {
+              "name": "createPost",
+              "description": null,
+              "args": [
+                {
+                  "name": "input",
+                  "description": null,
+                  "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "INPUT_OBJECT", "name": "CreatePostInput", "ofType": null}},
+                  "defaultValue": null
+                }
+              ],
+              "type": {"kind": "OBJECT", "name": "Post", "ofType": null},
+              "isDeprecated": false,
+              "deprecationReason": null
+            },
+            {
               "name": "updateUser",
               "description": null,
               "args": [
@@ -249,6 +264,14 @@
               "description": null,
               "args": [],
               "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "LIST", "name": null, "ofType": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "String", "ofType": null}}}},
+              "isDeprecated": false,
+              "deprecationReason": null
+            },
+            {
+              "name": "author",
+              "description": null,
+              "args": [],
+              "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "OBJECT", "name": "User", "ofType": null}},
               "isDeprecated": false,
               "deprecationReason": null
             }
@@ -425,6 +448,76 @@
               "name": "avatarUrl",
               "description": null,
               "type": {"kind": "SCALAR", "name": "String", "ofType": null},
+              "defaultValue": null
+            }
+          ]
+        },
+        {
+          "kind": "INPUT_OBJECT",
+          "name": "CreatePostInput",
+          "description": null,
+          "fields": null,
+          "enumValues": null,
+          "interfaces": null,
+          "possibleTypes": null,
+          "inputFields": [
+            {
+              "name": "title",
+              "description": null,
+              "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "String", "ofType": null}},
+              "defaultValue": null
+            },
+            {
+              "name": "body",
+              "description": null,
+              "type": {"kind": "SCALAR", "name": "String", "ofType": null},
+              "defaultValue": null
+            },
+            {
+              "name": "status",
+              "description": null,
+              "type": {"kind": "ENUM", "name": "PostStatus", "ofType": null},
+              "defaultValue": null
+            },
+            {
+              "name": "tags",
+              "description": null,
+              "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "LIST", "name": null, "ofType": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "SCALAR", "name": "String", "ofType": null}}}},
+              "defaultValue": null
+            },
+            {
+              "name": "metadata",
+              "description": null,
+              "type": {"kind": "INPUT_OBJECT", "name": "MetadataInput", "ofType": null},
+              "defaultValue": null
+            }
+          ]
+        },
+        {
+          "kind": "INPUT_OBJECT",
+          "name": "MetadataInput",
+          "description": null,
+          "fields": null,
+          "enumValues": null,
+          "interfaces": null,
+          "possibleTypes": null,
+          "inputFields": [
+            {
+              "name": "slug",
+              "description": null,
+              "type": {"kind": "SCALAR", "name": "String", "ofType": null},
+              "defaultValue": null
+            },
+            {
+              "name": "seoTitle",
+              "description": null,
+              "type": {"kind": "SCALAR", "name": "String", "ofType": null},
+              "defaultValue": null
+            },
+            {
+              "name": "publishAt",
+              "description": null,
+              "type": {"kind": "SCALAR", "name": "DateTime", "ofType": null},
               "defaultValue": null
             }
           ]
