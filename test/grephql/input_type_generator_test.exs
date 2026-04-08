@@ -39,6 +39,8 @@ defmodule Grephql.InputTypeGeneratorTest do
               Grephql.Test.Input.Params.Inputs.CreateUserInput
             ]}
 
+  import Grephql.Test.Helpers, only: [errors_on: 2]
+
   alias Grephql.InputTypeGenerator
   alias Grephql.Schema.Field, as: SchemaField
   alias Grephql.Schema.InputValue
@@ -554,12 +556,6 @@ defmodule Grephql.InputTypeGeneratorTest do
   defp parse!(query) do
     {:ok, %{definitions: [operation | _rest]}} = Grephql.Parser.parse(query)
     operation
-  end
-
-  defp errors_on(changeset, field) do
-    changeset.errors
-    |> Keyword.get_values(field)
-    |> Enum.map(fn {msg, _opts} -> msg end)
   end
 
   defp schema_with_input do

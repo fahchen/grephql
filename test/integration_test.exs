@@ -1,6 +1,8 @@
 defmodule Grephql.IntegrationTest do
   use ExUnit.Case, async: true
 
+  import Grephql.Test.Helpers, only: [errors_on: 2]
+
   alias Grephql.Result
 
   defmodule Client do
@@ -1163,12 +1165,6 @@ defmodule Grephql.IntegrationTest do
   end
 
   defp req_options, do: [plug: {Req.Test, Client}]
-
-  defp errors_on(changeset, field) do
-    changeset.errors
-    |> Keyword.get_values(field)
-    |> Enum.map(fn {msg, _opts} -> msg end)
-  end
 
   defp expect_json(body), do: expect_json(200, body)
 
