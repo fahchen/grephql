@@ -106,7 +106,7 @@ defmodule Grephql.Macros do
   def __resolve_fragments__(query_str, fragment_entries) do
     fragment_map = build_fragment_map(fragment_entries)
 
-    spread_names = fragment_spread_names(query_str)
+    spread_names = collect_spread_names(query_str)
     undefined = Enum.reject(spread_names, &Map.has_key?(fragment_map, &1))
 
     if undefined != [] do
@@ -131,7 +131,17 @@ defmodule Grephql.Macros do
     |> Map.new(fn entry -> {entry.fragment.name, entry} end)
   end
 
-  @fragment_spread_pattern ~r/\.\.\.\s*([_A-Za-z][_0-9A-Za-z]*)/
+  defp collect_spread_names(query_str) do
+    case Grephql.Parser.parse(query_str) do
+      {:ok, document} ->
+        document.definitions
+        |> Enum.flat_map(&selection_spread_names/1)
+        |> Enum.uniq()
+
+      {:error, _reason} ->
+        []
+    end
+  end
 
   # Dialyzer incorrectly flags MapSet as opaque in recursive calls
   @spec resolve_spread_names([String.t()], map(), MapSet.t(String.t()), [String.t()]) ::
@@ -155,7 +165,7 @@ defmodule Grephql.Macros do
 
     case Map.fetch(fragment_map, name) do
       {:ok, entry} ->
-        nested_names = fragment_spread_names(entry.source)
+        nested_names = ast_spread_names(entry.fragment.selection_set)
         resolve_spread_names(nested_names, fragment_map, seen, [name | acc])
 
       :error ->
@@ -163,12 +173,20 @@ defmodule Grephql.Macros do
     end
   end
 
-  defp fragment_spread_names(source) do
-    @fragment_spread_pattern
-    |> Regex.scan(source)
-    |> Enum.map(fn [_full, name] -> name end)
-    |> Enum.reject(&(&1 == "on"))
-  end
+  defp selection_spread_names(%{selection_set: selection_set}),
+    do: ast_spread_names(selection_set)
+
+  defp selection_spread_names(_definition), do: []
+
+  defp ast_spread_names(nil), do: []
+  defp ast_spread_names(%{selections: selections}), do: Enum.flat_map(selections, &spread_name/1)
+
+  defp spread_name(%Grephql.Language.FragmentSpread{name: name}), do: [name]
+
+  defp spread_name(%{selection_set: selection_set}),
+    do: ast_spread_names(selection_set)
+
+  defp spread_name(_other), do: []
 
   @doc """
   Defines a reusable named GraphQL fragment.
