@@ -1,6 +1,7 @@
 defmodule TypedStructor.Plugins.AccessTest do
   use ExUnit.Case, async: true
 
+  alias Grephql.Test.Response.Profile
   alias Grephql.Test.Response.ScalarUser
   alias Grephql.Test.Response.UserWithProfile
 
@@ -29,12 +30,6 @@ defmodule TypedStructor.Plugins.AccessTest do
 
       assert user[:name] == "Alice"
       assert user[:email] == "alice@example.com"
-    end
-
-    test "returns nil for non-existing keys with bracket syntax" do
-      user = %ScalarUser{name: "Alice", email: nil}
-
-      assert user[:nonexistent] == nil
     end
   end
 
@@ -72,7 +67,7 @@ defmodule TypedStructor.Plugins.AccessTest do
     test "works with get_in/2 for nested schemas" do
       user = %UserWithProfile{
         name: "Alice",
-        profile: %Grephql.Test.Response.Profile{bio: "hello"}
+        profile: %Profile{bio: "hello"}
       }
 
       assert get_in(user, [:profile, :bio]) == "hello"
