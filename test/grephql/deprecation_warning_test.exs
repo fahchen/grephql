@@ -1,6 +1,5 @@
 defmodule Grephql.DeprecationWarningTest do
-  # capture_io(:stderr) can pick up warnings from concurrent compilations
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   import ExUnit.CaptureIO
 
