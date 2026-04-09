@@ -312,6 +312,25 @@ end
 # MyApp.GitHub.GetUser.Variables            — %{id: String.t()}
 ```
 
+## Access Behaviour
+
+All generated schemas implement the `Access` behaviour, so you can use bracket syntax and `get_in/2` alongside dot notation:
+
+```elixir
+{:ok, result} = MyApp.GitHub.get_user(%{login: "octocat"})
+
+# Dot notation
+result.data.user.name
+
+# Bracket syntax
+result.data.user[:name]
+
+# Dynamic / nested access
+get_in(result.data, [:user, :name])
+```
+
+This is powered by `TypedStructor.Plugins.Access`, which is registered in every generated `typed_embedded_schema` block.
+
 ## Testing
 
 Use `Req.Test` to stub HTTP responses without any network calls:
