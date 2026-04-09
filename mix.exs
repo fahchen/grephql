@@ -43,7 +43,7 @@ defmodule Grephql.MixProject do
     [
       {:nimble_parsec, "~> 1.4", runtime: false},
       {:req, "~> 0.5"},
-      {:jason, "~> 1.4"},
+      {:jason, "~> 1.4", optional: true},
       {:ecto, "~> 3.12"},
       {:ecto_typed_schema, "~> 0.1.0"},
       {:typed_structor, "~> 0.6"},

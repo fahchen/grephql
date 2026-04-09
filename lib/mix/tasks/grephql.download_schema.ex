@@ -93,7 +93,7 @@ defmodule Mix.Tasks.Grephql.DownloadSchema do
   end
 
   defp validate_and_save!(body, output) when is_map(body) do
-    json = Jason.encode!(body, pretty: true)
+    json = Grephql.JSON.encode!(body)
 
     case Grephql.Schema.Parser.parse(json) do
       {:ok, _schema} -> save!(output, json)

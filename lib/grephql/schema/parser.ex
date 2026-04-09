@@ -11,7 +11,7 @@ defmodule Grephql.Schema.Parser do
 
   @spec parse(String.t()) :: {:ok, Schema.t()} | {:error, String.t()}
   def parse(json) when is_binary(json) do
-    case Jason.decode(json) do
+    case Grephql.JSON.decode(json) do
       {:ok, %{"data" => %{"__schema" => schema}}} ->
         {:ok, build_schema(schema)}
 
@@ -21,8 +21,8 @@ defmodule Grephql.Schema.Parser do
       {:ok, _} ->
         {:error, "invalid introspection result: missing __schema"}
 
-      {:error, %Jason.DecodeError{} = error} ->
-        {:error, "JSON decode error: #{Exception.message(error)}"}
+      {:error, error} ->
+        {:error, "JSON decode error: #{format_json_error(error)}"}
     end
   end
 
@@ -169,4 +169,7 @@ defmodule Grephql.Schema.Parser do
   }
 
   defp parse_location(loc) when is_map_key(@location_map, loc), do: @location_map[loc]
+
+  defp format_json_error(error) when is_exception(error), do: Exception.message(error)
+  defp format_json_error(error), do: inspect(error)
 end
