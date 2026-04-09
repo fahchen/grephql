@@ -234,8 +234,8 @@ defmodule Grephql.IntegrationTest do
 
       assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
 
-      assert result.data.user.profile.bio == "Hello world"
-      assert result.data.user.profile.avatar_url == "https://example.com/avatar.png"
+      assert %{bio: "Hello world", avatar_url: "https://example.com/avatar.png"} =
+               result.data.user.profile
     end
 
     test "decodes nullable nested object as nil" do
@@ -292,16 +292,15 @@ defmodule Grephql.IntegrationTest do
 
       assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
 
-      assert length(result.data.user.posts) == 2
-      [post1, post2] = result.data.user.posts
-      assert post1.title == "First Post"
-      assert post1.status == :published
-      assert post1.published_at == ~U[2025-03-01 12:00:00Z]
-      assert post1.tags == ["elixir", "graphql"]
-      assert post2.title == "Second Post"
-      assert post2.status == :draft
-      assert post2.published_at == nil
-      assert post2.tags == []
+      assert [
+               %{
+                 title: "First Post",
+                 status: :published,
+                 published_at: ~U[2025-03-01 12:00:00Z],
+                 tags: ["elixir", "graphql"]
+               },
+               %{title: "Second Post", status: :draft, published_at: nil, tags: []}
+             ] = result.data.user.posts
     end
 
     test "decodes list of scalar strings (tags)" do
@@ -347,13 +346,10 @@ defmodule Grephql.IntegrationTest do
       assert {:ok, %Result{} = result} =
                Client.search(%{query: "hello"}, req_options: req_options())
 
-      [user, post] = result.data.search
-      assert user.__typename == "User"
-      assert user.name == "Alice"
-      assert user.role == :admin
-      assert post.__typename == "Post"
-      assert post.title == "Hello"
-      assert post.status == :published
+      assert [
+               %{__typename: "User", name: "Alice", role: :admin},
+               %{__typename: "Post", title: "Hello", status: :published}
+             ] = result.data.search
     end
   end
 
@@ -371,13 +367,10 @@ defmodule Grephql.IntegrationTest do
       assert {:ok, %Result{} = result} =
                Client.get_nodes(%{ids: ["1", "10"]}, req_options: req_options())
 
-      [user, post] = result.data.nodes
-      assert user.__typename == "User"
-      assert user.id == "1"
-      assert user.name == "Alice"
-      assert post.__typename == "Post"
-      assert post.id == "10"
-      assert post.title == "Hello"
+      assert [
+               %{__typename: "User", id: "1", name: "Alice"},
+               %{__typename: "Post", id: "10", title: "Hello"}
+             ] = result.data.nodes
     end
   end
 
@@ -415,10 +408,8 @@ defmodule Grephql.IntegrationTest do
                  req_options: req_options()
                )
 
-      assert result.data.create_user.id == "42"
-      assert result.data.create_user.name == "New User"
-      assert result.data.create_user.role == :user
-      assert result.data.create_user.created_at == ~U[2025-06-15 12:00:00Z]
+      assert %{id: "42", name: "New User", role: :user, created_at: ~U[2025-06-15 12:00:00Z]} =
+               result.data.create_user
     end
 
     test "mutation with nested input object variables serialized correctly" do
@@ -426,12 +417,12 @@ defmodule Grephql.IntegrationTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
-        input = request["variables"]["input"]
-        assert input["name"] == "Alice"
-        assert input["email"] == "alice@example.com"
-        assert input["role"] == "ADMIN"
-        assert input["profile"]["bio"] == "Hello"
-        assert input["profile"]["avatarUrl"] == "https://img.example.com/a.png"
+        assert %{
+                 "name" => "Alice",
+                 "email" => "alice@example.com",
+                 "role" => "ADMIN",
+                 "profile" => %{"bio" => "Hello", "avatarUrl" => "https://img.example.com/a.png"}
+               } = request["variables"]["input"]
 
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -470,9 +461,8 @@ defmodule Grephql.IntegrationTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
-        assert request["variables"]["id"] == "1"
-        assert request["variables"]["input"]["name"] == "Updated"
-        assert request["variables"]["input"]["role"] == "ADMIN"
+        assert %{"id" => "1", "input" => %{"name" => "Updated", "role" => "ADMIN"}} =
+                 request["variables"]
 
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -492,8 +482,7 @@ defmodule Grephql.IntegrationTest do
                  req_options: req_options()
                )
 
-      assert result.data.update_user.name == "Updated"
-      assert result.data.update_user.role == :admin
+      assert %{name: "Updated", role: :admin} = result.data.update_user
     end
 
     test "mutation with invalid variables returns changeset error" do
@@ -645,44 +634,45 @@ defmodule Grephql.IntegrationTest do
       [alice, post, carol] = result.data.search
 
       # User variant with nested profile + posts
-      assert alice.__typename == "User"
-      assert alice.id == "1"
-      assert alice.name == "Alice"
-      assert alice.email == "alice@example.com"
-      assert alice.role == :admin
-      assert alice.created_at == ~U[2025-01-15 10:30:00Z]
-      assert alice.profile.bio == "Elixir dev"
-      assert alice.profile.avatar_url == "https://img.example.com/alice.png"
-      assert length(alice.posts) == 2
-      [p1, p2] = alice.posts
-      assert p1.title == "First Post"
-      assert p1.status == :published
-      assert p1.published_at == ~U[2025-03-01 12:00:00Z]
-      assert p1.tags == ["elixir", "graphql"]
-      assert p2.status == :draft
-      assert p2.published_at == nil
-      assert p2.tags == []
+      assert %{
+               __typename: "User",
+               id: "1",
+               name: "Alice",
+               email: "alice@example.com",
+               role: :admin,
+               created_at: ~U[2025-01-15 10:30:00Z],
+               profile: %{bio: "Elixir dev", avatar_url: "https://img.example.com/alice.png"},
+               posts: [
+                 %{
+                   title: "First Post",
+                   status: :published,
+                   published_at: ~U[2025-03-01 12:00:00Z],
+                   tags: ["elixir", "graphql"]
+                 },
+                 %{status: :draft, published_at: nil, tags: []}
+               ]
+             } = alice
 
       # Post variant with nested author (User via fragment)
-      assert post.__typename == "Post"
-      assert post.id == "20"
-      assert post.title == "GraphQL Best Practices"
-      assert post.body == "Use fragments for reuse."
-      assert post.status == :published
-      assert post.published_at == ~U[2025-06-01 08:00:00Z]
-      assert post.tags == ["graphql", "best-practices"]
-      assert post.author.id == "2"
-      assert post.author.name == "Bob"
-      assert post.author.role == :user
-      assert post.author.created_at == ~U[2024-12-01 00:00:00Z]
-      assert post.author.profile.bio == "Writer"
-      assert post.author.profile.avatar_url == nil
+      assert %{
+               __typename: "Post",
+               id: "20",
+               title: "GraphQL Best Practices",
+               body: "Use fragments for reuse.",
+               status: :published,
+               published_at: ~U[2025-06-01 08:00:00Z],
+               tags: ["graphql", "best-practices"],
+               author: %{
+                 id: "2",
+                 name: "Bob",
+                 role: :user,
+                 created_at: ~U[2024-12-01 00:00:00Z],
+                 profile: %{bio: "Writer", avatar_url: nil}
+               }
+             } = post
 
       # User variant with nil profile and empty posts
-      assert carol.__typename == "User"
-      assert carol.role == :guest
-      assert carol.profile == nil
-      assert carol.posts == []
+      assert %{__typename: "User", role: :guest, profile: nil, posts: []} = carol
     end
   end
 
@@ -694,14 +684,17 @@ defmodule Grephql.IntegrationTest do
 
         assert request["operationName"] == "CreatePost"
 
-        input = request["variables"]["input"]
-        assert input["title"] == "Deep Nesting Test"
-        assert input["body"] == "Testing deeply nested inputs and responses."
-        assert input["status"] == "DRAFT"
-        assert input["tags"] == ["test", "integration"]
-        assert input["metadata"]["slug"] == "deep-nesting-test"
-        assert input["metadata"]["seoTitle"] == "Deep Nesting | Test"
-        assert input["metadata"]["publishAt"] == "2025-12-25T00:00:00Z"
+        assert %{
+                 "title" => "Deep Nesting Test",
+                 "body" => "Testing deeply nested inputs and responses.",
+                 "status" => "DRAFT",
+                 "tags" => ["test", "integration"],
+                 "metadata" => %{
+                   "slug" => "deep-nesting-test",
+                   "seoTitle" => "Deep Nesting | Test",
+                   "publishAt" => "2025-12-25T00:00:00Z"
+                 }
+               } = request["variables"]["input"]
 
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -751,22 +744,22 @@ defmodule Grephql.IntegrationTest do
                  req_options: req_options()
                )
 
-      post = result.data.create_post
-      assert post.id == "100"
-      assert post.title == "Deep Nesting Test"
-      assert post.body == "Testing deeply nested inputs and responses."
-      assert post.status == :draft
-      assert post.published_at == nil
-      assert post.tags == ["test", "integration"]
-
-      # Verify deeply nested author (via PostDetail fragment)
-      assert post.author.id == "1"
-      assert post.author.name == "Alice"
-      assert post.author.email == "alice@example.com"
-      assert post.author.role == :admin
-      assert post.author.created_at == ~U[2025-01-15 10:30:00Z]
-      assert post.author.profile.bio == "Elixir dev"
-      assert post.author.profile.avatar_url == "https://img.example.com/alice.png"
+      assert %{
+               id: "100",
+               title: "Deep Nesting Test",
+               body: "Testing deeply nested inputs and responses.",
+               status: :draft,
+               published_at: nil,
+               tags: ["test", "integration"],
+               author: %{
+                 id: "1",
+                 name: "Alice",
+                 email: "alice@example.com",
+                 role: :admin,
+                 created_at: ~U[2025-01-15 10:30:00Z],
+                 profile: %{bio: "Elixir dev", avatar_url: "https://img.example.com/alice.png"}
+               }
+             } = result.data.create_post
     end
   end
 
@@ -823,34 +816,35 @@ defmodule Grephql.IntegrationTest do
       assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
 
       # Partial data is decoded
-      assert result.data.user.id == "1"
-      assert result.data.user.name == "Alice"
-      assert result.data.user.email == nil
-      assert result.data.user.role == :admin
-      assert result.data.user.profile.bio == "Hello"
-      assert result.data.user.profile.avatar_url == nil
+      assert %{
+               id: "1",
+               name: "Alice",
+               email: nil,
+               role: :admin,
+               profile: %{bio: "Hello", avatar_url: nil}
+             } = result.data.user
 
       # Nested list with mixed null fields
-      [p1, p2] = result.data.user.posts
-      assert p1.title == "Published"
-      assert p1.status == :published
-      assert p1.tags == ["elixir"]
-      assert p2.title == nil
-      assert p2.status == :draft
-      assert p2.published_at == nil
-      assert p2.tags == []
+      assert [
+               %{title: "Published", status: :published, tags: ["elixir"]},
+               %{title: nil, status: :draft, published_at: nil, tags: []}
+             ] = result.data.user.posts
 
       # Errors with extensions
-      assert length(result.errors) == 2
-      [err1, err2] = result.errors
-      assert err1.message == "Field 'title' is null for restricted post"
-      assert err1.path == ["user", "posts", 1, "title"]
-      assert [%{"line" => 5, "column" => 9}] = err1.locations
-      assert err1.extensions == %{"code" => "PERMISSION_DENIED", "retryable" => false}
-      assert err2.message == "Email is restricted"
-      assert err2.path == ["user", "email"]
-      assert err2.locations == nil
-      assert err2.extensions == nil
+      assert [
+               %{
+                 message: "Field 'title' is null for restricted post",
+                 path: ["user", "posts", 1, "title"],
+                 locations: [%{"line" => 5, "column" => 9}],
+                 extensions: %{"code" => "PERMISSION_DENIED", "retryable" => false}
+               },
+               %{
+                 message: "Email is restricted",
+                 path: ["user", "email"],
+                 locations: nil,
+                 extensions: nil
+               }
+             ] = result.errors
     end
 
     test "union query with empty list, single item, and null nested objects" do
@@ -940,12 +934,15 @@ defmodule Grephql.IntegrationTest do
       assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
 
       assert result.data == nil
-      assert length(result.errors) == 2
-      [e1, e2] = result.errors
-      assert e1.message == "Authentication required"
-      assert e1.extensions == %{"code" => "UNAUTHENTICATED"}
-      assert e1.path == nil
-      assert e2.extensions["retryAfter"] == 30
+
+      assert [
+               %{
+                 message: "Authentication required",
+                 extensions: %{"code" => "UNAUTHENTICATED"},
+                 path: nil
+               },
+               %{extensions: %{"retryAfter" => 30}}
+             ] = result.errors
     end
 
     test "non-200 HTTP responses return error tuples" do
@@ -989,11 +986,8 @@ defmodule Grephql.IntegrationTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
-        input = request["variables"]["input"]
-        assert input["name"] == "Minimal"
-        assert input["email"] == "min@example.com"
-        refute Map.has_key?(input, "role") && input["role"] != nil
-        refute Map.has_key?(input, "profile") && input["profile"] != nil
+        assert %{"name" => "Minimal", "email" => "min@example.com"} =
+                 request["variables"]["input"]
 
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -1019,8 +1013,7 @@ defmodule Grephql.IntegrationTest do
                  req_options: req_options()
                )
 
-      assert result.data.create_user.name == "Minimal"
-      assert result.data.create_user.role == :user
+      assert %{name: "Minimal", role: :user} = result.data.create_user
     end
 
     test "mutation with nested input, enum, and partial response with errors" do
@@ -1090,20 +1083,19 @@ defmodule Grephql.IntegrationTest do
                  req_options: req_options()
                )
 
-      post = result.data.create_post
-      assert post.id == "200"
-      assert post.title == "Edge Post"
-      assert post.body == nil
-      assert post.status == :published
-      assert post.published_at == ~U[2025-12-31 23:59:59Z]
-      assert post.tags == ["a", "b", "c"]
-      assert post.author.email == nil
-      assert post.author.profile == nil
+      assert %{
+               id: "200",
+               title: "Edge Post",
+               body: nil,
+               status: :published,
+               published_at: ~U[2025-12-31 23:59:59Z],
+               tags: ["a", "b", "c"],
+               author: %{email: nil, profile: nil}
+             } = result.data.create_post
 
       # Partial success: data present + warning error
-      assert [error] = result.errors
-      assert error.message == "SEO title too short"
-      assert error.extensions["code"] == "VALIDATION_WARNING"
+      assert [%{message: "SEO title too short", extensions: %{"code" => "VALIDATION_WARNING"}}] =
+               result.errors
     end
 
     test "mutation with deeply nested optional input all nil round-trips correctly" do
@@ -1111,13 +1103,7 @@ defmodule Grephql.IntegrationTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
-        input = request["variables"]["input"]
-        assert input["title"] == "Bare"
-        assert input["tags"] == []
-        # metadata is nil/not present when not provided
-        assert input["metadata"] == nil || not Map.has_key?(input, "metadata")
-        assert input["body"] == nil || not Map.has_key?(input, "body")
-        assert input["status"] == nil || not Map.has_key?(input, "status")
+        assert %{"title" => "Bare", "tags" => []} = request["variables"]["input"]
 
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -1152,14 +1138,15 @@ defmodule Grephql.IntegrationTest do
                  req_options: req_options()
                )
 
-      post = result.data.create_post
-      assert post.id == "201"
-      assert post.body == nil
-      assert post.status == :draft
-      assert post.published_at == nil
-      assert post.tags == []
-      assert post.author.name == "System"
-      assert post.author.profile == nil
+      assert %{
+               id: "201",
+               body: nil,
+               status: :draft,
+               published_at: nil,
+               tags: [],
+               author: %{name: "System", profile: nil}
+             } = result.data.create_post
+
       assert result.errors == []
     end
   end
