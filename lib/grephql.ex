@@ -181,7 +181,16 @@ defmodule Grephql do
   end
 
   defp decode_response(body, result_module) when is_binary(body) do
-    body |> Jason.decode!() |> decode_response(result_module)
+    case Grephql.JSON.decode(body) do
+      {:ok, decoded} ->
+        decode_response(decoded, result_module)
+
+      {:error, reason} when is_exception(reason) ->
+        {:error, reason}
+
+      {:error, reason} ->
+        {:error, RuntimeError.exception(inspect(reason))}
+    end
   end
 
   @doc false
