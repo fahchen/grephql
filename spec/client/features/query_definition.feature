@@ -68,7 +68,7 @@ Feature: GraphQL query definition and execution
 
     Scenario: Define and use a named fragment via deffragment
       Given a client module with a valid schema
-      When the developer defines deffragment :user_fields with a fragment on User
+      When the developer defines deffragment with a fragment on User
       And defines defgql :get_user with a query that spreads ...UserFields
       Then the fragment is auto-concatenated to the query string
       And the fragment result struct is generated under ClientModule.Fragments.UserFields
@@ -78,6 +78,13 @@ Feature: GraphQL query definition and execution
       And defgql :get_user spreads fragment A
       When the module is compiled
       Then both fragment A and B are concatenated to the query string
+
+    Scenario: Later fragment definitions override earlier ones for subsequent queries
+      Given fragment UserFields is defined before defgql :get_user_name with field name
+      And fragment UserFields is redefined before defgql :get_user_email with field email
+      When the module is compiled
+      Then get_user_name uses the earlier UserFields definition
+      And get_user_email uses the later UserFields definition
 
   Rule: Response distinguishes GraphQL-level results from transport errors
 

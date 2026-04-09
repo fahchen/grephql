@@ -101,43 +101,92 @@ defmodule Grephql.Macros do
   end
 
   @doc false
-  @spec __resolve_fragments__(String.t(), [{atom(), Grephql.Compiler.fragment_entry()}]) ::
+  @spec __resolve_fragments__(String.t(), [Grephql.Compiler.fragment_entry()]) ::
           {String.t(), %{String.t() => Grephql.Compiler.fragment_entry()}}
-  def __resolve_fragments__(query_str, fragment_pairs) do
-    fragment_map =
-      Map.new(fragment_pairs, fn {_key, entry} -> {entry.fragment.name, entry} end)
+  def __resolve_fragments__(query_str, fragment_entries) do
+    fragment_map = build_fragment_map(fragment_entries)
 
-    used = collect_spread_names(query_str, fragment_map, MapSet.new())
+    spread_names = collect_spread_names(query_str)
+    undefined = Enum.reject(spread_names, &Map.has_key?(fragment_map, &1))
 
-    appended = Enum.map_join(used, "\n", fn name -> fragment_map[name].source end)
+    if undefined != [] do
+      names = Enum.map_join(undefined, ", ", &"...#{&1}")
+      raise CompileError, description: "undefined fragment spread: #{names}"
+    end
+
+    {_seen, used_names} = resolve_spread_names(spread_names, fragment_map, MapSet.new(), [])
+    used_names = Enum.reverse(used_names)
+
+    appended = Enum.map_join(used_names, "\n", fn name -> fragment_map[name].source end)
 
     full_query = if appended == "", do: query_str, else: query_str <> "\n" <> appended
-    used_map = Map.take(fragment_map, MapSet.to_list(used))
+    used_map = Map.take(fragment_map, used_names)
 
     {full_query, used_map}
   end
 
-  @fragment_spread_pattern ~r/\.\.\.([A-Z]\w*)/
+  defp build_fragment_map(fragment_entries) do
+    fragment_entries
+    |> Enum.reverse()
+    |> Map.new(fn entry -> {entry.fragment.name, entry} end)
+  end
+
+  defp collect_spread_names(query_str) do
+    case Grephql.Parser.parse(query_str) do
+      {:ok, document} ->
+        document.definitions
+        |> Enum.flat_map(&selection_spread_names/1)
+        |> Enum.uniq()
+
+      {:error, _reason} ->
+        []
+    end
+  end
 
   # Dialyzer incorrectly flags MapSet as opaque in recursive calls
-  @dialyzer {:no_opaque, collect_spread_names: 3}
-  defp collect_spread_names(source, fragment_map, seen) do
-    names =
-      @fragment_spread_pattern
-      |> Regex.scan(source)
-      |> Enum.map(fn [_full, name] -> name end)
-      |> Enum.reject(&MapSet.member?(seen, &1))
-
-    Enum.reduce(names, seen, fn name, acc ->
-      case Map.fetch(fragment_map, name) do
-        {:ok, entry} ->
-          collect_spread_names(entry.source, fragment_map, MapSet.put(acc, name))
-
-        :error ->
-          acc
+  @spec resolve_spread_names([String.t()], map(), MapSet.t(String.t()), [String.t()]) ::
+          {MapSet.t(String.t()), [String.t()]}
+  @dialyzer {:no_opaque, resolve_spread_names: 4}
+  defp resolve_spread_names(names, fragment_map, seen, acc) do
+    Enum.reduce(names, {seen, acc}, fn name, {seen_acc, acc_acc} ->
+      if MapSet.member?(seen_acc, name) do
+        {seen_acc, acc_acc}
+      else
+        resolve_spread_name(name, fragment_map, seen_acc, acc_acc)
       end
     end)
   end
+
+  @spec resolve_spread_name(String.t(), map(), MapSet.t(String.t()), [String.t()]) ::
+          {MapSet.t(String.t()), [String.t()]}
+  @dialyzer {:no_opaque, resolve_spread_name: 4}
+  defp resolve_spread_name(name, fragment_map, seen, acc) do
+    seen = MapSet.put(seen, name)
+
+    case Map.fetch(fragment_map, name) do
+      {:ok, entry} ->
+        nested_names = ast_spread_names(entry.fragment.selection_set)
+        resolve_spread_names(nested_names, fragment_map, seen, [name | acc])
+
+      :error ->
+        {seen, acc}
+    end
+  end
+
+  defp selection_spread_names(%{selection_set: selection_set}),
+    do: ast_spread_names(selection_set)
+
+  defp selection_spread_names(_definition), do: []
+
+  defp ast_spread_names(nil), do: []
+  defp ast_spread_names(%{selections: selections}), do: Enum.flat_map(selections, &spread_name/1)
+
+  defp spread_name(%Grephql.Language.FragmentSpread{name: name}), do: [name]
+
+  defp spread_name(%{selection_set: selection_set}),
+    do: ast_spread_names(selection_set)
+
+  defp spread_name(_other), do: []
 
   @doc """
   Defines a reusable named GraphQL fragment.
@@ -147,9 +196,17 @@ defmodule Grephql.Macros do
   query uses `...FragmentName`, the fragment definition is automatically
   appended to the query string sent to the server.
 
+  The fragment name is inferred from the GraphQL definition itself
+  (`fragment UserFields on User { ... }`), so no separate Elixir name is
+  required.
+
+  Fragments are resolved lexically: a `defgql` sees only the fragments
+  defined before it in the module body. If the same fragment name is
+  defined multiple times before a `defgql`, the latest definition wins.
+
   ## Examples
 
-      deffragment :user_fields, ~GQL\"\"\"
+      deffragment ~GQL\"\"\"
       fragment UserFields on User {
         name
         email
@@ -164,29 +221,25 @@ defmodule Grephql.Macros do
       }
       \"\"\"
   """
-  defmacro deffragment(name, fragment_string) do
-    define_fragment(name, fragment_string)
+  defmacro deffragment(fragment_string) do
+    define_fragment(fragment_string)
   end
 
   # ~GQL sigil doesn't expand before deffragment receives it — extract the binary
-  defp define_fragment(
-         name,
-         {:sigil_GQL, _meta, [{:<<>>, _bin_meta, [frag_str]}, _modifiers]}
-       )
-       when is_atom(name) and is_binary(frag_str) do
-    define_fragment(name, frag_str)
+  defp define_fragment({:sigil_GQL, _meta, [{:<<>>, _bin_meta, [frag_str]}, _modifiers]})
+       when is_binary(frag_str) do
+    define_fragment(frag_str)
   end
 
-  defp define_fragment(name, frag_str_ast) when is_atom(name) do
-    quote bind_quoted: [name: name, frag_str: frag_str_ast] do
-      @grephql_fragments {name,
-                          Grephql.Compiler.compile_fragment!(
-                            frag_str,
-                            @grephql_schema,
-                            client_module: __MODULE__,
-                            scalar_types: @grephql_scalars,
-                            caller_env: __ENV__
-                          )}
+  defp define_fragment(frag_str_ast) do
+    quote bind_quoted: [frag_str: frag_str_ast] do
+      @grephql_fragments Grephql.Compiler.compile_fragment!(
+                           frag_str,
+                           @grephql_schema,
+                           client_module: __MODULE__,
+                           scalar_types: @grephql_scalars,
+                           caller_env: __ENV__
+                         )
     end
   end
 

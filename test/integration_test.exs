@@ -1,6 +1,8 @@
 defmodule Grephql.IntegrationTest do
   use ExUnit.Case, async: true
 
+  import Grephql.Test.Helpers, only: [errors_on: 2]
+
   alias Grephql.Result
 
   defmodule Client do
@@ -8,6 +10,31 @@ defmodule Grephql.IntegrationTest do
       otp_app: :grephql,
       source: "support/schemas/integration.json",
       endpoint: "https://api.example.com/graphql"
+
+    deffragment """
+    fragment UserCore on User {
+      id
+      name
+      email
+      role
+    }
+    """
+
+    deffragment """
+    fragment PostDetail on Post {
+      id
+      title
+      body
+      status
+      publishedAt
+      tags
+      author {
+        ...UserCore
+        createdAt
+        profile { bio avatarUrl }
+      }
+    }
+    """
 
     defgql(:get_user, """
     query GetUser($id: ID!) {
@@ -34,6 +61,22 @@ defmodule Grephql.IntegrationTest do
       search(query: $query) {
         ... on User { id name role }
         ... on Post { id title status }
+      }
+    }
+    """)
+
+    defgql(:search_with_fragments, """
+    query SearchWithFragments($query: String!) {
+      search(query: $query) {
+        ... on User {
+          ...UserCore
+          createdAt
+          profile { bio avatarUrl }
+          posts { id title status publishedAt tags }
+        }
+        ... on Post {
+          ...PostDetail
+        }
       }
     }
     """)
@@ -65,6 +108,14 @@ defmodule Grephql.IntegrationTest do
         id
         name
         role
+      }
+    }
+    """)
+
+    defgql(:create_post, """
+    mutation CreatePost($input: CreatePostInput!) {
+      createPost(input: $input) {
+        ...PostDetail
       }
     }
     """)
@@ -183,8 +234,8 @@ defmodule Grephql.IntegrationTest do
 
       assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
 
-      assert result.data.user.profile.bio == "Hello world"
-      assert result.data.user.profile.avatar_url == "https://example.com/avatar.png"
+      assert %{bio: "Hello world", avatar_url: "https://example.com/avatar.png"} =
+               result.data.user.profile
     end
 
     test "decodes nullable nested object as nil" do
@@ -241,16 +292,15 @@ defmodule Grephql.IntegrationTest do
 
       assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
 
-      assert length(result.data.user.posts) == 2
-      [post1, post2] = result.data.user.posts
-      assert post1.title == "First Post"
-      assert post1.status == :published
-      assert post1.published_at == ~U[2025-03-01 12:00:00Z]
-      assert post1.tags == ["elixir", "graphql"]
-      assert post2.title == "Second Post"
-      assert post2.status == :draft
-      assert post2.published_at == nil
-      assert post2.tags == []
+      assert [
+               %{
+                 title: "First Post",
+                 status: :published,
+                 published_at: ~U[2025-03-01 12:00:00Z],
+                 tags: ["elixir", "graphql"]
+               },
+               %{title: "Second Post", status: :draft, published_at: nil, tags: []}
+             ] = result.data.user.posts
     end
 
     test "decodes list of scalar strings (tags)" do
@@ -296,13 +346,10 @@ defmodule Grephql.IntegrationTest do
       assert {:ok, %Result{} = result} =
                Client.search(%{query: "hello"}, req_options: req_options())
 
-      [user, post] = result.data.search
-      assert user.__typename == "User"
-      assert user.name == "Alice"
-      assert user.role == :admin
-      assert post.__typename == "Post"
-      assert post.title == "Hello"
-      assert post.status == :published
+      assert [
+               %{__typename: "User", name: "Alice", role: :admin},
+               %{__typename: "Post", title: "Hello", status: :published}
+             ] = result.data.search
     end
   end
 
@@ -320,13 +367,10 @@ defmodule Grephql.IntegrationTest do
       assert {:ok, %Result{} = result} =
                Client.get_nodes(%{ids: ["1", "10"]}, req_options: req_options())
 
-      [user, post] = result.data.nodes
-      assert user.__typename == "User"
-      assert user.id == "1"
-      assert user.name == "Alice"
-      assert post.__typename == "Post"
-      assert post.id == "10"
-      assert post.title == "Hello"
+      assert [
+               %{__typename: "User", id: "1", name: "Alice"},
+               %{__typename: "Post", id: "10", title: "Hello"}
+             ] = result.data.nodes
     end
   end
 
@@ -364,10 +408,8 @@ defmodule Grephql.IntegrationTest do
                  req_options: req_options()
                )
 
-      assert result.data.create_user.id == "42"
-      assert result.data.create_user.name == "New User"
-      assert result.data.create_user.role == :user
-      assert result.data.create_user.created_at == ~U[2025-06-15 12:00:00Z]
+      assert %{id: "42", name: "New User", role: :user, created_at: ~U[2025-06-15 12:00:00Z]} =
+               result.data.create_user
     end
 
     test "mutation with nested input object variables serialized correctly" do
@@ -375,12 +417,12 @@ defmodule Grephql.IntegrationTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
-        input = request["variables"]["input"]
-        assert input["name"] == "Alice"
-        assert input["email"] == "alice@example.com"
-        assert input["role"] == "ADMIN"
-        assert input["profile"]["bio"] == "Hello"
-        assert input["profile"]["avatarUrl"] == "https://img.example.com/a.png"
+        assert %{
+                 "name" => "Alice",
+                 "email" => "alice@example.com",
+                 "role" => "ADMIN",
+                 "profile" => %{"bio" => "Hello", "avatarUrl" => "https://img.example.com/a.png"}
+               } = request["variables"]["input"]
 
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -419,9 +461,8 @@ defmodule Grephql.IntegrationTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
-        assert request["variables"]["id"] == "1"
-        assert request["variables"]["input"]["name"] == "Updated"
-        assert request["variables"]["input"]["role"] == "ADMIN"
+        assert %{"id" => "1", "input" => %{"name" => "Updated", "role" => "ADMIN"}} =
+                 request["variables"]
 
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -441,8 +482,7 @@ defmodule Grephql.IntegrationTest do
                  req_options: req_options()
                )
 
-      assert result.data.update_user.name == "Updated"
-      assert result.data.update_user.role == :admin
+      assert %{name: "Updated", role: :admin} = result.data.update_user
     end
 
     test "mutation with invalid variables returns changeset error" do
@@ -507,6 +547,607 @@ defmodule Grephql.IntegrationTest do
 
       assert {:ok, %Result{}} =
                Client.get_nodes(%{ids: ["1", "2", "3"]}, req_options: req_options())
+    end
+  end
+
+  describe "complex: fragment + union + nested response round-trip" do
+    test "search with fragments resolves union variants with deeply nested data" do
+      Req.Test.expect(Client, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Jason.decode!(body)
+
+        assert request["operationName"] == "SearchWithFragments"
+        assert request["query"] =~ "fragment UserCore on User"
+        assert request["query"] =~ "fragment PostDetail on Post"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "search" => [
+                %{
+                  "__typename" => "User",
+                  "id" => "1",
+                  "name" => "Alice",
+                  "email" => "alice@example.com",
+                  "role" => "ADMIN",
+                  "createdAt" => "2025-01-15T10:30:00Z",
+                  "profile" => %{
+                    "bio" => "Elixir dev",
+                    "avatarUrl" => "https://img.example.com/alice.png"
+                  },
+                  "posts" => [
+                    %{
+                      "id" => "10",
+                      "title" => "First Post",
+                      "status" => "PUBLISHED",
+                      "publishedAt" => "2025-03-01T12:00:00Z",
+                      "tags" => ["elixir", "graphql"]
+                    },
+                    %{
+                      "id" => "11",
+                      "title" => "Draft Post",
+                      "status" => "DRAFT",
+                      "publishedAt" => nil,
+                      "tags" => []
+                    }
+                  ]
+                },
+                %{
+                  "__typename" => "Post",
+                  "id" => "20",
+                  "title" => "GraphQL Best Practices",
+                  "body" => "Use fragments for reuse.",
+                  "status" => "PUBLISHED",
+                  "publishedAt" => "2025-06-01T08:00:00Z",
+                  "tags" => ["graphql", "best-practices"],
+                  "author" => %{
+                    "id" => "2",
+                    "name" => "Bob",
+                    "email" => "bob@example.com",
+                    "role" => "USER",
+                    "createdAt" => "2024-12-01T00:00:00Z",
+                    "profile" => %{"bio" => "Writer", "avatarUrl" => nil}
+                  }
+                },
+                %{
+                  "__typename" => "User",
+                  "id" => "3",
+                  "name" => "Carol",
+                  "email" => nil,
+                  "role" => "GUEST",
+                  "createdAt" => "2025-07-01T00:00:00Z",
+                  "profile" => nil,
+                  "posts" => []
+                }
+              ]
+            }
+          })
+        )
+      end)
+
+      assert {:ok, %Result{} = result} =
+               Client.search_with_fragments(%{query: "alice"}, req_options: req_options())
+
+      [alice, post, carol] = result.data.search
+
+      # User variant with nested profile + posts
+      assert %{
+               __typename: "User",
+               id: "1",
+               name: "Alice",
+               email: "alice@example.com",
+               role: :admin,
+               created_at: ~U[2025-01-15 10:30:00Z],
+               profile: %{bio: "Elixir dev", avatar_url: "https://img.example.com/alice.png"},
+               posts: [
+                 %{
+                   title: "First Post",
+                   status: :published,
+                   published_at: ~U[2025-03-01 12:00:00Z],
+                   tags: ["elixir", "graphql"]
+                 },
+                 %{status: :draft, published_at: nil, tags: []}
+               ]
+             } = alice
+
+      # Post variant with nested author (User via fragment)
+      assert %{
+               __typename: "Post",
+               id: "20",
+               title: "GraphQL Best Practices",
+               body: "Use fragments for reuse.",
+               status: :published,
+               published_at: ~U[2025-06-01 08:00:00Z],
+               tags: ["graphql", "best-practices"],
+               author: %{
+                 id: "2",
+                 name: "Bob",
+                 role: :user,
+                 created_at: ~U[2024-12-01 00:00:00Z],
+                 profile: %{bio: "Writer", avatar_url: nil}
+               }
+             } = post
+
+      # User variant with nil profile and empty posts
+      assert %{__typename: "User", role: :guest, profile: nil, posts: []} = carol
+    end
+  end
+
+  describe "complex: mutation with nested input + deep response" do
+    test "createPost serializes nested input and decodes deep response" do
+      Req.Test.expect(Client, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Jason.decode!(body)
+
+        assert request["operationName"] == "CreatePost"
+
+        assert %{
+                 "title" => "Deep Nesting Test",
+                 "body" => "Testing deeply nested inputs and responses.",
+                 "status" => "DRAFT",
+                 "tags" => ["test", "integration"],
+                 "metadata" => %{
+                   "slug" => "deep-nesting-test",
+                   "seoTitle" => "Deep Nesting | Test",
+                   "publishAt" => "2025-12-25T00:00:00Z"
+                 }
+               } = request["variables"]["input"]
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "createPost" => %{
+                "id" => "100",
+                "title" => "Deep Nesting Test",
+                "body" => "Testing deeply nested inputs and responses.",
+                "status" => "DRAFT",
+                "publishedAt" => nil,
+                "tags" => ["test", "integration"],
+                "author" => %{
+                  "id" => "1",
+                  "name" => "Alice",
+                  "email" => "alice@example.com",
+                  "role" => "ADMIN",
+                  "createdAt" => "2025-01-15T10:30:00Z",
+                  "profile" => %{
+                    "bio" => "Elixir dev",
+                    "avatarUrl" => "https://img.example.com/alice.png"
+                  }
+                }
+              }
+            }
+          })
+        )
+      end)
+
+      assert {:ok, %Result{} = result} =
+               Client.create_post(
+                 %{
+                   input: %{
+                     title: "Deep Nesting Test",
+                     body: "Testing deeply nested inputs and responses.",
+                     status: "DRAFT",
+                     tags: ["test", "integration"],
+                     metadata: %{
+                       slug: "deep-nesting-test",
+                       seo_title: "Deep Nesting | Test",
+                       publish_at: "2025-12-25T00:00:00Z"
+                     }
+                   }
+                 },
+                 req_options: req_options()
+               )
+
+      assert %{
+               id: "100",
+               title: "Deep Nesting Test",
+               body: "Testing deeply nested inputs and responses.",
+               status: :draft,
+               published_at: nil,
+               tags: ["test", "integration"],
+               author: %{
+                 id: "1",
+                 name: "Alice",
+                 email: "alice@example.com",
+                 role: :admin,
+                 created_at: ~U[2025-01-15 10:30:00Z],
+                 profile: %{bio: "Elixir dev", avatar_url: "https://img.example.com/alice.png"}
+               }
+             } = result.data.create_post
+    end
+  end
+
+  describe "query boundary: deeply nested nulls, partial errors, extensions, and edge responses" do
+    test "partial data with errors and extensions on deeply nested query" do
+      Req.Test.expect(Client, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "user" => %{
+                "id" => "1",
+                "name" => "Alice",
+                "email" => nil,
+                "role" => "ADMIN",
+                "createdAt" => "2025-01-01T00:00:00Z",
+                "profile" => %{"bio" => "Hello", "avatarUrl" => nil},
+                "posts" => [
+                  %{
+                    "id" => "10",
+                    "title" => "Published",
+                    "status" => "PUBLISHED",
+                    "publishedAt" => "2025-06-01T12:00:00Z",
+                    "tags" => ["elixir"]
+                  },
+                  %{
+                    "id" => "11",
+                    "title" => nil,
+                    "status" => "DRAFT",
+                    "publishedAt" => nil,
+                    "tags" => []
+                  }
+                ]
+              }
+            },
+            "errors" => [
+              %{
+                "message" => "Field 'title' is null for restricted post",
+                "path" => ["user", "posts", 1, "title"],
+                "locations" => [%{"line" => 5, "column" => 9}],
+                "extensions" => %{"code" => "PERMISSION_DENIED", "retryable" => false}
+              },
+              %{
+                "message" => "Email is restricted",
+                "path" => ["user", "email"]
+              }
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+
+      # Partial data is decoded
+      assert %{
+               id: "1",
+               name: "Alice",
+               email: nil,
+               role: :admin,
+               profile: %{bio: "Hello", avatar_url: nil}
+             } = result.data.user
+
+      # Nested list with mixed null fields
+      assert [
+               %{title: "Published", status: :published, tags: ["elixir"]},
+               %{title: nil, status: :draft, published_at: nil, tags: []}
+             ] = result.data.user.posts
+
+      # Errors with extensions
+      assert [
+               %{
+                 message: "Field 'title' is null for restricted post",
+                 path: ["user", "posts", 1, "title"],
+                 locations: [%{"line" => 5, "column" => 9}],
+                 extensions: %{"code" => "PERMISSION_DENIED", "retryable" => false}
+               },
+               %{
+                 message: "Email is restricted",
+                 path: ["user", "email"],
+                 locations: nil,
+                 extensions: nil
+               }
+             ] = result.errors
+    end
+
+    test "union query with empty list, single item, and null nested objects" do
+      Req.Test.expect(Client, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "search" => [
+                %{
+                  "__typename" => "User",
+                  "id" => "1",
+                  "name" => "Alice",
+                  "email" => nil,
+                  "role" => "GUEST",
+                  "createdAt" => "2025-01-01T00:00:00Z",
+                  "profile" => nil,
+                  "posts" => []
+                },
+                %{
+                  "__typename" => "Post",
+                  "id" => "20",
+                  "title" => "Orphan",
+                  "body" => nil,
+                  "status" => "ARCHIVED",
+                  "publishedAt" => nil,
+                  "tags" => [],
+                  "author" => %{
+                    "id" => "99",
+                    "name" => "Ghost",
+                    "email" => nil,
+                    "role" => "USER",
+                    "createdAt" => "2020-01-01T00:00:00Z",
+                    "profile" => nil
+                  }
+                }
+              ]
+            }
+          })
+        )
+      end)
+
+      assert {:ok, %Result{} = result} =
+               Client.search_with_fragments(%{query: "edge"}, req_options: req_options())
+
+      [user, post] = result.data.search
+
+      # User with all nullable fields nil/empty
+      assert %{__typename: "User", email: nil, role: :guest, profile: nil, posts: []} = user
+
+      # Post with nil body, nil publishedAt, empty tags, author with nil profile
+      assert %{
+               __typename: "Post",
+               body: nil,
+               status: :archived,
+               published_at: nil,
+               tags: [],
+               author: %{id: "99", profile: nil}
+             } = post
+    end
+
+    test "null data with multiple errors returns nil data and all errors" do
+      Req.Test.expect(Client, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "data" => nil,
+            "errors" => [
+              %{
+                "message" => "Authentication required",
+                "extensions" => %{"code" => "UNAUTHENTICATED"}
+              },
+              %{
+                "message" => "Rate limited",
+                "path" => ["user"],
+                "extensions" => %{"code" => "RATE_LIMITED", "retryAfter" => 30}
+              }
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+
+      assert result.data == nil
+
+      assert [
+               %{
+                 message: "Authentication required",
+                 extensions: %{"code" => "UNAUTHENTICATED"},
+                 path: nil
+               },
+               %{extensions: %{"retryAfter" => 30}}
+             ] = result.errors
+    end
+
+    test "non-200 HTTP responses return error tuples" do
+      for {status, label} <- [{400, "Bad Request"}, {401, "Unauthorized"}, {403, "Forbidden"}] do
+        Req.Test.expect(Client, fn conn ->
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.send_resp(status, Jason.encode!(%{"error" => label}))
+        end)
+
+        assert {:error, %Req.Response{status: ^status}} =
+                 Client.get_user(%{id: "1"}, req_options: req_options())
+      end
+    end
+
+    test "transport error on query returns error tuple" do
+      assert {:error, %Req.TransportError{reason: :timeout}} =
+               Client.get_user(%{id: "1"},
+                 req_options: [
+                   retry: false,
+                   adapter: fn req -> {req, %Req.TransportError{reason: :timeout}} end
+                 ]
+               )
+    end
+  end
+
+  describe "mutation boundary: nested validation, enum coercion, all-nil optionals" do
+    test "nested required field validation failures propagate through changesets" do
+      # CreateUserInput requires name and email; profile is optional but if
+      # given, ProfileInput fields are all optional scalars — so this should pass
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Client.create_user(%{input: %{}}, req_options: req_options())
+
+      input_changeset = changeset.changes.input
+      assert "can't be blank" in errors_on(input_changeset, :name)
+      assert "can't be blank" in errors_on(input_changeset, :email)
+    end
+
+    test "mutation with all optional fields nil serializes correctly" do
+      Req.Test.expect(Client, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Jason.decode!(body)
+
+        assert %{"name" => "Minimal", "email" => "min@example.com"} =
+                 request["variables"]["input"]
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "createUser" => %{
+                "id" => "50",
+                "name" => "Minimal",
+                "email" => "min@example.com",
+                "role" => "USER",
+                "createdAt" => "2025-01-01T00:00:00Z"
+              }
+            }
+          })
+        )
+      end)
+
+      assert {:ok, %Result{} = result} =
+               Client.create_user(
+                 %{input: %{name: "Minimal", email: "min@example.com"}},
+                 req_options: req_options()
+               )
+
+      assert %{name: "Minimal", role: :user} = result.data.create_user
+    end
+
+    test "mutation with nested input, enum, and partial response with errors" do
+      Req.Test.expect(Client, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Jason.decode!(body)
+
+        assert %{
+                 "title" => "Edge Post",
+                 "status" => "PUBLISHED",
+                 "tags" => ["a", "b", "c"],
+                 "metadata" => %{
+                   "slug" => "edge-post",
+                   "seoTitle" => "Edge",
+                   "publishAt" => "2025-12-31T23:59:59Z"
+                 }
+               } = request["variables"]["input"]
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "createPost" => %{
+                "id" => "200",
+                "title" => "Edge Post",
+                "body" => nil,
+                "status" => "PUBLISHED",
+                "publishedAt" => "2025-12-31T23:59:59Z",
+                "tags" => ["a", "b", "c"],
+                "author" => %{
+                  "id" => "1",
+                  "name" => "Alice",
+                  "email" => nil,
+                  "role" => "ADMIN",
+                  "createdAt" => "2025-01-01T00:00:00Z",
+                  "profile" => nil
+                }
+              }
+            },
+            "errors" => [
+              %{
+                "message" => "SEO title too short",
+                "path" => ["createPost"],
+                "extensions" => %{"code" => "VALIDATION_WARNING", "field" => "metadata.seoTitle"}
+              }
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, %Result{} = result} =
+               Client.create_post(
+                 %{
+                   input: %{
+                     title: "Edge Post",
+                     status: "PUBLISHED",
+                     tags: ["a", "b", "c"],
+                     metadata: %{
+                       slug: "edge-post",
+                       seo_title: "Edge",
+                       publish_at: "2025-12-31T23:59:59Z"
+                     }
+                   }
+                 },
+                 req_options: req_options()
+               )
+
+      assert %{
+               id: "200",
+               title: "Edge Post",
+               body: nil,
+               status: :published,
+               published_at: ~U[2025-12-31 23:59:59Z],
+               tags: ["a", "b", "c"],
+               author: %{email: nil, profile: nil}
+             } = result.data.create_post
+
+      # Partial success: data present + warning error
+      assert [%{message: "SEO title too short", extensions: %{"code" => "VALIDATION_WARNING"}}] =
+               result.errors
+    end
+
+    test "mutation with deeply nested optional input all nil round-trips correctly" do
+      Req.Test.expect(Client, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Jason.decode!(body)
+
+        assert %{"title" => "Bare", "tags" => []} = request["variables"]["input"]
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{
+              "createPost" => %{
+                "id" => "201",
+                "title" => "Bare",
+                "body" => nil,
+                "status" => "DRAFT",
+                "publishedAt" => nil,
+                "tags" => [],
+                "author" => %{
+                  "id" => "1",
+                  "name" => "System",
+                  "email" => nil,
+                  "role" => "USER",
+                  "createdAt" => "2025-01-01T00:00:00Z",
+                  "profile" => nil
+                }
+              }
+            }
+          })
+        )
+      end)
+
+      assert {:ok, %Result{} = result} =
+               Client.create_post(
+                 %{input: %{title: "Bare", tags: []}},
+                 req_options: req_options()
+               )
+
+      assert %{
+               id: "201",
+               body: nil,
+               status: :draft,
+               published_at: nil,
+               tags: [],
+               author: %{name: "System", profile: nil}
+             } = result.data.create_post
+
+      assert result.errors == []
     end
   end
 

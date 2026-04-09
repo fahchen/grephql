@@ -24,6 +24,7 @@ defmodule Grephql.TypeGenerator do
   alias Grephql.GeneratorHelpers
   alias Grephql.Language.Field, as: QueryField
   alias Grephql.Language.FragmentSpread
+  alias Grephql.Language.InlineFragment
   alias Grephql.Schema
   alias Grephql.TypeMapper
   alias Grephql.Validator.Helpers
@@ -92,16 +93,31 @@ defmodule Grephql.TypeGenerator do
   # Collects module ASTs without creating them. Returns:
   #   - For objects: {[module_name, ...], [{mod, ast}, ...]}
   #   - For unions:  {{union_module, [module_name, ...]}, [{mod, ast}, ...]}
-  defp collect_selections(selections, parent_type_name, parent_module, context) do
+  defp collect_selections(
+         selections,
+         parent_type_name,
+         parent_module,
+         {schema, _scalar_types, _fragments} = context
+       ) do
     selections = expand_fragment_spreads(selections, context)
-    {shared_fields, inline_fragments} = Enum.split_with(selections, &match?(%QueryField{}, &1))
 
-    case inline_fragments do
-      [] ->
-        collect_object_schema(shared_fields, parent_type_name, parent_module, context)
+    case Schema.get_type(schema, parent_type_name) do
+      {:ok, %{kind: kind}} when kind in [:union, :interface] ->
+        {shared_fields, inline_fragments} =
+          Enum.split_with(selections, &match?(%QueryField{}, &1))
 
-      _fragments ->
-        collect_union_schemas(shared_fields, inline_fragments, parent_module, context)
+        case inline_fragments do
+          [] ->
+            collect_object_schema(shared_fields, parent_type_name, parent_module, context)
+
+          _fragments ->
+            collect_union_schemas(shared_fields, inline_fragments, parent_module, context)
+        end
+
+      _other ->
+        selections
+        |> flatten_inline_fragments()
+        |> collect_object_schema(parent_type_name, parent_module, context)
     end
   end
 
@@ -116,8 +132,26 @@ defmodule Grephql.TypeGenerator do
             []
         end
 
+      %InlineFragment{} = fragment ->
+        [
+          %{
+            fragment
+            | selection_set: %{
+                fragment.selection_set
+                | selections: expand_fragment_spreads(fragment.selection_set.selections, context)
+              }
+          }
+        ]
+
       other ->
         [other]
+    end)
+  end
+
+  defp flatten_inline_fragments(selections) do
+    Enum.flat_map(selections, fn
+      %QueryField{} = field -> [field]
+      %InlineFragment{} = fragment -> flatten_inline_fragments(fragment.selection_set.selections)
     end)
   end
 

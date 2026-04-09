@@ -1,5 +1,6 @@
 defmodule Grephql.DeffragmentTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureIO
 
   describe "deffragment basic" do
     defmodule BasicClient do
@@ -7,12 +8,12 @@ defmodule Grephql.DeffragmentTest do
         otp_app: :grephql,
         source: "../support/schemas/minimal.json"
 
-      deffragment(:user_fields, ~GQL"""
+      deffragment ~GQL"""
       fragment UserFields on User {
         name
         email
       }
-      """)
+      """
 
       defgql(:get_user, ~GQL"""
       query GetUser($id: ID!) {
@@ -54,7 +55,7 @@ defmodule Grephql.DeffragmentTest do
         otp_app: :grephql,
         source: "../support/schemas/minimal.json"
 
-      deffragment(:user_name, "fragment UserName on User { name }")
+      deffragment "fragment UserName on User { name }"
 
       defgql(:get_user, ~GQL"""
       query GetUser($id: ID!) {
@@ -81,11 +82,11 @@ defmodule Grephql.DeffragmentTest do
         otp_app: :grephql,
         source: "../support/schemas/minimal.json"
 
-      deffragment(:user_email, ~GQL"""
+      deffragment ~GQL"""
       fragment UserEmail on User {
         email
       }
-      """)
+      """
 
       defgql(:get_user, ~GQL"""
       query GetUser($id: ID!) {
@@ -110,18 +111,18 @@ defmodule Grephql.DeffragmentTest do
         otp_app: :grephql,
         source: "../support/schemas/minimal.json"
 
-      deffragment(:user_name, ~GQL"""
+      deffragment ~GQL"""
       fragment UserName on User {
         name
       }
-      """)
+      """
 
-      deffragment(:user_details, ~GQL"""
+      deffragment ~GQL"""
       fragment UserDetails on User {
         ...UserName
         email
       }
-      """)
+      """
 
       defgql(:get_user, ~GQL"""
       query GetUser($id: ID!) {
@@ -153,6 +154,121 @@ defmodule Grephql.DeffragmentTest do
       assert NestedClient.query().document =~ "fragment UserDetails on User"
       assert NestedClient.query().document =~ "fragment UserName on User"
     end
+
+    test "appends nested fragment definitions in a stable order" do
+      query = NestedClient.query().document
+
+      {details_index, _len} = :binary.match(query, "fragment UserDetails on User")
+      {name_index, _len} = :binary.match(query, "fragment UserName on User")
+
+      assert details_index < name_index
+    end
+  end
+
+  describe "fragment names with valid GraphQL identifiers" do
+    defmodule GraphqlNameClient do
+      use Grephql,
+        otp_app: :grephql,
+        source: "../support/schemas/minimal.json"
+
+      deffragment ~GQL"""
+      fragment userFields on User {
+        name
+      }
+      """
+
+      deffragment ~GQL"""
+      fragment _userEmail on User {
+        email
+      }
+      """
+
+      defgql(:get_user, ~GQL"""
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          ...userFields
+          ..._userEmail
+          ... on User {
+            altEmail: email
+          }
+        }
+      }
+      """)
+
+      def query, do: @grephql_query
+    end
+
+    test "resolves lowercase and underscore-prefixed fragment names" do
+      assert function_exported?(GraphqlNameClient, :get_user, 2)
+
+      user =
+        struct(GraphqlNameClient.GetUser.Result.User,
+          name: "Alice",
+          email: "a@b.com",
+          alt_email: "alt@b.com"
+        )
+
+      assert user.name == "Alice"
+      assert user.email == "a@b.com"
+      assert user.alt_email == "alt@b.com"
+    end
+
+    test "keeps inline fragments separate from named fragment resolution" do
+      query = GraphqlNameClient.query().document
+
+      assert query =~ "fragment userFields on User"
+      assert query =~ "fragment _userEmail on User"
+      assert query =~ "... on User"
+    end
+  end
+
+  describe "duplicate fragment names" do
+    test "later definitions override earlier ones for subsequent queries only" do
+      module_name = DuplicateRuntime
+
+      capture_io(:stderr, fn ->
+        Code.compile_string("""
+        defmodule #{inspect(module_name)} do
+          use Grephql,
+            otp_app: :grephql,
+            source: "test/support/schemas/minimal.json"
+
+          deffragment "fragment UserFields on User { name }"
+
+          defgql :get_user_name, "query GetUserName($id: ID!) { user(id: $id) { ...UserFields } }"
+
+          def query_name, do: @grephql_query
+
+          deffragment "fragment UserFields on User { email }"
+
+          defgql :get_user_email, "query GetUserEmail($id: ID!) { user(id: $id) { ...UserFields } }"
+
+          def query_email, do: @grephql_query
+        end
+        """)
+      end)
+
+      assert module_name.query_name().document =~ "fragment UserFields on User { name }"
+      refute module_name.query_name().document =~ "fragment UserFields on User { email }"
+
+      assert module_name.query_email().document =~ "fragment UserFields on User { email }"
+      refute module_name.query_email().document =~ "fragment UserFields on User { name }"
+
+      user_name =
+        struct(Module.safe_concat([module_name, GetUserName, Result, User]), name: "Alice")
+
+      assert user_name.name == "Alice"
+
+      user_email =
+        struct(Module.safe_concat([module_name, GetUserEmail, Result, User]), email: "a@b.com")
+
+      assert user_email.email == "a@b.com"
+
+      fragment =
+        struct(Module.safe_concat([module_name, Fragments, UserFields]), email: "latest@b.com")
+
+      assert fragment.email == "latest@b.com"
+    end
   end
 
   describe "query without fragments" do
@@ -161,11 +277,11 @@ defmodule Grephql.DeffragmentTest do
         otp_app: :grephql,
         source: "../support/schemas/minimal.json"
 
-      deffragment(:unused_fields, ~GQL"""
+      deffragment ~GQL"""
       fragment UnusedFields on User {
         name
       }
-      """)
+      """
 
       defgql(:get_user, ~GQL"""
       query GetUser($id: ID!) {
@@ -193,7 +309,21 @@ defmodule Grephql.DeffragmentTest do
             otp_app: :grephql,
             source: "test/support/schemas/minimal.json"
 
-          deffragment :bad, "fragment Bad on NonExistentType { name }"
+          deffragment "fragment Bad on NonExistentType { name }"
+        end
+        """)
+      end
+    end
+
+    test "undefined fragment spread raises" do
+      assert_raise CompileError, ~r/undefined fragment spread: \.\.\.NonExistent/, fn ->
+        Code.compile_string("""
+        defmodule Grephql.Test.UndefinedSpread do
+          use Grephql,
+            otp_app: :grephql,
+            source: "test/support/schemas/minimal.json"
+
+          defgql :get_user, "query($id: ID!) { user(id: $id) { ...NonExistent } }"
         end
         """)
       end
@@ -207,7 +337,7 @@ defmodule Grephql.DeffragmentTest do
             otp_app: :grephql,
             source: "test/support/schemas/minimal.json"
 
-          deffragment :bad, "fragment Bad on User { nonExistentField }"
+          deffragment "fragment Bad on User { nonExistentField }"
         end
         """)
       end
