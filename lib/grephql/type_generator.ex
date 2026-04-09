@@ -310,7 +310,6 @@ defmodule Grephql.TypeGenerator do
         use Grephql.EmbeddedSchema
 
         typed_embedded_schema do
-          plugin TypedStructor.Plugins.Access
           (unquote_splicing(field_asts))
         end
       end

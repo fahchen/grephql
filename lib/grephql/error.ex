@@ -12,8 +12,6 @@ defmodule Grephql.Error do
   @type location() :: %{line: non_neg_integer(), column: non_neg_integer()}
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :message, :string, typed: [null: false]
     field :locations, {:array, :map}, typed: [null: true]
     field :path, {:array, Grephql.Types.PathSegment}, typed: [null: true]

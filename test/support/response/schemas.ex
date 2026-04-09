@@ -3,8 +3,6 @@ defmodule Grephql.Test.Response.ScalarUser do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :name, :string, typed: [null: false]
     field :email, :string, typed: [null: true]
   end
@@ -15,8 +13,6 @@ defmodule Grephql.Test.Response.NumericFields do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :age, :integer, typed: [null: false]
     field :score, :float, typed: [null: false]
   end
@@ -27,8 +23,6 @@ defmodule Grephql.Test.Response.BooleanField do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :active, :boolean, typed: [null: false]
   end
 end
@@ -38,8 +32,6 @@ defmodule Grephql.Test.Response.Profile do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :bio, :string, typed: [null: true]
   end
 end
@@ -49,8 +41,6 @@ defmodule Grephql.Test.Response.UserWithProfile do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :name, :string, typed: [null: false]
     embeds_one :profile, Grephql.Test.Response.Profile, typed: [null: true]
   end
@@ -61,8 +51,6 @@ defmodule Grephql.Test.Response.Post do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :title, :string, typed: [null: false]
   end
 end
@@ -72,8 +60,6 @@ defmodule Grephql.Test.Response.UserWithPosts do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :name, :string, typed: [null: false]
     embeds_many :posts, Grephql.Test.Response.Post, typed: []
   end
@@ -84,8 +70,6 @@ defmodule Grephql.Test.Response.DeepAuthor do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :name, :string, typed: [null: false]
   end
 end
@@ -95,8 +79,6 @@ defmodule Grephql.Test.Response.DeepPost do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :title, :string, typed: [null: false]
     embeds_one :author, Grephql.Test.Response.DeepAuthor, typed: []
   end
@@ -107,8 +89,6 @@ defmodule Grephql.Test.Response.UserWithDeepPosts do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :name, :string, typed: [null: false]
     embeds_many :posts, Grephql.Test.Response.DeepPost, typed: []
   end
@@ -119,8 +99,6 @@ defmodule Grephql.Test.Response.UserWithRole do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :name, :string, typed: [null: false]
     field :role, Grephql.Types.Enum, values: ["ADMIN", "USER", "GUEST"], typed: [null: true]
   end
@@ -131,8 +109,6 @@ defmodule Grephql.Test.Response.WithDateTime do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    plugin TypedStructor.Plugins.Access
-
     field :name, :string, typed: [null: false]
     field :created_at, Grephql.Types.DateTime, typed: [null: true]
   end

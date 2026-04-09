@@ -309,7 +309,6 @@ defmodule Grephql.InputTypeGenerator do
         @type params() :: unquote(params_type_ast)
 
         typed_embedded_schema do
-          plugin TypedStructor.Plugins.Access
           (unquote_splicing(field_asts))
         end
 
