@@ -901,20 +901,17 @@ defmodule Grephql.IntegrationTest do
       [user, post] = result.data.search
 
       # User with all nullable fields nil/empty
-      assert user.__typename == "User"
-      assert user.email == nil
-      assert user.role == :guest
-      assert user.profile == nil
-      assert user.posts == []
+      assert %{__typename: "User", email: nil, role: :guest, profile: nil, posts: []} = user
 
       # Post with nil body, nil publishedAt, empty tags, author with nil profile
-      assert post.__typename == "Post"
-      assert post.body == nil
-      assert post.status == :archived
-      assert post.published_at == nil
-      assert post.tags == []
-      assert post.author.id == "99"
-      assert post.author.profile == nil
+      assert %{
+               __typename: "Post",
+               body: nil,
+               status: :archived,
+               published_at: nil,
+               tags: [],
+               author: %{id: "99", profile: nil}
+             } = post
     end
 
     test "null data with multiple errors returns nil data and all errors" do
@@ -1031,13 +1028,16 @@ defmodule Grephql.IntegrationTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         request = Jason.decode!(body)
 
-        input = request["variables"]["input"]
-        assert input["title"] == "Edge Post"
-        assert input["status"] == "PUBLISHED"
-        assert input["tags"] == ["a", "b", "c"]
-        assert input["metadata"]["slug"] == "edge-post"
-        assert input["metadata"]["seoTitle"] == "Edge"
-        assert input["metadata"]["publishAt"] == "2025-12-31T23:59:59Z"
+        assert %{
+                 "title" => "Edge Post",
+                 "status" => "PUBLISHED",
+                 "tags" => ["a", "b", "c"],
+                 "metadata" => %{
+                   "slug" => "edge-post",
+                   "seoTitle" => "Edge",
+                   "publishAt" => "2025-12-31T23:59:59Z"
+                 }
+               } = request["variables"]["input"]
 
         conn
         |> Plug.Conn.put_resp_content_type("application/json")

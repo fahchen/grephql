@@ -335,13 +335,21 @@ defmodule Grephql.InputTypeGenerator do
   end
 
   defp changeset_body_ast(cast_fields, embed_names, required_names) do
+    embed_set = MapSet.new(embed_names)
+    required_embeds = MapSet.intersection(MapSet.new(required_names), embed_set)
+    scalar_required = Enum.reject(required_names, &MapSet.member?(embed_set, &1))
+
     ast = quote do: cast(struct, params, unquote(cast_fields))
 
     ast =
       Enum.reduce(embed_names, ast, fn name, acc ->
-        quote do: cast_embed(unquote(acc), unquote(name))
+        if MapSet.member?(required_embeds, name) do
+          quote do: cast_embed(unquote(acc), unquote(name), required: true)
+        else
+          quote do: cast_embed(unquote(acc), unquote(name))
+        end
       end)
 
-    quote do: validate_required(unquote(ast), unquote(required_names))
+    quote do: validate_required(unquote(ast), unquote(scalar_required))
   end
 end
