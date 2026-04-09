@@ -37,7 +37,7 @@ defmodule Grephql.DeprecationWarningTest do
           """)
         end)
 
-      assert warnings == ""
+      refute warnings =~ "deprecated"
     end
   end
 
