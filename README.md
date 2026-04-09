@@ -22,7 +22,7 @@ Add `grephql` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:grephql, "~> 0.6.0"}
+    {:grephql, "~> 0.7.0"}
   ]
 end
 ```
