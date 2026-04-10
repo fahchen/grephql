@@ -66,7 +66,7 @@ defmodule Grephql.MixProject do
         "GitHub" => @source_url,
         "Hex" => "https://hex.pm/packages/grephql"
       },
-      files: ~w(lib src/*.yrl .formatter.exs mix.exs README.md LICENSE NOTICE)
+      files: ~w(lib priv/graphql/introspection.graphql src/*.yrl .formatter.exs mix.exs README.md LICENSE NOTICE)
     ]
   end
 
