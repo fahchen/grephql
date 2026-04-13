@@ -155,12 +155,9 @@ defmodule Grephql.TypeGenerator do
     end)
   end
 
-  defp collect_object_schema(
-         fields,
-         parent_type_name,
-         parent_module,
-         {schema, scalar_types, _fragments} = context
-       ) do
+  defp collect_object_schema(fields, parent_type_name, parent_module, context, opts \\ []) do
+    {schema, scalar_types, _fragments} = context
+
     {field_defs, nested_modules, nested_asts} =
       Enum.reduce(fields, {[], [], []}, fn %QueryField{} = field,
                                            {defs_acc, mods_acc, asts_acc} ->
@@ -172,7 +169,11 @@ defmodule Grephql.TypeGenerator do
           field_name |> Macro.underscore() |> String.to_atom()
 
         {:ok, schema_field} = Schema.get_field(schema, parent_type_name, field.name)
-        resolved = TypeMapper.resolve(schema_field.type, schema, scalar_types)
+
+        resolved =
+          schema_field.type
+          |> TypeMapper.resolve(schema, scalar_types)
+          |> override_typename_type(field.name, opts)
 
         {field_def, new_modules, new_asts} =
           build_field_def(field, atom_name, field_name, resolved, parent_module, context)
@@ -191,6 +192,7 @@ defmodule Grephql.TypeGenerator do
 
   defp collect_union_schemas(shared_fields, inline_fragments, parent_module, context) do
     shared_fields = ensure_typename(shared_fields)
+    typename_values = Enum.map(inline_fragments, & &1.type_condition.name)
 
     {typename_to_module, all_modules, all_asts} =
       Enum.reduce(inline_fragments, {%{}, [], []}, fn fragment, {type_map, mods_acc, asts_acc} ->
@@ -202,7 +204,9 @@ defmodule Grephql.TypeGenerator do
         fragment_module = Module.concat(parent_module, GeneratorHelpers.camelize(type_name))
 
         {fragment_modules, fragment_asts} =
-          collect_object_schema(merged_selections, type_name, fragment_module, context)
+          collect_object_schema(merged_selections, type_name, fragment_module, context,
+            typename_values: typename_values
+          )
 
         {Map.put(type_map, type_name, fragment_module), [fragment_modules | mods_acc],
          [fragment_asts | asts_acc]}
@@ -229,6 +233,16 @@ defmodule Grephql.TypeGenerator do
       [%QueryField{name: "__typename"} | shared_fields]
     end
   end
+
+  defp override_typename_type(resolved, "__typename", opts) do
+    values = Keyword.fetch!(opts, :typename_values)
+
+    resolved
+    |> Map.put(:ecto_type, Grephql.Types.Typename)
+    |> Map.put(:typename_values, values)
+  end
+
+  defp override_typename_type(resolved, _field_name, _opts), do: resolved
 
   defp build_field_def(field, atom_name, field_name, resolved, parent_module, context) do
     case resolved.ecto_type do
@@ -260,7 +274,8 @@ defmodule Grephql.TypeGenerator do
         typed_opts = GeneratorHelpers.scalar_typed_opts(resolved)
         source_opt = GeneratorHelpers.source_opt(atom_name, field_name)
         enum_opts = GeneratorHelpers.enum_opts(resolved)
-        opts = [{:typed, typed_opts} | source_opt] ++ enum_opts
+        typename_opts = GeneratorHelpers.typename_opts(resolved)
+        opts = [{:typed, typed_opts} | source_opt] ++ enum_opts ++ typename_opts
         {{:field, atom_name, ecto_type, opts}, [], []}
     end
   end

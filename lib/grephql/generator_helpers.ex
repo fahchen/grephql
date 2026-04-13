@@ -41,6 +41,14 @@ defmodule Grephql.GeneratorHelpers do
   def enum_opts(_resolved), do: []
 
   @doc """
+  Builds extra field opts for typename types (`:values` for `Grephql.Types.Typename`).
+  Returns `[]` for non-typename types.
+  """
+  @spec typename_opts(map()) :: keyword()
+  def typename_opts(%{typename_values: values}) when is_list(values), do: [values: values]
+  def typename_opts(_resolved), do: []
+
+  @doc """
   Builds `typed:` options for a scalar field, including enum type override.
   """
   @spec scalar_typed_opts(Grephql.TypeMapper.resolve_result()) :: keyword()
