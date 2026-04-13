@@ -1,51 +1,63 @@
 defmodule Grephql.Types.Typename do
   @moduledoc """
-  Ecto Type for GraphQL `__typename` fields.
+  Parameterized Ecto Type for GraphQL `__typename` fields.
 
   Converts GraphQL type name strings (e.g., `"User"`, `"SearchResult"`)
   to snake_cased Elixir atoms (e.g., `:user`, `:search_result`).
 
-  This type is automatically applied to `__typename` fields in generated
-  union/interface schemas.
+  The string-to-atom mapping is pre-computed at compile time in `init/1`.
+  At runtime, `cast/2` and `load/3` perform only a `Map.fetch/2` lookup.
+
+  ## Usage in schema
+
+      field :__typename, Grephql.Types.Typename, values: ["User", "Post"]
+
+  Ecto calls `init/1` automatically with the field options.
   """
 
-  use Ecto.Type
+  use Ecto.ParameterizedType
 
   @type t() :: atom()
 
-  @impl Ecto.Type
-  def type, do: :string
-
-  @impl Ecto.Type
-  def cast(nil), do: {:ok, nil}
-
-  def cast(value) when is_binary(value) do
-    {:ok, to_atom(value)}
+  @impl Ecto.ParameterizedType
+  def init(opts) do
+    opts
+    |> Keyword.fetch!(:values)
+    |> Map.new(fn val ->
+      # Type names from GraphQL schema, bounded set
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      {val, val |> Macro.underscore() |> String.to_atom()}
+    end)
   end
 
-  def cast(value) when is_atom(value), do: {:ok, value}
+  @impl Ecto.ParameterizedType
+  def type(_params), do: :string
 
-  def cast(_other), do: :error
+  @impl Ecto.ParameterizedType
+  def cast(nil, _params), do: {:ok, nil}
 
-  @impl Ecto.Type
-  def load(nil), do: {:ok, nil}
+  def cast(value, params) when is_binary(value), do: Map.fetch(params, value)
 
-  def load(value) when is_binary(value) do
-    {:ok, to_atom(value)}
-  end
+  def cast(value, _params) when is_atom(value), do: {:ok, value}
 
-  def load(_other), do: :error
+  def cast(_other, _params), do: :error
 
-  @impl Ecto.Type
-  def dump(nil), do: {:ok, nil}
+  @impl Ecto.ParameterizedType
+  def load(nil, _loader, _params), do: {:ok, nil}
 
-  def dump(value) when is_atom(value), do: {:ok, Atom.to_string(value)}
+  def load(value, _loader, params) when is_binary(value), do: Map.fetch(params, value)
 
-  def dump(value) when is_binary(value), do: {:ok, value}
+  def load(_other, _loader, _params), do: :error
 
-  def dump(_other), do: :error
+  @impl Ecto.ParameterizedType
+  def dump(nil, _dumper, _params), do: {:ok, nil}
 
-  # Type names from GraphQL schema, bounded set
-  # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-  defp to_atom(value), do: value |> Macro.underscore() |> String.to_atom()
+  def dump(value, _dumper, _params) when is_atom(value), do: {:ok, Atom.to_string(value)}
+
+  def dump(value, _dumper, _params) when is_binary(value), do: {:ok, value}
+
+  def dump(_other, _dumper, _params), do: :error
+
+  @impl Ecto.ParameterizedType
+  def embed_as(_format, _params), do: :dump
 end
