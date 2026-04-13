@@ -172,7 +172,11 @@ defmodule Grephql.TypeGenerator do
           field_name |> Macro.underscore() |> String.to_atom()
 
         {:ok, schema_field} = Schema.get_field(schema, parent_type_name, field.name)
-        resolved = TypeMapper.resolve(schema_field.type, schema, scalar_types)
+
+        resolved =
+          schema_field.type
+          |> TypeMapper.resolve(schema, scalar_types)
+          |> override_typename_type(field.name)
 
         {field_def, new_modules, new_asts} =
           build_field_def(field, atom_name, field_name, resolved, parent_module, context)
@@ -229,6 +233,11 @@ defmodule Grephql.TypeGenerator do
       [%QueryField{name: "__typename"} | shared_fields]
     end
   end
+
+  defp override_typename_type(resolved, "__typename"),
+    do: %{resolved | ecto_type: Grephql.Types.Typename}
+
+  defp override_typename_type(resolved, _field_name), do: resolved
 
   defp build_field_def(field, atom_name, field_name, resolved, parent_module, context) do
     case resolved.ecto_type do

@@ -19,14 +19,14 @@ defmodule Grephql.Types.UnionTest do
     test "loads User map by __typename" do
       map = %{"__typename" => "User", "name" => "Alice", "email" => "a@b.com"}
 
-      assert {:ok, %User{}} =
+      assert {:ok, %User{__typename: :user}} =
                SearchUnion.load(map, nil, %{})
     end
 
     test "loads Post map by __typename" do
       map = %{"__typename" => "Post", "title" => "Hello"}
 
-      assert {:ok, %Post{title: "Hello"}} =
+      assert {:ok, %Post{__typename: :post, title: "Hello"}} =
                SearchUnion.load(map, nil, %{})
     end
 
@@ -49,7 +49,7 @@ defmodule Grephql.Types.UnionTest do
     test "casts map by __typename" do
       map = %{"__typename" => "User", "name" => "Bob"}
 
-      assert {:ok, %User{name: "Bob"}} =
+      assert {:ok, %User{__typename: :user, name: "Bob"}} =
                SearchUnion.cast(map, %{})
     end
 

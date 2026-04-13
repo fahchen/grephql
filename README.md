@@ -265,9 +265,12 @@ defgql :search, ~GQL"""
 {:ok, result} = MyApp.GitHub.search(%{q: "elixir"})
 
 Enum.each(result.data.search, fn
-  %{__typename: "User"} = user -> IO.puts(user.name)
-  %{__typename: "Repository"} = repo -> IO.puts(repo.full_name)
+  %MyApp.GitHub.Search.Result.Search.User{} = user -> IO.puts(user.name)
+  %MyApp.GitHub.Search.Result.Search.Repository{} = repo -> IO.puts(repo.full_name)
 end)
+
+# __typename is also available as a snake_cased atom
+hd(result.data.search).__typename  #=> :user
 ```
 
 ## Field Aliases

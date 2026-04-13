@@ -347,8 +347,12 @@ defmodule Grephql.IntegrationTest do
                Client.search(%{query: "hello"}, req_options: req_options())
 
       assert [
-               %{__typename: "User", name: "Alice", role: :admin},
-               %{__typename: "Post", title: "Hello", status: :published}
+               %Client.Search.Result.Search.User{__typename: :user, name: "Alice", role: :admin},
+               %Client.Search.Result.Search.Post{
+                 __typename: :post,
+                 title: "Hello",
+                 status: :published
+               }
              ] = result.data.search
     end
   end
@@ -368,8 +372,8 @@ defmodule Grephql.IntegrationTest do
                Client.get_nodes(%{ids: ["1", "10"]}, req_options: req_options())
 
       assert [
-               %{__typename: "User", id: "1", name: "Alice"},
-               %{__typename: "Post", id: "10", title: "Hello"}
+               %Client.GetNodes.Result.Nodes.User{__typename: :user, id: "1", name: "Alice"},
+               %Client.GetNodes.Result.Nodes.Post{__typename: :post, id: "10", title: "Hello"}
              ] = result.data.nodes
     end
   end
@@ -634,8 +638,8 @@ defmodule Grephql.IntegrationTest do
       [alice, post, carol] = result.data.search
 
       # User variant with nested profile + posts
-      assert %{
-               __typename: "User",
+      assert %Client.SearchWithFragments.Result.Search.User{
+               __typename: :user,
                id: "1",
                name: "Alice",
                email: "alice@example.com",
@@ -654,8 +658,8 @@ defmodule Grephql.IntegrationTest do
              } = alice
 
       # Post variant with nested author (User via fragment)
-      assert %{
-               __typename: "Post",
+      assert %Client.SearchWithFragments.Result.Search.Post{
+               __typename: :post,
                id: "20",
                title: "GraphQL Best Practices",
                body: "Use fragments for reuse.",
@@ -672,7 +676,12 @@ defmodule Grephql.IntegrationTest do
              } = post
 
       # User variant with nil profile and empty posts
-      assert %{__typename: "User", role: :guest, profile: nil, posts: []} = carol
+      assert %Client.SearchWithFragments.Result.Search.User{
+               __typename: :user,
+               role: :guest,
+               profile: nil,
+               posts: []
+             } = carol
     end
   end
 
@@ -895,11 +904,17 @@ defmodule Grephql.IntegrationTest do
       [user, post] = result.data.search
 
       # User with all nullable fields nil/empty
-      assert %{__typename: "User", email: nil, role: :guest, profile: nil, posts: []} = user
+      assert %Client.SearchWithFragments.Result.Search.User{
+               __typename: :user,
+               email: nil,
+               role: :guest,
+               profile: nil,
+               posts: []
+             } = user
 
       # Post with nil body, nil publishedAt, empty tags, author with nil profile
-      assert %{
-               __typename: "Post",
+      assert %Client.SearchWithFragments.Result.Search.Post{
+               __typename: :post,
                body: nil,
                status: :archived,
                published_at: nil,

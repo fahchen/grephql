@@ -3,7 +3,7 @@ defmodule Grephql.Test.UnionTypes.User do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    field :__typename, :string, typed: [null: false]
+    field :__typename, Grephql.Types.Typename, typed: [null: false]
     field :name, :string, typed: [null: true]
     field :email, :string, typed: [null: true]
   end
@@ -14,7 +14,7 @@ defmodule Grephql.Test.UnionTypes.Post do
   use Grephql.EmbeddedSchema
 
   typed_embedded_schema do
-    field :__typename, :string, typed: [null: false]
+    field :__typename, Grephql.Types.Typename, typed: [null: false]
     field :title, :string, typed: [null: true]
   end
 end
