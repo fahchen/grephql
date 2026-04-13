@@ -7,13 +7,15 @@ Compile-time GraphQL client for Elixir. Parses and validates queries during comp
 
 ## Features
 
-- **Compile-time validation** — GraphQL syntax errors and schema mismatches caught at `mix compile`, with line:column positions pointing into your Elixir source
-- **Deprecation warnings** — Fields, arguments, enum values, and input fields marked `@deprecated` emit compile-time warnings
-- **Typed responses** — Auto-generated Ecto embedded schemas for query results
-- **Typed variables** — Input validation via Ecto changesets with generated `params()` type
+- **Compile-time validation** — Syntax errors, schema mismatches, and deprecated usage caught at `mix compile`, with errors pointing to file:line:column in your Elixir source
+- **Minimal code generation** — Only generates modules for types actually referenced in your queries, not the entire schema
 - **Zero runtime parsing** — All GraphQL parsing happens at compile time
-- **Req integration** — Full access to Req's middleware/plugin system, including `Req.Test` for testing
-- **Auto-generated docs** — `defgql` functions include `@doc` with variables, types, and generated modules
+- **Typed responses** — JSON responses are cast into typed Ecto embedded schemas, accessible via dot notation, `[:field]`, and `get_in`
+- **Typed variables** — Input validation via Ecto changesets with generated `params()` type
+- **Union / Interface support** — Automatic type dispatch, no extra fields needed
+- **Req integration** — Full access to Req's middleware/plugin system, test with `Req.Test` directly
+- **Configurable JSON library** — Defaults to Elixir 1.18+ built-in `JSON`, falls back to `Jason`, or set your own via `:json_library`
+- **Auto-generated docs** — `defgql` functions include `@doc` with variables, types, and generated module listing
 
 ## Installation
 
@@ -229,6 +231,17 @@ use Grephql,
 
 `Grephql.Types.DateTime` is included for ISO 8601 DateTime strings. For other custom scalars, provide any module implementing the `Ecto.Type` behaviour.
 
+## Enums
+
+GraphQL enums are automatically converted to snake_cased atoms:
+
+```elixir
+# GraphQL: enum Role { ADMIN, READ_ONLY }
+# Elixir:  :admin, :read_only
+```
+
+Loading is case-insensitive — `"ADMIN"`, `"admin"`, and `"Admin"` all resolve to `:admin`.
+
 ## Unions and Interfaces
 
 Union and interface types are resolved at decode time using the `__typename` field:
@@ -255,6 +268,23 @@ Enum.each(result.data.search, fn
   %{__typename: :user} = user -> IO.puts(user.name)
   %{__typename: :repository} = repo -> IO.puts(repo.full_name)
 end)
+```
+
+## Field Aliases
+
+GraphQL aliases affect both the struct field name and the module path:
+
+```elixir
+defgql :get_account, ~GQL"""
+  query {
+    account: user(login: "alice") {
+      displayName: name
+    }
+  }
+"""
+
+{:ok, result} = MyApp.GitHub.get_account()
+result.data.account.display_name  # alias becomes the field name
 ```
 
 ## Generated Modules
@@ -379,6 +409,16 @@ mix grephql.download_schema --endpoint URL --output PATH [--header "Key: Value"]
 | `:endpoint` | no | Default GraphQL endpoint URL |
 | `:req_options` | no | Default [Req options](https://hexdocs.pm/req/Req.html#new/1) (keyword list) |
 | `:scalars` | no | Map of GraphQL scalar name to Ecto type (default: `%{}`) |
+
+## JSON Library
+
+Defaults to Elixir 1.18+ built-in `JSON`, falls back to `Jason`. To override:
+
+```elixir
+config :grephql, :json_library, Jason
+```
+
+Any module implementing `encode!/1` and `decode!/1` works.
 
 ## Requirements
 
