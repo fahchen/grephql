@@ -265,8 +265,8 @@ defgql :search, ~GQL"""
 {:ok, result} = MyApp.GitHub.search(%{q: "elixir"})
 
 Enum.each(result.data.search, fn
-  %{__typename: :user} = user -> IO.puts(user.name)
-  %{__typename: :repository} = repo -> IO.puts(repo.full_name)
+  %{__typename: "User"} = user -> IO.puts(user.name)
+  %{__typename: "Repository"} = repo -> IO.puts(repo.full_name)
 end)
 ```
 
@@ -418,7 +418,7 @@ Defaults to Elixir 1.18+ built-in `JSON`, falls back to `Jason`. To override:
 config :grephql, :json_library, Jason
 ```
 
-Any module implementing `encode!/1` and `decode!/1` works.
+Any module implementing `encode!/1` and `decode/1` works.
 
 ## Requirements
 
