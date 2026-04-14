@@ -102,6 +102,15 @@ defmodule Grephql.IntegrationTest do
     }
     """)
 
+    defgql(:create_user_minimal, """
+    mutation CreateUserMinimal($input: CreateUserInput!) {
+      createUser(input: $input) {
+        id
+        name
+      }
+    }
+    """)
+
     defgql(:update_user, """
     mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {
       updateUser(id: $id, input: $input) {
@@ -492,6 +501,26 @@ defmodule Grephql.IntegrationTest do
     test "mutation with invalid variables returns changeset error" do
       assert {:error, %Ecto.Changeset{}} =
                Client.create_user(%{input: %{}}, req_options: req_options())
+    end
+
+    test "multiple mutations sharing same input type" do
+      expect_json(%{
+        "data" => %{"createUser" => %{"id" => "50", "name" => "Shared"}}
+      })
+
+      assert {:ok, %Result{} = result} =
+               Client.create_user_minimal(
+                 %{input: %{name: "Shared", email: "s@e.com"}},
+                 req_options: req_options()
+               )
+
+      assert %{id: "50", name: "Shared"} = result.data.create_user
+
+      # Both mutations embed the exact same Inputs module (not two copies)
+      %{related: module_a} = Client.CreateUser.Variables.__schema__(:embed, :input)
+      %{related: module_b} = Client.CreateUserMinimal.Variables.__schema__(:embed, :input)
+      assert module_a == module_b
+      assert module_a == Client.Inputs.CreateUserInput
     end
   end
 
