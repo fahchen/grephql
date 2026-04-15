@@ -24,6 +24,7 @@ defmodule Grephql.InputTypeGeneratorTest do
               Grephql.Test.Input.DeepDump.Inputs.OrderItemInput,
               Grephql.Test.Input.DeepDump.Inputs.PriceInput,
               Grephql.Test.Input.Dedup.Inputs.SharedInput,
+              Grephql.Test.Var.IdField.GetUser.Variables,
               Grephql.Test.Var.Scalar.GetUser.Variables,
               Grephql.Test.Var.Required.GetUser.Variables,
               Grephql.Test.Var.Camel.GetUser.Variables,
@@ -336,6 +337,28 @@ defmodule Grephql.InputTypeGeneratorTest do
   end
 
   describe "generate_variables/3" do
+    test "$id variable does not conflict with Ecto primary key" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!("query GetUser($id: ID!) { user(id: $id) { name } }")
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: Grephql.Test.Var.IdField,
+          function_name: :get_user,
+          scalar_types: %{}
+        )
+
+      # No auto-generated primary key
+      assert variables_module.__schema__(:primary_key) == []
+
+      # :id is a regular castable field
+      assert {:ok, vars} = variables_module.build(%{id: "42"})
+      assert vars.id == "42"
+
+      # Serializes correctly
+      assert %{id: "42"} = Ecto.embedded_dump(vars, :json)
+    end
+
     test "generates Variables struct with scalar fields" do
       schema = SchemaHelper.build_schema()
       operation = parse!("query GetUser($id: ID!) { user(id: $id) { name } }")
