@@ -129,14 +129,6 @@ defmodule Grephql do
   def execute(query, variables \\ %{}, opts \\ [])
 
   def execute(%Query{} = query, variables, opts) do
-    config = resolve_config(query.client_module, opts)
-
-    endpoint =
-      config[:endpoint] ||
-        raise ArgumentError, "Grephql: :endpoint is required but was not configured"
-
-    req_options = Keyword.get(config, :req_options, [])
-
     variables_json = dump_variables(variables)
 
     body = %{query: query.document, variables: variables_json}
@@ -144,9 +136,8 @@ defmodule Grephql do
     body =
       if query.operation_name, do: Map.put(body, :operationName, query.operation_name), else: body
 
-    case [url: endpoint, json: body]
-         |> Req.new()
-         |> Req.merge(req_options)
+    case query.client_module
+         |> build_request(opts, json: body)
          |> Req.post() do
       {:ok, %{status: status} = response} when status >= 200 and status <= 299 ->
         decode_response(response.body, query.result_module)
@@ -193,20 +184,30 @@ defmodule Grephql do
     end
   end
 
-  @doc false
-  @spec resolve_config(module(), keyword()) :: keyword()
-  def resolve_config(client_module, execute_opts) do
+  @spec build_request(module(), keyword(), keyword()) :: Req.Request.t()
+  defp build_request(client_module, execute_opts, base_opts) do
     {otp_app, use_config} = client_module.__grephql_config__()
     runtime_config = Application.get_env(otp_app, client_module, [])
 
-    defaults()
-    |> Keyword.merge(use_config)
-    |> Keyword.merge(runtime_config)
-    |> Keyword.merge(execute_opts)
-  end
+    {use_req_opts, use_rest} = Keyword.pop(use_config, :req_options, [])
+    {runtime_req_opts, runtime_rest} = Keyword.pop(runtime_config, :req_options, [])
+    {exec_req_opts, exec_rest} = Keyword.pop(execute_opts, :req_options, [])
 
-  defp defaults do
-    [endpoint: nil, req_options: []]
+    config =
+      [endpoint: nil]
+      |> Keyword.merge(use_rest)
+      |> Keyword.merge(runtime_rest)
+      |> Keyword.merge(exec_rest)
+
+    endpoint =
+      config[:endpoint] ||
+        raise ArgumentError, "Grephql: :endpoint is required but was not configured"
+
+    Enum.reduce(
+      [use_req_opts, runtime_req_opts, exec_req_opts],
+      Req.new([url: endpoint] ++ base_opts),
+      &Req.merge(&2, &1)
+    )
   end
 
   defp resolve_source(source, caller_file) do
