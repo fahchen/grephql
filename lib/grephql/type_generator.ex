@@ -168,7 +168,7 @@ defmodule Grephql.TypeGenerator do
         atom_name =
           field_name |> Macro.underscore() |> String.to_atom()
 
-        {:ok, schema_field} = Schema.get_field(schema, parent_type_name, field.name)
+        schema_field = get_field!(schema, parent_type_name, field.name)
 
         resolved =
           schema_field.type
@@ -188,6 +188,29 @@ defmodule Grephql.TypeGenerator do
     all_asts = [parent_ast | List.flatten(:lists.reverse(nested_asts))]
 
     {module_names, all_asts}
+  end
+
+  # __typename is a meta-field available on all object types per the GraphQL spec,
+  # but introspection JSON often omits it from the type's fields. Provide a
+  # synthetic NonNull String! field when Schema.get_field returns :error.
+  @typename_field %Grephql.Schema.Field{
+    name: "__typename",
+    type: %Grephql.Schema.TypeRef{
+      kind: :non_null,
+      of_type: %Grephql.Schema.TypeRef{kind: :scalar, name: "String"}
+    }
+  }
+
+  defp get_field!(schema, type_name, "__typename") do
+    case Schema.get_field(schema, type_name, "__typename") do
+      {:ok, field} -> field
+      :error -> @typename_field
+    end
+  end
+
+  defp get_field!(schema, type_name, field_name) do
+    {:ok, field} = Schema.get_field(schema, type_name, field_name)
+    field
   end
 
   defp collect_union_schemas(shared_fields, inline_fragments, parent_module, context) do

@@ -10,6 +10,8 @@ defmodule Grephql.TypeGeneratorTest do
               Grephql.Test.AliasMulti.GetUsers.Result.Author,
               Grephql.Test.AliasMulti.GetUsers.Result.SimpleUser,
               Grephql.Test.AutoTypename.GetNode.Result.Node.User,
+              Grephql.Test.InterfaceNoTypename.GetNode.Result.Node.AppSubscription,
+              Grephql.Test.InterfaceNoTypename.GetNode.Result.Node.Shop,
               Grephql.Test.Isolation.GetUser.Result.User,
               Grephql.Test.Isolation.ListUsers.Result.User,
               Grephql.Test.ListEmbed.GetUser.Result.User,
@@ -349,6 +351,51 @@ defmodule Grephql.TypeGeneratorTest do
       assert typename_count == 1
     end
 
+    test "handles __typename when not in introspection fields" do
+      schema = schema_with_interface_no_typename()
+
+      operation =
+        parse!(
+          "query($id: ID!) { node(id: $id) { ... on AppSubscription { status } ... on Shop { name } } }"
+        )
+
+      modules =
+        TypeGenerator.generate(operation, schema,
+          client_module: Grephql.Test.InterfaceNoTypename,
+          function_name: :get_node
+        )
+
+      assert Grephql.Test.InterfaceNoTypename.GetNode.Result.Node.AppSubscription in modules
+      assert Grephql.Test.InterfaceNoTypename.GetNode.Result.Node.Shop in modules
+
+      # __typename is auto-injected and resolved even without it in the schema fields
+      sub_fields =
+        Grephql.Test.InterfaceNoTypename.GetNode.Result.Node.AppSubscription.__schema__(:fields)
+
+      assert :__typename in sub_fields
+      assert :status in sub_fields
+
+      shop_fields =
+        Grephql.Test.InterfaceNoTypename.GetNode.Result.Node.Shop.__schema__(:fields)
+
+      assert :__typename in shop_fields
+      assert :name in shop_fields
+
+      # End-to-end decode works
+      json = %{"node" => %{"__typename" => "AppSubscription", "status" => "ACTIVE"}}
+
+      result =
+        Grephql.ResponseDecoder.decode!(
+          Grephql.Test.InterfaceNoTypename.GetNode.Result,
+          json
+        )
+
+      assert %{__struct__: Grephql.Test.InterfaceNoTypename.GetNode.Result.Node.AppSubscription} =
+               result.node
+
+      assert result.node.status == "ACTIVE"
+    end
+
     test "single union field (not list) uses field with union type" do
       schema = schema_with_single_union()
 
@@ -593,6 +640,76 @@ defmodule Grephql.TypeGeneratorTest do
             },
             "title" => %SchemaField{
               name: "title",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            }
+          }
+        }
+      })
+
+    SchemaHelper.build_schema(types: types)
+  end
+
+  # Interface type where concrete types do NOT have __typename in their fields,
+  # matching real introspection JSON behaviour.
+  defp schema_with_interface_no_typename do
+    types =
+      Map.merge(SchemaHelper.default_types(), %{
+        "Query" => %Type{
+          kind: :object,
+          name: "Query",
+          fields: %{
+            "node" => %SchemaField{
+              name: "node",
+              type: %TypeRef{kind: :interface, name: "Node"},
+              args: %{
+                "id" => %Grephql.Schema.InputValue{
+                  name: "id",
+                  type: %TypeRef{
+                    kind: :non_null,
+                    of_type: %TypeRef{kind: :scalar, name: "ID"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Node" => %Type{
+          kind: :interface,
+          name: "Node",
+          fields: %{
+            "id" => %SchemaField{
+              name: "id",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+            }
+          },
+          possible_types: ["AppSubscription", "Shop"]
+        },
+        "AppSubscription" => %Type{
+          kind: :object,
+          name: "AppSubscription",
+          interfaces: ["Node"],
+          fields: %{
+            "id" => %SchemaField{
+              name: "id",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+            },
+            "status" => %SchemaField{
+              name: "status",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            }
+          }
+        },
+        "Shop" => %Type{
+          kind: :object,
+          name: "Shop",
+          interfaces: ["Node"],
+          fields: %{
+            "id" => %SchemaField{
+              name: "id",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+            },
+            "name" => %SchemaField{
+              name: "name",
               type: %TypeRef{kind: :scalar, name: "String"}
             }
           }
