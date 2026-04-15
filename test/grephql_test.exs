@@ -165,5 +165,34 @@ defmodule GrephqlTest do
                  req_options: [plug: {Req.Test, ExecuteClient}]
                )
     end
+
+    test "per-call req_options merge with compile-time config, not replace" do
+      defmodule MergeClient do
+        use Grephql,
+          otp_app: :grephql,
+          source: "support/schemas/minimal.json",
+          endpoint: "https://api.example.com/graphql",
+          req_options: [plug: {Req.Test, __MODULE__}]
+
+        defgql(:get_user, "query { user(id: \"1\") { name } }")
+      end
+
+      Req.Test.stub(MergeClient, fn conn ->
+        assert Plug.Conn.get_req_header(conn, "x-custom") == ["hello"]
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{"data" => %{"user" => %{"name" => "Merged"}}})
+        )
+      end)
+
+      # Per-call header should NOT clobber compile-time plug
+      assert {:ok, %Result{} = result} =
+               MergeClient.get_user(req_options: [headers: [{"x-custom", "hello"}]])
+
+      assert result.data.user.name == "Merged"
+    end
   end
 end
