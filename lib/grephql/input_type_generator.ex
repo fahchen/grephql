@@ -313,7 +313,7 @@ defmodule Grephql.InputTypeGenerator do
         end
 
         @doc false
-        @spec changeset(t(), map()) :: Ecto.Changeset.t()
+        @spec changeset(%__MODULE__{}, map()) :: Ecto.Changeset.t()
         def changeset(struct \\ %__MODULE__{}, params) do
           unquote(changeset_body)
         end
