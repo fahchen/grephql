@@ -1,7 +1,7 @@
 defmodule Grephql.MixProject do
   use Mix.Project
 
-  @version "0.10.0"
+  @version "0.10.1"
   @source_url "https://github.com/fahchen/grephql"
 
   def project do
@@ -45,7 +45,7 @@ defmodule Grephql.MixProject do
       {:req, "~> 0.5"},
       {:jason, "~> 1.4", optional: true},
       {:ecto, "~> 3.12"},
-      {:ecto_typed_schema, "~> 0.1.0"},
+      {:ecto_typed_schema, "~> 0.1"},
       {:typed_structor, "~> 0.6"},
       {:plug, "~> 1.0", only: :test},
       {:mimic, "~> 2.3", only: :test},
