@@ -166,6 +166,103 @@ defmodule GrephqlTest do
                )
     end
 
+    test "prepare_req callback populates assigns from response" do
+      defmodule PrepareReqClient do
+        use Grephql,
+          otp_app: :grephql,
+          source: "support/schemas/minimal.json",
+          endpoint: "https://api.example.com/graphql"
+
+        def prepare_req(req) do
+          Req.Request.append_response_steps(req,
+            capture_extensions: fn {req, resp} ->
+              {req, Grephql.Result.put_resp_assign(resp, :extensions, resp.body["extensions"])}
+            end
+          )
+        end
+
+        defgql(:get_user, "query { user(id: \"1\") { name } }")
+      end
+
+      Req.Test.stub(PrepareReqClient, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{"user" => %{"name" => "Alice"}},
+            "extensions" => %{
+              "cost" => %{
+                "requestedQueryCost" => 12,
+                "throttleStatus" => %{"currentlyAvailable" => 980}
+              }
+            }
+          })
+        )
+      end)
+
+      assert {:ok, %Result{} = result} =
+               PrepareReqClient.get_user(req_options: [plug: {Req.Test, PrepareReqClient}])
+
+      assert result.data.user.name == "Alice"
+      assert result.assigns.extensions["cost"]["requestedQueryCost"] == 12
+      assert result.assigns.extensions["cost"]["throttleStatus"]["currentlyAvailable"] == 980
+    end
+
+    test "assigns default to empty map when prepare_req is not overridden" do
+      Req.Test.stub(ExecuteClient, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{
+            "data" => %{"user" => %{"name" => "Alice", "email" => "alice@example.com"}}
+          })
+        )
+      end)
+
+      assert {:ok, %Result{} = result} =
+               ExecuteClient.get_user(%{id: "1"}, req_options: [plug: {Req.Test, ExecuteClient}])
+
+      assert result.assigns == %{}
+    end
+
+    test "assigns survive when response body is raw binary" do
+      defmodule RawBodyClient do
+        use Grephql,
+          otp_app: :grephql,
+          source: "support/schemas/minimal.json",
+          endpoint: "https://api.example.com/graphql"
+
+        def prepare_req(req) do
+          req
+          |> Req.Request.append_response_steps(
+            capture_request_id: fn {req, resp} ->
+              {req, Grephql.Result.put_resp_assign(resp, :request_id, "test-123")}
+            end
+          )
+          |> Req.merge(decode_body: false)
+        end
+
+        defgql(:get_user, "query { user(id: \"1\") { name } }")
+      end
+
+      Req.Test.stub(RawBodyClient, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{"data" => %{"user" => %{"name" => "Alice"}}})
+        )
+      end)
+
+      assert {:ok, %Result{} = result} =
+               RawBodyClient.get_user(req_options: [plug: {Req.Test, RawBodyClient}])
+
+      assert result.data.user.name == "Alice"
+      assert result.assigns.request_id == "test-123"
+    end
+
     test "per-call req_options merge with compile-time config, not replace" do
       defmodule MergeClient do
         use Grephql,

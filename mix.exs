@@ -67,7 +67,7 @@ defmodule Grephql.MixProject do
         "Hex" => "https://hex.pm/packages/grephql"
       },
       files:
-        ~w(lib priv/graphql/introspection.graphql src/*.yrl .formatter.exs mix.exs README.md LICENSE NOTICE)
+        ~w(lib guides priv/graphql/introspection.graphql src/*.yrl .formatter.exs mix.exs README.md LICENSE NOTICE)
     ]
   end
 
@@ -78,7 +78,12 @@ defmodule Grephql.MixProject do
       source_url: @source_url,
       extras: [
         {"README.md", [title: "Introduction"]},
+        {"guides/extending-requests-with-prepare-req.md",
+         [title: "Customizing Requests with prepare_req"]},
         {"LICENSE", [title: "License"]}
+      ],
+      groups_for_extras: [
+        Guides: ~r/guides\/.*/
       ],
       skip_undefined_reference_warnings_on: [
         "Grephql.TypeMapper",

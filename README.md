@@ -14,6 +14,7 @@ Compile-time GraphQL client for Elixir. Parses and validates queries during comp
 - **Typed variables** — Input validation via Ecto changesets with generated `params()` type
 - **Union / Interface support** — Automatic type dispatch, no extra fields needed
 - **Req integration** — Full access to Req's middleware/plugin system, test with `Req.Test` directly
+- **Response metadata** — Capture arbitrary response metadata (e.g. GraphQL `extensions`) via `prepare_req/1` callback and `Result.assigns`
 - **Configurable JSON library** — Defaults to Elixir 1.18+ built-in `JSON`, falls back to `Jason`, or set your own via `:json_library`
 - **Auto-generated docs** — `defgql` functions include `@doc` with variables, types, and generated module listing
 
@@ -363,6 +364,22 @@ get_in(result.data, [:user, :name])
 ```
 
 This is powered by `TypedStructor.Plugins.Access`, which is registered in every generated `typed_embedded_schema` block.
+
+## Customizing Requests (`prepare_req/1`)
+
+Each client module has an overridable `prepare_req/1` callback that receives the `%Req.Request{}` before it is sent — attach Req steps, add headers, or capture response metadata into `Result.assigns`:
+
+```elixir
+def prepare_req(req) do
+  Req.Request.append_response_steps(req,
+    request_id: fn {req, resp} ->
+      {req, Grephql.Result.put_resp_assign(resp, :request_id, Req.Response.get_header(resp, "x-request-id"))}
+    end
+  )
+end
+```
+
+See the [Customizing Requests with `prepare_req`](guides/extending-requests-with-prepare-req.md) guide for more details.
 
 ## Testing
 

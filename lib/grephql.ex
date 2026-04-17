@@ -96,6 +96,27 @@ defmodule Grephql do
       @doc false
       @spec __grephql_config__() :: {atom(), keyword()}
       def __grephql_config__, do: {@grephql_otp_app, @grephql_use_config}
+
+      @doc """
+      Customizes the `Req.Request` before it is sent.
+
+      Override this callback to attach Req response steps, add headers,
+      or apply any other request-level configuration.
+
+      ## Example
+
+          def prepare_req(req) do
+            Req.Request.append_response_steps(req,
+              my_step: fn {req, resp} ->
+                {req, Grephql.Result.put_resp_assign(resp, :extensions, resp.body["extensions"])}
+              end
+            )
+          end
+      """
+      @spec prepare_req(Req.Request.t()) :: Req.Request.t()
+      def prepare_req(req), do: req
+
+      defoverridable prepare_req: 1
     end
   end
 
@@ -140,7 +161,7 @@ defmodule Grephql do
          |> build_request(opts, json: body)
          |> Req.post() do
       {:ok, %{status: status} = response} when status >= 200 and status <= 299 ->
-        decode_response(response.body, query.result_module)
+        decode_response(response, query.result_module)
 
       {:ok, response} ->
         {:error, response}
@@ -156,7 +177,8 @@ defmodule Grephql do
 
   defp dump_variables(variables) when is_map(variables), do: variables
 
-  defp decode_response(body, result_module) when is_map(body) do
+  defp decode_response(%Req.Response{body: body} = response, result_module)
+       when is_map(body) do
     data =
       case Map.get(body, "data") do
         data when is_map(data) -> ResponseDecoder.decode!(result_module, data)
@@ -168,13 +190,16 @@ defmodule Grephql do
       |> Map.get("errors", [])
       |> Enum.map(&Grephql.Error.from_json/1)
 
-    {:ok, %Result{data: data, errors: errors}}
+    assigns = Result.assigns_from_response(response)
+
+    {:ok, %Result{data: data, errors: errors, assigns: assigns}}
   end
 
-  defp decode_response(body, result_module) when is_binary(body) do
+  defp decode_response(%Req.Response{body: body} = response, result_module)
+       when is_binary(body) do
     case Grephql.JSON.decode(body) do
       {:ok, decoded} ->
-        decode_response(decoded, result_module)
+        decode_response(%{response | body: decoded}, result_module)
 
       {:error, reason} when is_exception(reason) ->
         {:error, reason}
@@ -203,11 +228,9 @@ defmodule Grephql do
       config[:endpoint] ||
         raise ArgumentError, "Grephql: :endpoint is required but was not configured"
 
-    Enum.reduce(
-      [use_req_opts, runtime_req_opts, exec_req_opts],
-      Req.new([url: endpoint] ++ base_opts),
-      &Req.merge(&2, &1)
-    )
+    [use_req_opts, runtime_req_opts, exec_req_opts]
+    |> Enum.reduce(Req.new([url: endpoint] ++ base_opts), &Req.merge(&2, &1))
+    |> client_module.prepare_req()
   end
 
   defp resolve_source(source, caller_file) do
