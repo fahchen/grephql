@@ -19,6 +19,7 @@ defmodule TypedGql.Query do
     field :document, String.t(), enforce: true
     field :operation_name, String.t()
     field :operation_type, String.t(), enforce: true
+    field :function_name, atom()
     field :result_module, module(), enforce: true
     field :result_modules, [module()], default: []
     field :variables_module, module()

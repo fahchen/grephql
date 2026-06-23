@@ -120,6 +120,25 @@ defmodule TypedGql do
               end
             )
           end
+
+      ## Accessing the operation in request steps
+
+      The full `%TypedGql.Query{}` being executed is stashed under
+      `request.private[:typed_gql_query]`. Request steps (including those you
+      attach here) can read it to inspect operation metadata such as
+      `function_name`, `operation_name`, or `client_module`:
+
+          def prepare_req(req) do
+            Req.Request.append_request_steps(req,
+              log_operation: fn req ->
+                %TypedGql.Query{function_name: name} = req.private[:typed_gql_query]
+                Logger.metadata(gql_operation: name)
+                req
+              end
+            )
+          end
+
+      `TypedGql.OperationInfo` is a built-in step that uses this.
       """
       @spec prepare_req(Req.Request.t()) :: Req.Request.t()
       def prepare_req(req), do: req
@@ -165,9 +184,14 @@ defmodule TypedGql do
     body =
       if query.operation_name, do: Map.put(body, :operationName, query.operation_name), else: body
 
-    case query.client_module
-         |> build_request(opts, json: body)
-         |> Req.post() do
+    request =
+      query.client_module
+      |> build_request(opts, json: body)
+      # stash the full query so request steps (e.g. TypedGql.OperationInfo)
+      # can read operation metadata off request.private
+      |> Req.Request.put_private(:typed_gql_query, query)
+
+    case Req.post(request) do
       {:ok, %{status: status} = response} when status >= 200 and status <= 299 ->
         decode_response(response, query.result_module)
 

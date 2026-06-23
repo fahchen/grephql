@@ -95,7 +95,8 @@ defmodule TypedGql.MixProject do
           TypedGql,
           TypedGql.Query,
           TypedGql.Result,
-          TypedGql.Error
+          TypedGql.Error,
+          TypedGql.OperationInfo
         ],
         "Type System": [
           TypedGql.EmbeddedSchema,

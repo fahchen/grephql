@@ -1,7 +1,10 @@
 defmodule TypedGqlTest do
   use ExUnit.Case, async: true
 
+  alias TypedGql.OperationInfo
   alias TypedGql.Result
+
+  setup {Req.Test, :verify_on_exit!}
 
   describe "execute/3" do
     defmodule ExecuteClient do
@@ -291,5 +294,85 @@ defmodule TypedGqlTest do
 
       assert result.data.user.name == "Merged"
     end
+  end
+
+  describe "OperationInfo.attach/1 + get/1" do
+    defmodule OpInfoClient do
+      use TypedGql,
+        otp_app: :typed_gql,
+        source: "support/schemas/minimal.json",
+        endpoint: "https://api.example.com/graphql"
+
+      def prepare_req(req), do: TypedGql.OperationInfo.attach(req)
+
+      defgql(:get_user, "query GetUser($id: ID!) { user(id: $id) { name } }")
+      defgql(:get_default_user, "query { user(id: \"1\") { name } }")
+    end
+
+    test "opted-in named operation exposes function/client/operation" do
+      Req.Test.expect(OpInfoClient, fn conn ->
+        assert OperationInfo.get(conn) == %{
+                 function: "get_user",
+                 client: inspect(OpInfoClient),
+                 operation: "GetUser"
+               }
+
+        json_ok(conn, %{"user" => %{"name" => "Alice"}})
+      end)
+
+      assert {:ok, %Result{}} =
+               OpInfoClient.get_user(%{id: "1"}, req_options: [plug: {Req.Test, OpInfoClient}])
+    end
+
+    test "opted-in anonymous query omits the operation" do
+      Req.Test.expect(OpInfoClient, fn conn ->
+        assert OperationInfo.get(conn) == %{
+                 function: "get_default_user",
+                 client: inspect(OpInfoClient),
+                 operation: nil
+               }
+
+        json_ok(conn, %{"user" => %{"name" => "Default"}})
+      end)
+
+      assert {:ok, %Result{}} =
+               OpInfoClient.get_default_user(req_options: [plug: {Req.Test, OpInfoClient}])
+    end
+
+    test "without opting in, no operation info is sent" do
+      client = TypedGqlTest.ExecuteClient
+
+      Req.Test.expect(client, fn conn ->
+        assert OperationInfo.get(conn) == %{function: nil, client: nil, operation: nil}
+
+        json_ok(conn, %{"user" => %{"name" => "Alice"}})
+      end)
+
+      assert {:ok, %Result{}} =
+               client.get_default_user(req_options: [plug: {Req.Test, client}])
+    end
+
+    test "distinguishes multiple functions on the same client" do
+      Req.Test.expect(OpInfoClient, 2, fn conn ->
+        name = if OperationInfo.get(conn).function == "get_user", do: "Named", else: "Default"
+
+        json_ok(conn, %{"user" => %{"name" => name}})
+      end)
+
+      assert {:ok, %Result{} = named} =
+               OpInfoClient.get_user(%{id: "1"}, req_options: [plug: {Req.Test, OpInfoClient}])
+
+      assert {:ok, %Result{} = default} =
+               OpInfoClient.get_default_user(req_options: [plug: {Req.Test, OpInfoClient}])
+
+      assert named.data.user.name == "Named"
+      assert default.data.user.name == "Default"
+    end
+  end
+
+  defp json_ok(conn, data) do
+    conn
+    |> Plug.Conn.put_resp_content_type("application/json")
+    |> Plug.Conn.send_resp(200, Jason.encode!(%{"data" => data}))
   end
 end

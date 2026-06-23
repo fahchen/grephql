@@ -91,6 +91,7 @@ defmodule TypedGql.Compiler do
       document: query_string,
       operation_name: operation.name,
       operation_type: Atom.to_string(operation.operation),
+      function_name: Keyword.fetch!(opts, :function_name),
       result_module: hd(output_modules),
       result_modules: output_modules,
       variables_module: variables_module,
