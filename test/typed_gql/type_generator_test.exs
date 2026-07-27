@@ -6,6 +6,9 @@ defmodule TypedGql.TypeGeneratorTest do
   @compile {:no_warn_undefined,
             [
               TypedGql.Test.Alias.GetUser.Result.User,
+              TypedGql.Test.AliasArgs.GetUsers.Result,
+              TypedGql.Test.AliasArgs.GetUsers.Result.Author,
+              TypedGql.Test.AliasArgs.GetUsers.Result.Editor,
               TypedGql.Test.AliasMulti.GetUsers.Result,
               TypedGql.Test.AliasMulti.GetUsers.Result.Author,
               TypedGql.Test.AliasMulti.GetUsers.Result.SimpleUser,
@@ -251,6 +254,57 @@ defmodule TypedGql.TypeGeneratorTest do
       result_fields = TypedGql.Test.AliasMulti.GetUsers.Result.__schema__(:fields)
       assert :author in result_fields
       assert :simple_user in result_fields
+    end
+
+    test "same field aliased with different arguments: independent structs, both arg sets printed, decode by alias" do
+      schema = SchemaHelper.build_schema()
+
+      query =
+        ~s|query { author: user(id: "1") { name email } editor: user(id: "2") { name } }|
+
+      {:ok, doc} = TypedGql.Parser.parse(query)
+      operation = hd(doc.definitions)
+
+      modules =
+        TypeGenerator.generate(operation, schema,
+          client_module: TypedGql.Test.AliasArgs,
+          function_name: :get_users
+        )
+
+      result_mod = TypedGql.Test.AliasArgs.GetUsers.Result
+
+      # Generation: one struct per alias, each with only its own selected fields
+      assert result_mod in modules
+      assert TypedGql.Test.AliasArgs.GetUsers.Result.Author in modules
+      assert TypedGql.Test.AliasArgs.GetUsers.Result.Editor in modules
+
+      author_fields = TypedGql.Test.AliasArgs.GetUsers.Result.Author.__schema__(:fields)
+      assert :name in author_fields
+      assert :email in author_fields
+
+      editor_fields = TypedGql.Test.AliasArgs.GetUsers.Result.Editor.__schema__(:fields)
+      assert :name in editor_fields
+      refute :email in editor_fields
+
+      result_fields = result_mod.__schema__(:fields)
+      assert :author in result_fields
+      assert :editor in result_fields
+
+      # Printer: both distinct argument sets survive query reconstruction
+      printed = TypedGql.Printer.print(doc)
+      assert printed =~ ~s|author: user(id: "1")|
+      assert printed =~ ~s|editor: user(id: "2")|
+
+      # Decode: response keyed by alias loads into the matching nested struct
+      data = %{
+        "author" => %{"name" => "A", "email" => "a@x"},
+        "editor" => %{"name" => "E"}
+      }
+
+      result = TypedGql.ResponseDecoder.decode!(result_mod, data)
+      assert result.author.name == "A"
+      assert result.author.email == "a@x"
+      assert result.editor.name == "E"
     end
 
     test "alias affects nested module name" do
