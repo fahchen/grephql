@@ -105,11 +105,9 @@ defmodule TypedGql.InputTypeGenerator do
           # Variable names from query, bounded set
           # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
           atom_name = var_name |> Macro.underscore() |> String.to_atom()
-          # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-          source_atom = String.to_atom(var_name)
 
           req = if resolved.nullable, do: reqs, else: [atom_name | reqs]
-          source_opt = if atom_name != source_atom, do: [source: source_atom], else: []
+          source_opt = GeneratorHelpers.source_opt(atom_name, var_name)
 
           build_input_field_def(
             atom_name,
