@@ -24,6 +24,17 @@ defmodule TypedGql.InputTypeGeneratorTest do
               TypedGql.Test.Input.DeepDump.Inputs.OrderItemInput,
               TypedGql.Test.Input.DeepDump.Inputs.PriceInput,
               TypedGql.Test.Input.Dedup.Inputs.SharedInput,
+              TypedGql.Test.Input.EmbedSource.Inputs.UpdateProfileInput,
+              TypedGql.Test.Input.EmbedSource.Inputs.AddressInput,
+              TypedGql.Test.Input.EmbedSource.Inputs.JobInput,
+              TypedGql.Test.Input.EmbedSource.Inputs.GeoPointInput,
+              TypedGql.Test.Input.EmbedEmpty.Inputs.UpdateProfileInput,
+              TypedGql.Test.Input.EmbedEmpty.Inputs.AddressInput,
+              TypedGql.Test.Input.EmbedEmpty.Inputs.JobInput,
+              TypedGql.Test.Input.EmbedEmpty.Inputs.GeoPointInput,
+              TypedGql.Test.Var.EmbedSource.Inputs.AddressInput,
+              TypedGql.Test.Var.EmbedSource.Inputs.GeoPointInput,
+              TypedGql.Test.Var.EmbedSource.UpdateProfile.Variables,
               TypedGql.Test.Var.IdField.GetUser.Variables,
               TypedGql.Test.Var.Scalar.GetUser.Variables,
               TypedGql.Test.Var.Required.GetUser.Variables,
@@ -300,6 +311,88 @@ defmodule TypedGql.InputTypeGeneratorTest do
       assert item[:quantity] == 1
       assert item[:price][:amount] == "5"
       assert item[:price][:currency] == "USD"
+    end
+  end
+
+  describe "camelCase embed fields" do
+    test "dump/1 uses GraphQL field name for nested input object fields" do
+      schema = schema_with_camel_embed_input()
+
+      operation =
+        parse!(
+          "mutation UpdateProfile($input: UpdateProfileInput!) { updateProfile(input: $input) { name } }"
+        )
+
+      InputTypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.Input.EmbedSource,
+        scalar_types: %{}
+      )
+
+      {:ok, struct} =
+        TypedGql.Test.Input.EmbedSource.Inputs.UpdateProfileInput.build(%{
+          home_address: %{city: "NYC", geo_point: %{lat_degrees: "40.7"}},
+          past_jobs: [%{title: "Dev"}]
+        })
+
+      dumped = Ecto.embedded_dump(struct, :json)
+
+      assert dumped[:homeAddress][:city] == "NYC"
+      assert dumped[:homeAddress][:geoPoint][:latDegrees] == "40.7"
+      assert [%{title: "Dev"}] = dumped[:pastJobs]
+      refute Map.has_key?(dumped, :home_address)
+      refute Map.has_key?(dumped, :past_jobs)
+    end
+
+    test "dump/1 uses GraphQL variable name for input object variables" do
+      schema = schema_with_camel_embed_input()
+
+      operation =
+        parse!(
+          "mutation UpdateProfile($homeAddress: AddressInput!) { updateProfile(input: $homeAddress) { name } }"
+        )
+
+      InputTypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.Var.EmbedSource,
+        scalar_types: %{}
+      )
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: TypedGql.Test.Var.EmbedSource,
+          function_name: :update_profile,
+          scalar_types: %{}
+        )
+
+      {:ok, vars} = variables_module.build(%{home_address: %{city: "NYC"}})
+
+      dumped = Ecto.embedded_dump(vars, :json)
+
+      assert dumped[:homeAddress][:city] == "NYC"
+      refute Map.has_key?(dumped, :home_address)
+    end
+
+    test "omitted nullable embeds_many dumps as an empty list" do
+      schema = schema_with_camel_embed_input()
+
+      operation =
+        parse!(
+          "mutation UpdateProfile($input: UpdateProfileInput!) { updateProfile(input: $input) { name } }"
+        )
+
+      InputTypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.Input.EmbedEmpty,
+        scalar_types: %{}
+      )
+
+      {:ok, struct} =
+        TypedGql.Test.Input.EmbedEmpty.Inputs.UpdateProfileInput.build(%{
+          home_address: %{city: "NYC"}
+        })
+
+      dumped = Ecto.embedded_dump(struct, :json)
+
+      assert dumped[:pastJobs] == []
+      assert dumped[:homeAddress][:geoPoint] == nil
     end
   end
 
@@ -796,6 +889,87 @@ defmodule TypedGql.InputTypeGeneratorTest do
             %{name: "EUR", is_deprecated: false, deprecation_reason: nil},
             %{name: "JPY", is_deprecated: false, deprecation_reason: nil}
           ]
+        }
+      })
+
+    SchemaHelper.build_schema(types: types, mutation_type: "Mutation")
+  end
+
+  defp schema_with_camel_embed_input do
+    types =
+      Map.merge(SchemaHelper.default_types(), %{
+        "Mutation" => %Type{
+          kind: :object,
+          name: "Mutation",
+          fields: %{
+            "updateProfile" => %SchemaField{
+              name: "updateProfile",
+              type: %TypeRef{kind: :object, name: "User"},
+              args: %{
+                "input" => %InputValue{
+                  name: "input",
+                  type: %TypeRef{
+                    kind: :non_null,
+                    of_type: %TypeRef{kind: :input_object, name: "UpdateProfileInput"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "UpdateProfileInput" => %Type{
+          kind: :input_object,
+          name: "UpdateProfileInput",
+          input_fields: %{
+            "homeAddress" => %InputValue{
+              name: "homeAddress",
+              type: %TypeRef{kind: :input_object, name: "AddressInput"}
+            },
+            "pastJobs" => %InputValue{
+              name: "pastJobs",
+              type: %TypeRef{
+                kind: :list,
+                of_type: %TypeRef{
+                  kind: :non_null,
+                  of_type: %TypeRef{kind: :input_object, name: "JobInput"}
+                }
+              }
+            }
+          }
+        },
+        "AddressInput" => %Type{
+          kind: :input_object,
+          name: "AddressInput",
+          input_fields: %{
+            "city" => %InputValue{
+              name: "city",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            },
+            "geoPoint" => %InputValue{
+              name: "geoPoint",
+              type: %TypeRef{kind: :input_object, name: "GeoPointInput"}
+            }
+          }
+        },
+        "GeoPointInput" => %Type{
+          kind: :input_object,
+          name: "GeoPointInput",
+          input_fields: %{
+            "latDegrees" => %InputValue{
+              name: "latDegrees",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            }
+          }
+        },
+        "JobInput" => %Type{
+          kind: :input_object,
+          name: "JobInput",
+          input_fields: %{
+            "title" => %InputValue{
+              name: "title",
+              type: %TypeRef{kind: :scalar, name: "String"}
+            }
+          }
         }
       })
 

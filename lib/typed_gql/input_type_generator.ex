@@ -154,6 +154,7 @@ defmodule TypedGql.InputTypeGenerator do
           atom_name,
           nested_type_name,
           resolved,
+          source_opt,
           context,
           {defs, embeds, reqs},
           collect_acc
@@ -165,6 +166,7 @@ defmodule TypedGql.InputTypeGenerator do
           atom_name,
           nested_type_name,
           resolved,
+          source_opt,
           context,
           {defs, embeds, reqs},
           collect_acc
@@ -186,6 +188,7 @@ defmodule TypedGql.InputTypeGenerator do
          atom_name,
          nested_type_name,
          resolved,
+         source_opt,
          context,
          {defs, embeds, reqs},
          collect_acc
@@ -195,7 +198,7 @@ defmodule TypedGql.InputTypeGenerator do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     nested_module = Module.concat(inputs_module, Macro.camelize(nested_type_name))
     typed_opts = GeneratorHelpers.embed_typed_opts(kind, resolved)
-    field_def = {kind, atom_name, nested_module, [typed: typed_opts]}
+    field_def = {kind, atom_name, nested_module, [{:typed, typed_opts} | source_opt]}
     {[field_def | defs], [atom_name | embeds], reqs, collect_acc}
   end
 
