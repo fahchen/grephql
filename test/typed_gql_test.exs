@@ -136,16 +136,58 @@ defmodule TypedGqlTest do
                )
     end
 
-    test "raises when endpoint is not configured" do
-      defmodule NoEndpointClient do
-        use TypedGql,
-          otp_app: :typed_gql,
-          source: "support/schemas/minimal.json"
+    defmodule NoEndpointClient do
+      use TypedGql,
+        otp_app: :typed_gql,
+        source: "support/schemas/minimal.json"
 
-        defgql(:get_user, "query { user(id: \"1\") { name } }")
-      end
+      defgql(:get_user, "query { user(id: \"1\") { name } }")
+    end
 
-      assert_raise ArgumentError, ~r/endpoint is required/, fn ->
+    test "no endpoint: the URL can come from :req_options instead" do
+      Req.Test.stub(NoEndpointClient, fn conn ->
+        assert conn.host == "api.example.com"
+        assert conn.request_path == "/graphql"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(200, Jason.encode!(%{"data" => %{"user" => %{"name" => "Base"}}}))
+      end)
+
+      assert {:ok, %Result{} = result} =
+               NoEndpointClient.get_user(
+                 req_options: [
+                   base_url: "https://api.example.com/graphql",
+                   plug: {Req.Test, NoEndpointClient}
+                 ]
+               )
+
+      assert result.data.user.name == "Base"
+    end
+
+    test "no endpoint: the URL can be passed at execution time" do
+      Req.Test.stub(NoEndpointClient, fn conn ->
+        assert conn.host == "api.example.com"
+        assert conn.request_path == "/graphql"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(200, Jason.encode!(%{"data" => %{"user" => %{"name" => "Url"}}}))
+      end)
+
+      assert {:ok, %Result{} = result} =
+               NoEndpointClient.get_user(
+                 req_options: [
+                   url: "https://api.example.com/graphql",
+                   plug: {Req.Test, NoEndpointClient}
+                 ]
+               )
+
+      assert result.data.user.name == "Url"
+    end
+
+    test "no URL at all fails in Req" do
+      assert_raise ArgumentError, ~r/scheme is required/, fn ->
         NoEndpointClient.get_user()
       end
     end

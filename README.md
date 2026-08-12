@@ -458,7 +458,7 @@ mix typed_gql.download_schema --endpoint URL --output PATH [--header "Key: Value
 |--------|----------|-------------|
 | `:otp_app` | yes | OTP application for runtime config lookup |
 | `:source` | yes | Path to introspection JSON (relative to caller file) or inline JSON string |
-| `:endpoint` | no | Default GraphQL endpoint URL |
+| `:endpoint` | no | Default GraphQL endpoint URL. Shorthand for `req_options: [url: ...]` |
 | `:req_options` | no | Default [Req options](https://hexdocs.pm/req/Req.html#new/1) (keyword list) |
 | `:scalars` | no | Map of GraphQL scalar name to Ecto type (default: `%{}`) |
 
