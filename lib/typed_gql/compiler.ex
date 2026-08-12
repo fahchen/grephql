@@ -86,7 +86,8 @@ defmodule TypedGql.Compiler do
       # name: it is the definition the server will see.
       fragments:
         opts |> registered_fragments() |> Map.merge(Document.fragments_by_name(document)),
-      generation_plugins: Keyword.get(opts, :generation_plugins, [])
+      generation_plugins: Keyword.get(opts, :generation_plugins, []),
+      caller_env: caller_env
     ]
 
     output_modules = TypeGenerator.generate(operation, schema, generator_opts)
@@ -160,7 +161,8 @@ defmodule TypedGql.Compiler do
       generation_plugins: Keyword.get(opts, :generation_plugins, []),
       # The fragment's own definition is deliberately left out: a body may only
       # spread fragments registered before it, so it can never spread itself.
-      fragments: registered_fragments(opts)
+      fragments: registered_fragments(opts),
+      caller_env: caller_env
     ]
 
     result_module =

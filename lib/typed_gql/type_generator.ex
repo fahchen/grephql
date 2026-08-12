@@ -76,6 +76,7 @@ defmodule TypedGql.TypeGenerator do
           | {:scalar_types, map()}
           | {:fragments, %{String.t() => TypedGql.Language.Fragment.t()}}
           | {:generation_plugins, [module()]}
+          | {:caller_env, Macro.Env.t() | nil}
 
   @doc """
   Generates embedded schema modules for an operation's output types.
@@ -92,6 +93,9 @@ defmodule TypedGql.TypeGenerator do
       `CompileError` (default: `%{}`)
     - `:generation_plugins` — user `TypedGql.Generation.Plugin` modules,
       appended after the built-in plugins (default: `[]`)
+    - `:caller_env` — the macro caller's `Macro.Env`, used to set generated
+      modules' source location for editor "go to definition" support
+      (default: `nil`)
   """
   @spec generate(TypedGql.Language.OperationDefinition.t(), Schema.t(), [option()]) :: [module()]
   def generate(operation, schema, opts) do
@@ -103,9 +107,16 @@ defmodule TypedGql.TypeGenerator do
     base_module = Module.concat([client_module, GeneratorHelpers.camelize(function_name), Result])
 
     root_type_name = Helpers.root_type_name(schema, operation.operation)
+    location = GeneratorHelpers.location_from(Keyword.get(opts, :caller_env))
 
     operation.selection_set.selections
-    |> run_pipeline(root_type_name, base_module, build_context(schema, opts), plugins(opts))
+    |> run_pipeline(
+      root_type_name,
+      base_module,
+      build_context(schema, opts),
+      plugins(opts),
+      location
+    )
     |> unwrap_module_names()
   end
 
@@ -145,7 +156,8 @@ defmodule TypedGql.TypeGenerator do
         type_name,
         base_module,
         build_context(schema, opts),
-        plugins(opts)
+        plugins(opts),
+        GeneratorHelpers.location_from(Keyword.get(opts, :caller_env))
       )
 
     # base_module is the naming root the pipeline was given, not necessarily a
@@ -170,7 +182,7 @@ defmodule TypedGql.TypeGenerator do
   end
 
   # Runs the full generation pipeline and returns the tree's module result.
-  defp run_pipeline(selections, parent_type_name, parent_module, context, plugins) do
+  defp run_pipeline(selections, parent_type_name, parent_module, context, plugins, location) do
     canonical =
       selections
       |> run_after(plugins, :before_normalize, context)
@@ -187,7 +199,7 @@ defmodule TypedGql.TypeGenerator do
     tree
     |> lower()
     |> run_after(plugins, :after_lower, context)
-    |> GeneratorHelpers.create_modules()
+    |> GeneratorHelpers.create_modules(location)
 
     tree
   end
