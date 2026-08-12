@@ -174,6 +174,18 @@ MyApp.GitHub.get_user(%{login: "octocat"},
 )
 ```
 
+### Where the URL comes from
+
+`:endpoint` is a shorthand for `req_options: [url: ...]` and is optional. The request URL can equally come from `:req_options` (`:url` or `:base_url`) or be set in `prepare_req/1` — useful when the URL depends on a tenant, a plugin, or runtime secrets:
+
+```elixir
+def prepare_req(req) do
+  Req.merge(req, url: "https://#{System.fetch_env!("SHOP_DOMAIN")}/admin/api/graphql.json")
+end
+```
+
+If none of them supply a URL, Req raises `ArgumentError` with `scheme is required for url:`.
+
 ## The `~GQL` Sigil and Formatter
 
 The `~GQL` sigil marks GraphQL strings for automatic formatting by `mix format`. Plain strings still work with `defgql` — `~GQL` is optional.
@@ -458,7 +470,7 @@ mix typed_gql.download_schema --endpoint URL --output PATH [--header "Key: Value
 |--------|----------|-------------|
 | `:otp_app` | yes | OTP application for runtime config lookup |
 | `:source` | yes | Path to introspection JSON (relative to caller file) or inline JSON string |
-| `:endpoint` | no | Default GraphQL endpoint URL |
+| `:endpoint` | no | Default GraphQL endpoint URL. Shorthand for `req_options: [url: ...]` |
 | `:req_options` | no | Default [Req options](https://hexdocs.pm/req/Req.html#new/1) (keyword list) |
 | `:scalars` | no | Map of GraphQL scalar name to Ecto type (default: `%{}`) |
 

@@ -54,6 +54,22 @@ def prepare_req(req) do
 end
 ```
 
+## Setting the URL
+
+`prepare_req/1` runs last, so it can also supply the request URL. `:endpoint` is optional — use this when the URL is only known at runtime (per-tenant hosts, secrets, feature flags):
+
+```elixir
+defmodule MyApp.Shopify do
+  use TypedGql, otp_app: :my_app, source: "priv/schemas/shopify.json"
+
+  def prepare_req(req) do
+    Req.merge(req, url: "https://#{System.fetch_env!("SHOP_DOMAIN")}/admin/api/graphql.json")
+  end
+end
+```
+
+If neither `:endpoint`, `:req_options` (`:url`/`:base_url`), nor `prepare_req/1` supplies a URL, Req raises `ArgumentError` with `scheme is required for url:`.
+
 ## Testing
 
 Use `Req.Test` as usual. Include the metadata you want to capture in the stubbed response:

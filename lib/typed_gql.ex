@@ -29,7 +29,8 @@ defmodule TypedGql do
     * `:generation_plugins` — `TypedGql.Generation.Plugin` modules that hook into
       response-type generation. TypedGql's built-in plugins (e.g. `@include`/`@skip`
       handling) always run first; these are appended after them (default: `[]`)
-    * `:endpoint` — default GraphQL endpoint URL
+    * `:endpoint` — default GraphQL endpoint URL. Optional: the URL can also come
+      from `:req_options` (`:url`/`:base_url`) or from `prepare_req/1`
     * `:req_options` — default Req options passed directly to `Req.new/1` (keyword list).
       Supports all Req options including middleware/plugins. Common examples:
 
@@ -256,12 +257,13 @@ defmodule TypedGql do
       |> Keyword.merge(runtime_rest)
       |> Keyword.merge(exec_rest)
 
-    endpoint =
-      config[:endpoint] ||
-        raise ArgumentError, "TypedGql: :endpoint is required but was not configured"
+    # ponytail: no :endpoint validation — the URL may also come from
+    # :req_options (:url/:base_url) or prepare_req/1. A request with no URL at
+    # all fails in Req with "scheme is required for url:".
+    endpoint_opts = if config[:endpoint], do: [url: config[:endpoint]], else: []
 
     [use_req_opts, runtime_req_opts, exec_req_opts]
-    |> Enum.reduce(Req.new([url: endpoint] ++ base_opts), &Req.merge(&2, &1))
+    |> Enum.reduce(Req.new(endpoint_opts ++ base_opts), &Req.merge(&2, &1))
     |> client_module.prepare_req()
   end
 
