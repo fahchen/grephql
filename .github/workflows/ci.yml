@@ -29,14 +29,14 @@ jobs:
           - elixir: 1.18.4
             otp: 27.3.4.16
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Elixir and Erlang
         uses: erlef/setup-beam@v1
         with:
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
       - name: Restore deps and _build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             deps
@@ -66,7 +66,7 @@ jobs:
         if: ${{ matrix.lint }}
 
       - name: Cache Dialyzer PLT
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         if: ${{ matrix.lint }}
         with:
           path: priv/plts
