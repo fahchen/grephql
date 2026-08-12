@@ -1,7 +1,7 @@
 defmodule TypedGql.MixProject do
   use Mix.Project
 
-  @version "0.12.1"
+  @version "0.12.2"
   @source_url "https://github.com/fahchen/typed_gql"
 
   def project do
