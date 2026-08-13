@@ -1,6 +1,7 @@
 defmodule TypedGql.Compiler do
   @moduledoc false
 
+  alias TypedGql.EnsureTypename
   alias TypedGql.InputTypeGenerator
   alias TypedGql.Language.Fragment
   alias TypedGql.Language.ListType
@@ -8,6 +9,7 @@ defmodule TypedGql.Compiler do
   alias TypedGql.Language.NonNullType
   alias TypedGql.Language.OperationDefinition
   alias TypedGql.Parser
+  alias TypedGql.Printer
   alias TypedGql.Query
   alias TypedGql.Schema
   alias TypedGql.TypeGenerator
@@ -54,7 +56,12 @@ defmodule TypedGql.Compiler do
   """
   @spec compile_document!(TypedGql.Language.Document.t(), String.t(), Schema.t(), [option()]) ::
           Query.t()
-  def compile_document!(document, query_string, schema, opts) do
+  def compile_document!(document, _query_string, schema, opts) do
+    # Dispatching a union or interface needs __typename in the *response*, so it
+    # has to be in the document that gets sent — see TypedGql.EnsureTypename.
+    # Running before validation keeps a single view of the document throughout.
+    document = EnsureTypename.transform(document, schema)
+
     operation =
       extract_single!(
         document,
@@ -88,7 +95,7 @@ defmodule TypedGql.Compiler do
     variables_module = InputTypeGenerator.generate_variables(operation, schema, generator_opts)
 
     %Query{
-      document: query_string,
+      document: Printer.print(document),
       operation_name: operation.name,
       operation_type: Atom.to_string(operation.operation),
       function_name: Keyword.fetch!(opts, :function_name),

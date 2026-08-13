@@ -523,7 +523,6 @@ defmodule TypedGql.TypeGenerator do
   # carrying the shared fields alone.
   defp resolve_union(shared_fields, inline_fragments, parent_type_name, parent_module, context) do
     shared_fields = ensure_typename(shared_fields)
-    typename_key = typename_key(shared_fields)
     {:ok, parent} = Schema.get_type(context.schema, parent_type_name)
     typename_values = parent.possible_types
 
@@ -552,7 +551,6 @@ defmodule TypedGql.TypeGenerator do
       kind: :union,
       module: parent_module,
       union_module: union_module,
-      typename_key: typename_key,
       typename_to_module: typename_to_module,
       children: :lists.reverse(variants)
     }
@@ -585,23 +583,6 @@ defmodule TypedGql.TypeGenerator do
     end
   end
 
-  # Dispatch reads one key out of the raw response before any variant is known,
-  # so it has to be a selection every member shares. Prefer an unaliased
-  # __typename: an aliased one can also carry @skip, and the response then has
-  # neither key.
-  defp typename_key(shared_fields) do
-    typename_fields = Enum.filter(shared_fields, &(&1.name == "__typename"))
-    # A copy carrying @skip/@include may be absent from the response, so it can
-    # only be the key when it is the only copy there is.
-    unconditional = Enum.filter(typename_fields, &(&1.directives == []))
-
-    preferred =
-      Enum.find(unconditional, &is_nil(&1.alias)) || List.first(unconditional) ||
-        hd(typename_fields)
-
-    field_name(preferred)
-  end
-
   # __typename is a meta-field available on all object types per the GraphQL spec,
   # but introspection JSON often omits it from the type's fields. Provide a
   # synthetic NonNull String! field when Schema.get_field returns :error.
@@ -625,13 +606,20 @@ defmodule TypedGql.TypeGenerator do
     field
   end
 
+  # An aliased or conditional copy cannot serve as the discriminator: the alias
+  # changes the response key and a directive can remove it, while dispatch runs
+  # before either is known. TypedGql.EnsureTypename puts the same field into the
+  # document that is sent; this covers callers of generate/3, which do not.
   defp ensure_typename(shared_fields) do
-    if Enum.any?(shared_fields, &(&1.name == "__typename")) do
-      shared_fields
-    else
-      [%QueryField{name: "__typename"} | shared_fields]
-    end
+    if Enum.any?(shared_fields, &dispatchable_typename?/1),
+      do: shared_fields,
+      else: [%QueryField{name: "__typename"} | shared_fields]
   end
+
+  defp dispatchable_typename?(%QueryField{name: "__typename", alias: nil, directives: []}),
+    do: true
+
+  defp dispatchable_typename?(_selection), do: false
 
   defp override_typename_type(resolved, "__typename", opts) do
     values = Keyword.fetch!(opts, :typename_values)
@@ -649,7 +637,7 @@ defmodule TypedGql.TypeGenerator do
   # Ecto's __field__ validates parameterized type modules exist at schema
   # compile time, before lowered embedded-schema modules are created.
   defp create_union_modules(%GenSchema{kind: :union} = node) do
-    TypedGql.Types.Union.define(node.union_module, node.typename_to_module, node.typename_key)
+    TypedGql.Types.Union.define(node.union_module, node.typename_to_module)
     Enum.each(node.children, &create_union_modules/1)
   end
 

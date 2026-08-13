@@ -37,20 +37,14 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.AbstractCondition.Search.Result.Search.Post,
               TypedGql.Test.SpreadCondition.Search.Result.Search.Post,
               TypedGql.Test.SpreadCondition.Search.Result.Search.User,
-              TypedGql.Test.AliasedTypename.Search.Result,
-              TypedGql.Test.AliasedTypename.Search.Result.Search.User,
               TypedGql.Test.GhostCondition.Search.Result.Search.User,
+              TypedGql.Test.UnusableTypename.Search.Result,
+              TypedGql.Test.UnusableTypename.Search.Result.Search.User,
               TypedGql.Test.NestedAbstract.Search.Result.Search.Post,
               TypedGql.Test.NestedAbstract.Search.Result.Search.User,
               TypedGql.Test.AbstractSpread.Search.Result.Search.User,
               TypedGql.Test.SharedSpread.Search.Result,
               TypedGql.Test.SharedSpread.Search.Result.Search,
-              TypedGql.Test.TwoTypenames.Search.Result,
-              TypedGql.Test.TwoTypenames.Search.Result.Search.User,
-              TypedGql.Test.SkippableTypename.Search.Result,
-              TypedGql.Test.SkippableTypename.Search.Result.Search.User,
-              TypedGql.Test.OnlyConditionalTypename.Search.Result,
-              TypedGql.Test.OnlyConditionalTypename.Search.Result.Search.User,
               TypedGql.Test.OverlappingConditions.Search.Result.Search.User,
               TypedGql.Test.ImplementedInterface.GetNode.Result,
               TypedGql.Test.ImplementedInterface.GetNode.Result.Node,
@@ -751,23 +745,40 @@ defmodule TypedGql.TypeGeneratorTest do
       assert :__typename in TypedGql.Test.SharedSpread.Search.Result.Search.__schema__(:fields)
     end
 
-    test "an unaliased __typename wins over an aliased one as the dispatch key" do
+    test "the transmitted document carries the injected __typename" do
       schema = schema_with_union()
-      operation = parse!("query { search { kind: __typename __typename ... on User { email } } }")
 
-      TypeGenerator.generate(operation, schema,
-        client_module: TypedGql.Test.TwoTypenames,
-        function_name: :search
-      )
+      document =
+        TypedGql.EnsureTypename.transform(
+          parse_document!("query { search { ... on User { email } } }"),
+          schema
+        )
 
-      # Only the unaliased key is present, so this fails if "kind" was chosen.
-      json = %{"search" => [%{"__typename" => "User", "email" => "a@b.com"}]}
-      result = TypedGql.ResponseDecoder.decode!(TypedGql.Test.TwoTypenames.Search.Result, json)
+      printed = TypedGql.Printer.print(document)
 
-      assert [%{__struct__: TypedGql.Test.TwoTypenames.Search.Result.Search.User}] = result.search
+      # Without this the server never returns the discriminator the generated
+      # decoder dispatches on.
+      assert printed =~ "__typename"
     end
 
-    test "a skippable __typename loses to an unconditional aliased one" do
+    test "a selection that already dispatches is left alone, and SDL passes through" do
+      schema = schema_with_union()
+
+      already =
+        TypedGql.EnsureTypename.transform(
+          parse_document!("query { search { __typename ... on User { email } } }"),
+          schema
+        )
+
+      printed = TypedGql.Printer.print(already)
+      assert printed |> String.split("__typename") |> length() == 2
+
+      # A type system definition has no selection set to walk.
+      sdl = parse_document!("scalar DateTime")
+      assert TypedGql.EnsureTypename.transform(sdl, schema) == sdl
+    end
+
+    test "an aliased or conditional __typename does not serve as the discriminator" do
       schema = schema_with_union()
 
       operation =
@@ -776,44 +787,21 @@ defmodule TypedGql.TypeGeneratorTest do
         )
 
       TypeGenerator.generate(operation, schema,
-        client_module: TypedGql.Test.SkippableTypename,
+        client_module: TypedGql.Test.UnusableTypename,
         function_name: :search
       )
 
-      # $hide was true, so the response carries only the unconditional alias.
-      json = %{"search" => [%{"kind" => "User", "email" => "a@b.com"}]}
+      # Neither copy can be dispatched on, so a plain one is added alongside.
+      fields = TypedGql.Test.UnusableTypename.Search.Result.Search.User.__schema__(:fields)
+      assert :kind in fields
+      assert :__typename in fields
+
+      json = %{"search" => [%{"__typename" => "User", "kind" => "User", "email" => "a@b.com"}]}
 
       result =
-        TypedGql.ResponseDecoder.decode!(TypedGql.Test.SkippableTypename.Search.Result, json)
+        TypedGql.ResponseDecoder.decode!(TypedGql.Test.UnusableTypename.Search.Result, json)
 
-      assert [%{__struct__: TypedGql.Test.SkippableTypename.Search.Result.Search.User}] =
-               result.search
-    end
-
-    test "a conditional __typename is the key when it is the only one" do
-      schema = schema_with_union()
-
-      operation =
-        parse!(
-          "query Q($show: Boolean!) { search { __typename @include(if: $show) ... on User { email } } }"
-        )
-
-      TypeGenerator.generate(operation, schema,
-        client_module: TypedGql.Test.OnlyConditionalTypename,
-        function_name: :search
-      )
-
-      # A variant fragment forces the dispatch path, so the conditional copy has
-      # to serve as the key.
-      json = %{"search" => [%{"__typename" => "User", "email" => "a@b.com"}]}
-
-      result =
-        TypedGql.ResponseDecoder.decode!(
-          TypedGql.Test.OnlyConditionalTypename.Search.Result,
-          json
-        )
-
-      assert [%{__struct__: TypedGql.Test.OnlyConditionalTypename.Search.Result.Search.User}] =
+      assert [%{__struct__: TypedGql.Test.UnusableTypename.Search.Result.Search.User}] =
                result.search
     end
 
@@ -1025,24 +1013,6 @@ defmodule TypedGql.TypeGeneratorTest do
       fields = TypedGql.Test.GhostCondition.Search.Result.Search.User.__schema__(:fields)
       assert fields == [:__typename]
     end
-
-    test "an aliased __typename still drives union dispatch" do
-      schema = schema_with_union()
-      operation = parse!("query { search { kind: __typename ... on User { email } } }")
-
-      TypeGenerator.generate(operation, schema,
-        client_module: TypedGql.Test.AliasedTypename,
-        function_name: :search
-      )
-
-      json = %{"search" => [%{"kind" => "User", "email" => "a@b.com"}]}
-      result = TypedGql.ResponseDecoder.decode!(TypedGql.Test.AliasedTypename.Search.Result, json)
-
-      assert [%{__struct__: TypedGql.Test.AliasedTypename.Search.Result.Search.User} = user] =
-               result.search
-
-      assert user.email == "a@b.com"
-    end
   end
 
   describe "generate_fragment/4" do
@@ -1082,6 +1052,11 @@ defmodule TypedGql.TypeGeneratorTest do
     [union_node] = tree.children
     variant = Enum.find(union_node.children, &(&1.parent_type == type_name))
     Enum.find(variant.fields, &(&1.name == field_name))
+  end
+
+  defp parse_document!(query) do
+    {:ok, document} = TypedGql.Parser.parse(query)
+    document
   end
 
   defp parse!(query) do

@@ -16,24 +16,20 @@ defmodule TypedGql.Types.Union do
 
   Called by the type generator at compile time. `typename_to_module` maps
   GraphQL `__typename` strings to their corresponding embedded schema modules.
-
-  `typename_key` is the key the response carries the typename under — normally
-  `"__typename"`, but the alias when the query spells it `kind: __typename`.
   """
-  @spec define(module(), %{String.t() => module()}, String.t()) ::
-          {:module, module(), binary(), term()}
-  def define(module_name, typename_to_module, typename_key)
-      when is_atom(module_name) and is_map(typename_to_module) and is_binary(typename_key) do
+  @spec define(module(), %{String.t() => module()}) :: {:module, module(), binary(), term()}
+  def define(module_name, typename_to_module)
+      when is_atom(module_name) and is_map(typename_to_module) do
     Module.create(
       module_name,
-      module_body(typename_to_module, typename_key),
+      module_body(typename_to_module),
       Macro.Env.location(__ENV__)
     )
   end
 
   # Multiple function clauses required by Ecto.ParameterizedType behaviour
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
-  defp module_body(typename_to_module, typename_key) do
+  defp module_body(typename_to_module) do
     quote do
       use Ecto.ParameterizedType
 
@@ -82,15 +78,14 @@ defmodule TypedGql.Types.Union do
       @impl Ecto.ParameterizedType
       def embed_as(_format, _params), do: :dump
 
-      defp resolve_module(%{unquote(typename_key) => typename}) do
+      defp resolve_module(%{"__typename" => typename}) do
         case Map.fetch(@typename_to_module, typename) do
           {:ok, _module} = ok -> ok
           :error -> {:error, "unknown __typename: #{inspect(typename)}"}
         end
       end
 
-      defp resolve_module(_map),
-        do: {:error, "missing #{unquote(typename_key)} field"}
+      defp resolve_module(_map), do: {:error, "missing __typename field"}
     end
   end
 end

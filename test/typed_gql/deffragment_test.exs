@@ -248,11 +248,12 @@ defmodule TypedGql.DeffragmentTest do
         """)
       end)
 
-      assert module_name.query_name().document =~ "fragment UserFields on User { name }"
-      refute module_name.query_name().document =~ "fragment UserFields on User { email }"
+      # The document is reprinted from the AST, so the fragment body is indented.
+      assert module_name.query_name().document =~ "fragment UserFields on User {\n  name\n}"
+      refute module_name.query_name().document =~ "email"
 
-      assert module_name.query_email().document =~ "fragment UserFields on User { email }"
-      refute module_name.query_email().document =~ "fragment UserFields on User { name }"
+      assert module_name.query_email().document =~ "fragment UserFields on User {\n  email\n}"
+      refute module_name.query_email().document =~ "name"
 
       user_name =
         struct(Module.safe_concat([module_name, GetUserName, Result, User]), name: "Alice")
