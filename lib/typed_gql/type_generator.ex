@@ -199,31 +199,42 @@ defmodule TypedGql.TypeGenerator do
       %QueryField{} = field ->
         [normalize_field(field, parent_type_name, context)]
 
-      # A fragment with no type condition, or one naming the parent itself
-      # (`fragment NodeFields on Node` spread under a Node), selects fields every
-      # member shares. Hoisting it (directives propagated) keeps it out of
-      # resolve_union/4 — which would otherwise turn a plain shared selection
-      # into a __typename-dispatched union.
-      %InlineFragment{type_condition: nil} = fragment ->
-        hoist_shared(fragment, parent_type_name, context)
-
-      %InlineFragment{type_condition: %{name: ^parent_type_name}} = fragment ->
-        hoist_shared(fragment, parent_type_name, context)
-
       %InlineFragment{} = fragment ->
-        normalized =
-          fragment.selection_set.selections
-          |> prepend_directives(fragment.directives)
-          |> normalize(fragment.type_condition.name, context)
-
-        [%{fragment | selection_set: %{fragment.selection_set | selections: normalized}}]
+        normalize_union_fragment(fragment, parent_type_name, context)
     end)
   end
 
-  defp hoist_shared(fragment, parent_type_name, context) do
-    fragment.selection_set.selections
-    |> prepend_directives(fragment.directives)
-    |> normalize(parent_type_name, context)
+  defp normalize_union_fragment(fragment, parent_type_name, context) do
+    condition = fragment.type_condition && fragment.type_condition.name
+
+    if shared_condition?(context.schema, condition, parent_type_name) do
+      fragment.selection_set.selections
+      |> prepend_directives(fragment.directives)
+      |> normalize(parent_type_name, context)
+    else
+      normalized =
+        fragment.selection_set.selections
+        |> prepend_directives(fragment.directives)
+        |> normalize(condition, context)
+
+      [%{fragment | selection_set: %{fragment.selection_set | selections: normalized}}]
+    end
+  end
+
+  # A fragment with no type condition, on the parent itself, or on an interface
+  # the parent implements selects fields every member shares — and the parent
+  # declares them, so they resolve without a variant. Hoisting keeps them out of
+  # resolve_union/5, which would otherwise invent a __typename dispatch the
+  # response has no reason to satisfy.
+  defp shared_condition?(_schema, nil, _parent_type_name), do: true
+
+  defp shared_condition?(schema, condition, parent_type_name) do
+    condition == parent_type_name or condition in interfaces_of(schema, parent_type_name)
+  end
+
+  defp interfaces_of(schema, type_name) do
+    {:ok, type} = Schema.get_type(schema, type_name)
+    type.interfaces
   end
 
   # Normalizes a field's own sub-selection set under its child type. A field's
@@ -319,6 +330,7 @@ defmodule TypedGql.TypeGenerator do
     # On a concrete object type `__typename` can only ever be that type's name;
     # abstract parents override this with their possible types.
     opts = Keyword.put_new(opts, :typename_values, [parent_type_name])
+    fields = merge_fields(fields)
 
     {gen_fields, children} =
       Enum.reduce(fields, {[], []}, fn %QueryField{} = field, {fields_acc, children_acc} ->
@@ -339,6 +351,45 @@ defmodule TypedGql.TypeGenerator do
 
   defp maybe_prepend(nil, acc), do: acc
   defp maybe_prepend(child, acc), do: [child | acc]
+
+  # Two fragments may select the same field — `... on Node { id } ... on Named
+  # { id }` where a member implements both — and a struct cannot declare it
+  # twice. GraphQL treats them as one selection, so merge by response key,
+  # keeping first-seen order.
+  defp merge_fields(fields) do
+    {order, by_key} =
+      Enum.reduce(fields, {[], %{}}, fn field, {order, by_key} ->
+        key = field_name(field)
+
+        case Map.fetch(by_key, key) do
+          {:ok, existing} -> {order, Map.put(by_key, key, merge_field(existing, field))}
+          :error -> {[key | order], Map.put(by_key, key, field)}
+        end
+      end)
+
+    order |> :lists.reverse() |> Enum.map(&Map.fetch!(by_key, &1))
+  end
+
+  defp merge_field(existing, field) do
+    %{
+      existing
+      | directives: merge_directives(existing.directives, field.directives),
+        selection_set: merge_selection_sets(existing.selection_set, field.selection_set)
+    }
+  end
+
+  # Selected unconditionally anywhere means always present, so an unconditional
+  # copy clears the other's @skip/@include.
+  defp merge_directives([], _other), do: []
+  defp merge_directives(_directives, []), do: []
+  defp merge_directives(directives, other), do: directives ++ other
+
+  # Both copies are the same schema field, so either both are leaves or neither is.
+  defp merge_selection_sets(nil, _other), do: nil
+
+  defp merge_selection_sets(selection_set, other) do
+    %{selection_set | selections: merge_fields(selection_set.selections ++ other.selections)}
+  end
 
   defp resolve_field(%QueryField{} = field, parent_type_name, parent_module, context, opts) do
     field_name = field_name(field)
@@ -472,11 +523,15 @@ defmodule TypedGql.TypeGenerator do
   # neither key.
   defp typename_key(shared_fields) do
     typename_fields = Enum.filter(shared_fields, &(&1.name == "__typename"))
+    # A copy carrying @skip/@include may be absent from the response, so it can
+    # only be the key when it is the only copy there is.
+    unconditional = Enum.filter(typename_fields, &(&1.directives == []))
 
-    case Enum.find(typename_fields, &is_nil(&1.alias)) do
-      nil -> typename_fields |> hd() |> field_name()
-      field -> field_name(field)
-    end
+    preferred =
+      Enum.find(unconditional, &is_nil(&1.alias)) || List.first(unconditional) ||
+        hd(typename_fields)
+
+    field_name(preferred)
   end
 
   # __typename is a meta-field available on all object types per the GraphQL spec,

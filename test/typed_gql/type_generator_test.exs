@@ -46,7 +46,14 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.SharedSpread.Search.Result,
               TypedGql.Test.SharedSpread.Search.Result.Search,
               TypedGql.Test.TwoTypenames.Search.Result,
-              TypedGql.Test.TwoTypenames.Search.Result.Search.User
+              TypedGql.Test.TwoTypenames.Search.Result.Search.User,
+              TypedGql.Test.SkippableTypename.Search.Result,
+              TypedGql.Test.SkippableTypename.Search.Result.Search.User,
+              TypedGql.Test.OnlyConditionalTypename.Search.Result.Search,
+              TypedGql.Test.OverlappingConditions.Search.Result.Search.User,
+              TypedGql.Test.ImplementedInterface.GetNode.Result,
+              TypedGql.Test.ImplementedInterface.GetNode.Result.Node,
+              TypedGql.Test.MergedSubSelections.Search.Result.Search.User.Profile
             ]}
 
   alias TypedGql.Schema.Field, as: SchemaField
@@ -54,6 +61,17 @@ defmodule TypedGql.TypeGeneratorTest do
   alias TypedGql.Schema.TypeRef
   alias TypedGql.Test.SchemaHelper
   alias TypedGql.TypeGenerator
+
+  defmodule CaptureTreePlugin do
+    @moduledoc false
+    use TypedGql.Generation.Plugin
+
+    @impl TypedGql.Generation.Plugin
+    def after_resolve(tree, _context) do
+      send(self(), {:resolved_tree, tree})
+      tree
+    end
+  end
 
   describe "basic scalar fields" do
     test "generates embedded schema with scalar fields" do
@@ -735,10 +753,128 @@ defmodule TypedGql.TypeGeneratorTest do
         function_name: :search
       )
 
-      json = %{"search" => [%{"__typename" => "User", "kind" => "User", "email" => "a@b.com"}]}
+      # Only the unaliased key is present, so this fails if "kind" was chosen.
+      json = %{"search" => [%{"__typename" => "User", "email" => "a@b.com"}]}
       result = TypedGql.ResponseDecoder.decode!(TypedGql.Test.TwoTypenames.Search.Result, json)
 
       assert [%{__struct__: TypedGql.Test.TwoTypenames.Search.Result.Search.User}] = result.search
+    end
+
+    test "a skippable __typename loses to an unconditional aliased one" do
+      schema = schema_with_union()
+
+      operation =
+        parse!(
+          "query Q($hide: Boolean!) { search { kind: __typename __typename @skip(if: $hide) ... on User { email } } }"
+        )
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.SkippableTypename,
+        function_name: :search
+      )
+
+      # $hide was true, so the response carries only the unconditional alias.
+      json = %{"search" => [%{"kind" => "User", "email" => "a@b.com"}]}
+
+      result =
+        TypedGql.ResponseDecoder.decode!(TypedGql.Test.SkippableTypename.Search.Result, json)
+
+      assert [%{__struct__: TypedGql.Test.SkippableTypename.Search.Result.Search.User}] =
+               result.search
+    end
+
+    test "a conditional __typename is the key when it is the only one" do
+      schema = schema_with_union()
+
+      operation =
+        parse!("query Q($show: Boolean!) { search { __typename @include(if: $show) } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.OnlyConditionalTypename,
+        function_name: :search
+      )
+
+      assert :__typename in TypedGql.Test.OnlyConditionalTypename.Search.Result.Search.__schema__(
+               :fields
+             )
+    end
+
+    test "the same field selected by two overlapping conditions is merged once" do
+      schema = schema_with_two_interfaces()
+
+      operation =
+        parse!("query { search { __typename ... on Node { id } ... on Named { id name } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.OverlappingConditions,
+        function_name: :search
+      )
+
+      fields = TypedGql.Test.OverlappingConditions.Search.Result.Search.User.__schema__(:fields)
+
+      assert Enum.count(fields, &(&1 == :id)) == 1
+      assert :name in fields
+    end
+
+    test "sub-selections of a field reached by two conditions are merged" do
+      schema = schema_with_two_interfaces()
+
+      operation =
+        parse!(
+          "query { search { __typename ... on Node { profile { bio } } ... on Named { profile { avatar } } } }"
+        )
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.MergedSubSelections,
+        function_name: :search
+      )
+
+      profile_fields =
+        TypedGql.Test.MergedSubSelections.Search.Result.Search.User.Profile.__schema__(:fields)
+
+      assert :bio in profile_fields
+      assert :avatar in profile_fields
+    end
+
+    test "an unconditional copy of a merged field clears the other's @skip" do
+      schema = schema_with_two_interfaces()
+
+      tree =
+        resolved_tree(
+          schema,
+          "query Q($show: Boolean!) { search { __typename ... on Node { id @include(if: $show) } ... on Named { id } } }",
+          TypedGql.Test.MergedUnconditional
+        )
+
+      refute variant_field(tree, "User", :id).resolved.nullable
+    end
+
+    test "a merged field conditional on both sides stays conditional" do
+      schema = schema_with_two_interfaces()
+
+      tree =
+        resolved_tree(
+          schema,
+          "query Q($a: Boolean!, $b: Boolean!) { search { __typename ... on Node { id @include(if: $a) } ... on Named { id @skip(if: $b) } } }",
+          TypedGql.Test.MergedConditional
+        )
+
+      assert variant_field(tree, "User", :id).resolved.nullable
+    end
+
+    test "a fragment on an interface the parent implements stays a plain object" do
+      schema = schema_interface_implementing_interface()
+      operation = parse!("query { node { ... on Node { id } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.ImplementedInterface,
+        function_name: :get_node
+      )
+
+      # Resolved against Timestamped, which declares `id` because it implements
+      # Node — no variants and no discriminator the response would have to carry.
+      assert :node in TypedGql.Test.ImplementedInterface.GetNode.Result.__schema__(:embeds)
+      assert :id in TypedGql.Test.ImplementedInterface.GetNode.Result.Node.__schema__(:fields)
     end
 
     # Rules.Fragments rejects this before generation runs, but generate/3 is
@@ -795,6 +931,24 @@ defmodule TypedGql.TypeGeneratorTest do
   end
 
   # Helpers
+
+  defp resolved_tree(schema, query, client_module) do
+    TypeGenerator.generate(parse!(query), schema,
+      client_module: client_module,
+      function_name: :search,
+      generation_plugins: [CaptureTreePlugin]
+    )
+
+    assert_received {:resolved_tree, tree}
+    tree
+  end
+
+  # The `search` field's union node holds one object node per member.
+  defp variant_field(tree, type_name, field_name) do
+    [union_node] = tree.children
+    variant = Enum.find(union_node.children, &(&1.parent_type == type_name))
+    Enum.find(variant.fields, &(&1.name == field_name))
+  end
 
   defp parse!(query) do
     {:ok, %{definitions: [operation | _rest]}} = TypedGql.Parser.parse(query)
@@ -969,6 +1123,103 @@ defmodule TypedGql.TypeGeneratorTest do
             "title" => %SchemaField{
               name: "title",
               type: %TypeRef{kind: :scalar, name: "String"}
+            }
+          }
+        }
+      })
+
+    SchemaHelper.build_schema(types: types)
+  end
+
+  # A union whose members implement two interfaces, so one field can be reached
+  # through either condition.
+  defp schema_with_two_interfaces do
+    profile = %SchemaField{name: "profile", type: %TypeRef{kind: :object, name: "Profile"}}
+    base = schema_with_union().types
+
+    types =
+      base
+      |> Map.update!("User", &%{&1 | fields: Map.put(&1.fields, "profile", profile)})
+      |> Map.update!("Post", &%{&1 | fields: Map.put(&1.fields, "profile", profile)})
+      |> Map.put("Node", %Type{
+        kind: :interface,
+        name: "Node",
+        possible_types: ["User", "Post"],
+        fields: %{
+          "id" => %SchemaField{
+            name: "id",
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+          },
+          "profile" => %SchemaField{
+            name: "profile",
+            type: %TypeRef{kind: :object, name: "Profile"}
+          }
+        }
+      })
+      |> Map.put("Named", %Type{
+        kind: :interface,
+        name: "Named",
+        possible_types: ["User"],
+        fields: %{
+          "id" => %SchemaField{
+            name: "id",
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+          },
+          "name" => %SchemaField{name: "name", type: %TypeRef{kind: :scalar, name: "String"}},
+          "profile" => %SchemaField{
+            name: "profile",
+            type: %TypeRef{kind: :object, name: "Profile"}
+          }
+        }
+      })
+      |> Map.put("Profile", %Type{
+        kind: :object,
+        name: "Profile",
+        fields: %{
+          "bio" => %SchemaField{name: "bio", type: %TypeRef{kind: :scalar, name: "String"}},
+          "avatar" => %SchemaField{name: "avatar", type: %TypeRef{kind: :scalar, name: "String"}}
+        }
+      })
+
+    SchemaHelper.build_schema(types: types)
+  end
+
+  # Timestamped implements Node, so a `... on Node` fragment under a Timestamped
+  # parent selects fields Timestamped itself declares.
+  defp schema_interface_implementing_interface do
+    types =
+      Map.merge(SchemaHelper.default_types(), %{
+        "Query" => %Type{
+          kind: :object,
+          name: "Query",
+          fields: %{
+            "node" => %SchemaField{
+              name: "node",
+              type: %TypeRef{kind: :interface, name: "Timestamped"},
+              args: %{}
+            }
+          }
+        },
+        "Node" => %Type{
+          kind: :interface,
+          name: "Node",
+          possible_types: ["User"],
+          fields: %{
+            "id" => %SchemaField{
+              name: "id",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+            }
+          }
+        },
+        "Timestamped" => %Type{
+          kind: :interface,
+          name: "Timestamped",
+          interfaces: ["Node"],
+          possible_types: ["User"],
+          fields: %{
+            "id" => %SchemaField{
+              name: "id",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
             }
           }
         }
