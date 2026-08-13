@@ -39,7 +39,14 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.SpreadCondition.Search.Result.Search.User,
               TypedGql.Test.AliasedTypename.Search.Result,
               TypedGql.Test.AliasedTypename.Search.Result.Search.User,
-              TypedGql.Test.GhostCondition.Search.Result.Search.User
+              TypedGql.Test.GhostCondition.Search.Result.Search.User,
+              TypedGql.Test.NestedAbstract.Search.Result.Search.Post,
+              TypedGql.Test.NestedAbstract.Search.Result.Search.User,
+              TypedGql.Test.AbstractSpread.Search.Result.Search.User,
+              TypedGql.Test.SharedSpread.Search.Result,
+              TypedGql.Test.SharedSpread.Search.Result.Search,
+              TypedGql.Test.TwoTypenames.Search.Result,
+              TypedGql.Test.TwoTypenames.Search.Result.Search.User
             ]}
 
   alias TypedGql.Schema.Field, as: SchemaField
@@ -654,6 +661,84 @@ defmodule TypedGql.TypeGeneratorTest do
       # `email` belongs to the User variant only; Post keeps just the shared field.
       assert :email in user_fields
       refute :email in post_fields
+    end
+
+    test "a fragment nested inside an abstract one reaches the concrete member" do
+      schema = schema_with_union_of_nodes()
+
+      operation =
+        parse!("query { search { __typename ... on Node { id ... on User { email } } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.NestedAbstract,
+        function_name: :search
+      )
+
+      user_fields = TypedGql.Test.NestedAbstract.Search.Result.Search.User.__schema__(:fields)
+      post_fields = TypedGql.Test.NestedAbstract.Search.Result.Search.Post.__schema__(:fields)
+
+      assert :id in user_fields
+      assert :email in user_fields
+      assert :id in post_fields
+      refute :email in post_fields
+    end
+
+    test "a named abstract fragment spread carrying inline fragments still resolves" do
+      schema = schema_with_union()
+
+      {:ok, %{definitions: [fragment]}} =
+        TypedGql.Parser.parse(
+          "fragment SearchFields on SearchResult { __typename ... on User { email } }"
+        )
+
+      operation = parse!("query { search { ...SearchFields } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.AbstractSpread,
+        function_name: :search,
+        fragments: %{"SearchFields" => %{source: "", fragment: fragment, result_module: nil}}
+      )
+
+      user_fields = TypedGql.Test.AbstractSpread.Search.Result.Search.User.__schema__(:fields)
+      assert :__typename in user_fields
+      assert :email in user_fields
+    end
+
+    test "an interface spread of shared fields alone stays a plain object" do
+      schema = schema_with_union_of_nodes()
+
+      {:ok, %{definitions: [fragment]}} =
+        TypedGql.Parser.parse("fragment ResultFields on SearchResult { __typename }")
+
+      operation = parse!("query { search { ...ResultFields } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.SharedSpread,
+        function_name: :search,
+        fragments: %{"ResultFields" => %{source: "", fragment: fragment, result_module: nil}}
+      )
+
+      # A plain embed, not a __typename-dispatched union: a shared-only selection
+      # needs no variants, and forcing dispatch would demand a discriminator the
+      # response has no reason to carry.
+      assert :search in TypedGql.Test.SharedSpread.Search.Result.__schema__(:embeds)
+
+      assert :__typename in TypedGql.Test.SharedSpread.Search.Result.Search.__schema__(:fields)
+    end
+
+    test "an unaliased __typename wins over an aliased one as the dispatch key" do
+      schema = schema_with_union()
+      operation = parse!("query { search { kind: __typename __typename ... on User { email } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.TwoTypenames,
+        function_name: :search
+      )
+
+      json = %{"search" => [%{"__typename" => "User", "kind" => "User", "email" => "a@b.com"}]}
+      result = TypedGql.ResponseDecoder.decode!(TypedGql.Test.TwoTypenames.Search.Result, json)
+
+      assert [%{__struct__: TypedGql.Test.TwoTypenames.Search.Result.Search.User}] = result.search
     end
 
     # Rules.Fragments rejects this before generation runs, but generate/3 is

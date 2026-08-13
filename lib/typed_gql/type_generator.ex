@@ -199,15 +199,16 @@ defmodule TypedGql.TypeGenerator do
       %QueryField{} = field ->
         [normalize_field(field, parent_type_name, context)]
 
-      # An inline fragment without a type condition is valid GraphQL. On a
-      # union/interface parent its members are shared across every variant, not
-      # a variant of their own, so hoist them (directives propagated) into the
-      # shared selection. This also keeps resolve_union/4 free of type-condition
-      # -less fragments, which it cannot turn into a variant module.
+      # A fragment with no type condition, or one naming the parent itself
+      # (`fragment NodeFields on Node` spread under a Node), selects fields every
+      # member shares. Hoisting it (directives propagated) keeps it out of
+      # resolve_union/4 — which would otherwise turn a plain shared selection
+      # into a __typename-dispatched union.
       %InlineFragment{type_condition: nil} = fragment ->
-        fragment.selection_set.selections
-        |> prepend_directives(fragment.directives)
-        |> normalize(parent_type_name, context)
+        hoist_shared(fragment, parent_type_name, context)
+
+      %InlineFragment{type_condition: %{name: ^parent_type_name}} = fragment ->
+        hoist_shared(fragment, parent_type_name, context)
 
       %InlineFragment{} = fragment ->
         normalized =
@@ -217,6 +218,12 @@ defmodule TypedGql.TypeGenerator do
 
         [%{fragment | selection_set: %{fragment.selection_set | selections: normalized}}]
     end)
+  end
+
+  defp hoist_shared(fragment, parent_type_name, context) do
+    fragment.selection_set.selections
+    |> prepend_directives(fragment.directives)
+    |> normalize(parent_type_name, context)
   end
 
   # Normalizes a field's own sub-selection set under its child type. A field's
@@ -397,14 +404,14 @@ defmodule TypedGql.TypeGenerator do
   # carrying the shared fields alone.
   defp resolve_union(shared_fields, inline_fragments, parent_type_name, parent_module, context) do
     shared_fields = ensure_typename(shared_fields)
-    typename_key = shared_fields |> Enum.find(&(&1.name == "__typename")) |> field_name()
+    typename_key = typename_key(shared_fields)
     {:ok, parent} = Schema.get_type(context.schema, parent_type_name)
     typename_values = parent.possible_types
 
     {typename_to_module, variants} =
       Enum.reduce(typename_values, {%{}, []}, fn type_name, {type_map, variants_acc} ->
         merged_selections =
-          shared_fields ++ fragment_selections_for(inline_fragments, type_name, context)
+          shared_fields ++ member_selections(inline_fragments, type_name, context)
 
         # Member type names from schema, bounded set
         # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
@@ -432,22 +439,43 @@ defmodule TypedGql.TypeGenerator do
     }
   end
 
-  # A fragment contributes to a member when its condition names that member, or
-  # is an abstract type the member belongs to (`... on Node` on a union of Nodes).
-  defp fragment_selections_for(inline_fragments, type_name, context) do
-    Enum.flat_map(inline_fragments, fn fragment ->
-      condition = fragment.type_condition.name
+  # Flattens the fragments that apply to `type_name` down to plain fields.
+  # A fragment applies when its condition names the member, or is an abstract
+  # type the member belongs to (`... on Node` over a union of Nodes). Recursing
+  # is what handles a fragment nested inside an abstract one, whose members were
+  # normalized against the abstract type and so are still inline fragments —
+  # resolve_object/5 only accepts fields.
+  defp member_selections(selections, type_name, context) do
+    Enum.flat_map(selections, fn
+      %QueryField{} = field ->
+        [field]
 
-      if condition == type_name or member_of?(context.schema, condition, type_name),
-        do: fragment.selection_set.selections,
-        else: []
+      %InlineFragment{} = fragment ->
+        if applies_to?(context.schema, fragment.type_condition.name, type_name),
+          do: member_selections(fragment.selection_set.selections, type_name, context),
+          else: []
     end)
   end
 
-  defp member_of?(schema, abstract_type_name, type_name) do
-    case Schema.get_type(schema, abstract_type_name) do
+  defp applies_to?(_schema, type_name, type_name), do: true
+
+  defp applies_to?(schema, condition, type_name) do
+    case Schema.get_type(schema, condition) do
       {:ok, %{possible_types: possible_types}} -> type_name in possible_types
       :error -> false
+    end
+  end
+
+  # Dispatch reads one key out of the raw response before any variant is known,
+  # so it has to be a selection every member shares. Prefer an unaliased
+  # __typename: an aliased one can also carry @skip, and the response then has
+  # neither key.
+  defp typename_key(shared_fields) do
+    typename_fields = Enum.filter(shared_fields, &(&1.name == "__typename"))
+
+    case Enum.find(typename_fields, &is_nil(&1.alias)) do
+      nil -> typename_fields |> hd() |> field_name()
+      field -> field_name(field)
     end
   end
 
