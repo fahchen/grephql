@@ -50,6 +50,7 @@ defmodule TypedGql.TypeGenerator do
   alias TypedGql.Language.Field, as: QueryField
   alias TypedGql.Language.FragmentSpread
   alias TypedGql.Language.InlineFragment
+  alias TypedGql.Language.ObjectValue
   alias TypedGql.Schema
   alias TypedGql.TypeMapper
   alias TypedGql.Validator.Helpers
@@ -423,6 +424,11 @@ defmodule TypedGql.TypeGenerator do
 
   defp comparable_arguments(arguments) do
     arguments |> Enum.sort_by(& &1.name) |> without_locations()
+  end
+
+  # Input object fields are unordered per the spec, unlike list values.
+  defp without_locations(%ObjectValue{fields: fields}) do
+    {ObjectValue, %{fields: fields |> Enum.sort_by(& &1.name) |> without_locations()}}
   end
 
   defp without_locations(%struct{} = node) do

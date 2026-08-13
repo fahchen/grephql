@@ -59,7 +59,8 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.PartialInterface.Search.Result.Search.User,
               TypedGql.Test.TransitiveInterface.GetNode.Result,
               TypedGql.Test.TransitiveInterface.GetNode.Result.Node,
-              TypedGql.Test.EqualArgs.Search.Result
+              TypedGql.Test.EqualArgs.Search.Result,
+              TypedGql.Test.EqualObjectArgs.Search.Result
             ]}
 
   alias TypedGql.Schema.Field, as: SchemaField
@@ -943,6 +944,24 @@ defmodule TypedGql.TypeGeneratorTest do
       )
 
       assert :search in TypedGql.Test.EqualArgs.Search.Result.__schema__(:embeds)
+    end
+
+    test "input object arguments compare by field, not by written order" do
+      schema = schema_with_two_interfaces()
+
+      # Input object fields are unordered per the spec, so these are one
+      # selection, not a conflict.
+      operation =
+        parse!(
+          ~s|query { search(where: {a: 1, b: 2}) { __typename } search(where: {b: 2, a: 1}) { __typename } }|
+        )
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.EqualObjectArgs,
+        function_name: :search
+      )
+
+      assert :search in TypedGql.Test.EqualObjectArgs.Search.Result.__schema__(:embeds)
     end
 
     test "an interface that covers only some members still produces variants" do
