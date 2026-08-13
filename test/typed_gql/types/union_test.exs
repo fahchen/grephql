@@ -7,10 +7,11 @@ defmodule TypedGql.Types.UnionTest do
   alias TypedGql.Types.Union
 
   setup_all do
-    Union.define(SearchUnion, %{
-      "User" => User,
-      "Post" => Post
-    })
+    Union.define(
+      SearchUnion,
+      %{"User" => User, "Post" => Post},
+      "__typename"
+    )
 
     :ok
   end

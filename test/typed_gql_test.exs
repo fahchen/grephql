@@ -198,6 +198,14 @@ defmodule TypedGqlTest do
 
     test "execute/1 uses the default variables and options" do
       Req.Test.stub(StubbedClient, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Jason.decode!(body)
+
+        # execute/1 defaults variables to %{}, and the query is anonymous so no
+        # operationName is sent.
+        assert request["variables"] == %{}
+        refute Map.has_key?(request, "operationName")
+
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(200, Jason.encode!(%{"errors" => [%{"message" => "boom"}]}))

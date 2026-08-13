@@ -383,7 +383,19 @@ defmodule TypedGql.ParserTest do
 
     # The validator walks (Traversal, Variables, Fragments, Directives) and
     # Macros.__resolve_fragments__/2 match these three shapes with no fallback
-    # clause. A fourth selection kind would have to be handled in each of them.
+    # clause, so a fourth production would have to be handled in each of them.
+    # Reading the grammar is what pins that down; the parse below only shows the
+    # three known forms round-trip.
+    test "the grammar declares exactly three Selection productions" do
+      productions =
+        "src/typed_gql_parser.yrl"
+        |> File.read!()
+        |> then(&Regex.scan(~r/^Selection -> (\w+)/m, &1, capture: :all_but_first))
+        |> List.flatten()
+
+      assert productions == ["Field", "FragmentSpread", "InlineFragment"]
+    end
+
     test "a selection is only ever a Field, FragmentSpread or InlineFragment" do
       assert {:ok, %Language.Document{definitions: [op]}} =
                Parser.parse("query { a b { c } ...F ... on User { d } ... { e } }")

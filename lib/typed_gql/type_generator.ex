@@ -225,24 +225,34 @@ defmodule TypedGql.TypeGenerator do
   defp normalize_field(%QueryField{selection_set: nil} = field, _parent_type_name, _context),
     do: field
 
-  # child_type is nil only for a field the schema does not declare, which the
-  # validator rejects before generation runs — see defgql_test's "raises
-  # CompileError on validation error". normalize/3 tolerates a nil parent anyway
-  # (Schema.get_type/2 returns :error for it), so there is nothing to guard.
+  # child_type is nil only for a field the schema does not declare or whose type
+  # it does not define; Rules.Fields rejects both before generation runs. Callers
+  # of generate/3 that skip validation get a crash further down either way — the
+  # old nil guard here only moved where it happened.
   defp normalize_field(%QueryField{} = field, parent_type_name, context) do
     child_type = Helpers.resolve_field_type(context.schema, parent_type_name, field.name)
     normalized = normalize(field.selection_set.selections, child_type, context)
     %{field | selection_set: %{field.selection_set | selections: normalized}}
   end
 
+  # A spread becomes an inline fragment rather than being spliced in: its type
+  # condition decides which concrete type the members belong to, which matters
+  # under a union or interface parent. Under an object parent the inline
+  # fragment is flattened right back, so nothing changes there.
   defp expand_spreads(selections, context) do
     Enum.flat_map(selections, fn
       %FragmentSpread{name: name, directives: directives} ->
         case Map.fetch(context.fragments, name) do
           {:ok, entry} ->
-            entry.fragment.selection_set.selections
-            |> expand_spreads(context)
-            |> prepend_directives(directives)
+            expanded = expand_spreads(entry.fragment.selection_set.selections, context)
+
+            [
+              %InlineFragment{
+                type_condition: entry.fragment.type_condition,
+                directives: directives,
+                selection_set: %{entry.fragment.selection_set | selections: expanded}
+              }
+            ]
 
           :error ->
             []
@@ -281,7 +291,7 @@ defmodule TypedGql.TypeGenerator do
           resolve_abstract_fields(shared_fields, parent_type_name, parent_module, context)
 
         _fragments ->
-          resolve_union(shared_fields, inline_fragments, parent_module, context)
+          resolve_union(shared_fields, inline_fragments, parent_type_name, parent_module, context)
       end
     else
       resolve_object(selections, parent_type_name, parent_module, context)
@@ -380,25 +390,32 @@ defmodule TypedGql.TypeGenerator do
     {gen_field, child}
   end
 
-  defp resolve_union(shared_fields, inline_fragments, parent_module, context) do
+  # A variant per possible type of the abstract parent, not per inline fragment:
+  # the server may return any member, including one no fragment selected, and it
+  # answers with a concrete typename even when the fragment condition was itself
+  # abstract (`... on Node`). Members without a matching fragment still decode,
+  # carrying the shared fields alone.
+  defp resolve_union(shared_fields, inline_fragments, parent_type_name, parent_module, context) do
     shared_fields = ensure_typename(shared_fields)
-    typename_values = Enum.map(inline_fragments, & &1.type_condition.name)
+    typename_key = shared_fields |> Enum.find(&(&1.name == "__typename")) |> field_name()
+    {:ok, parent} = Schema.get_type(context.schema, parent_type_name)
+    typename_values = parent.possible_types
 
     {typename_to_module, variants} =
-      Enum.reduce(inline_fragments, {%{}, []}, fn fragment, {type_map, variants_acc} ->
-        type_name = fragment.type_condition.name
-        merged_selections = shared_fields ++ fragment.selection_set.selections
+      Enum.reduce(typename_values, {%{}, []}, fn type_name, {type_map, variants_acc} ->
+        merged_selections =
+          shared_fields ++ fragment_selections_for(inline_fragments, type_name, context)
 
-        # Fragment type names from schema, bounded set
+        # Member type names from schema, bounded set
         # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-        fragment_module = Module.concat(parent_module, GeneratorHelpers.camelize(type_name))
+        variant_module = Module.concat(parent_module, GeneratorHelpers.camelize(type_name))
 
         variant =
-          resolve_object(merged_selections, type_name, fragment_module, context,
+          resolve_object(merged_selections, type_name, variant_module, context,
             typename_values: typename_values
           )
 
-        {Map.put(type_map, type_name, fragment_module), [variant | variants_acc]}
+        {Map.put(type_map, type_name, variant_module), [variant | variants_acc]}
       end)
 
     # Union type module names derived from schema at compile time
@@ -409,9 +426,29 @@ defmodule TypedGql.TypeGenerator do
       kind: :union,
       module: parent_module,
       union_module: union_module,
+      typename_key: typename_key,
       typename_to_module: typename_to_module,
       children: :lists.reverse(variants)
     }
+  end
+
+  # A fragment contributes to a member when its condition names that member, or
+  # is an abstract type the member belongs to (`... on Node` on a union of Nodes).
+  defp fragment_selections_for(inline_fragments, type_name, context) do
+    Enum.flat_map(inline_fragments, fn fragment ->
+      condition = fragment.type_condition.name
+
+      if condition == type_name or member_of?(context.schema, condition, type_name),
+        do: fragment.selection_set.selections,
+        else: []
+    end)
+  end
+
+  defp member_of?(schema, abstract_type_name, type_name) do
+    case Schema.get_type(schema, abstract_type_name) do
+      {:ok, %{possible_types: possible_types}} -> type_name in possible_types
+      :error -> false
+    end
   end
 
   # __typename is a meta-field available on all object types per the GraphQL spec,
@@ -461,7 +498,7 @@ defmodule TypedGql.TypeGenerator do
   # Ecto's __field__ validates parameterized type modules exist at schema
   # compile time, before lowered embedded-schema modules are created.
   defp create_union_modules(%GenSchema{kind: :union} = node) do
-    TypedGql.Types.Union.define(node.union_module, node.typename_to_module)
+    TypedGql.Types.Union.define(node.union_module, node.typename_to_module, node.typename_key)
     Enum.each(node.children, &create_union_modules/1)
   end
 

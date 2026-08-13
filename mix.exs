@@ -127,7 +127,7 @@ defmodule TypedGql.MixProject do
         "format",
         "credo --strict",
         "dialyzer",
-        "test"
+        "test --cover"
       ]
     ]
   end

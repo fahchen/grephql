@@ -54,7 +54,11 @@ defmodule TypedGql.ClientModuleTest do
     end
 
     test "an inline JSON source registers no external resource" do
-      assert InlineJsonClient.__typed_gql_config__() == {:typed_gql, []}
+      assert external_resources(InlineJsonClient) == []
+      # Contrast: a file source does register one, so the assertion above is not
+      # merely observing that nothing ever registers.
+      assert [path] = external_resources(TypedGql.ClientModuleTest.FileClient)
+      assert Path.basename(path) == "minimal.json"
     end
   end
 
@@ -127,5 +131,13 @@ defmodule TypedGql.ClientModuleTest do
       assert result.user.display_name == "Alice"
       refute Map.has_key?(result.user, :name)
     end
+  end
+
+  defp external_resources(module) do
+    attributes = module.__info__(:attributes)
+
+    attributes
+    |> Keyword.get_values(:external_resource)
+    |> List.flatten()
   end
 end

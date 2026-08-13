@@ -50,9 +50,20 @@ defmodule TypedGql.Validator.Rules.Fields do
 
   defp check_sub_selections(ctx, field, type_ref) do
     named_type = Helpers.unwrap_type(type_ref)
-    kind = resolve_type_kind(ctx.schema, named_type)
 
-    check_kind(ctx, field, kind, has_selections?(field.selection_set))
+    case resolve_type_kind(ctx.schema, named_type) do
+      # The schema declares the field but not the type it returns. Generation
+      # would dereference the missing type and crash, so stop here instead.
+      nil ->
+        Context.add_error(
+          ctx,
+          "type \"#{named_type.name}\" of field \"#{field.name}\" is not defined in the schema",
+          field
+        )
+
+      kind ->
+        check_kind(ctx, field, kind, has_selections?(field.selection_set))
+    end
   end
 
   defp check_kind(ctx, field, :scalar, true) do
@@ -88,10 +99,6 @@ defmodule TypedGql.Validator.Rules.Fields do
        when composite in [:object, :interface, :union] do
     ctx
   end
-
-  # Dangling type reference — nothing to check against, and the schema itself is
-  # already suspect; other rules report what they can.
-  defp check_kind(ctx, _field, nil, _has_selections), do: ctx
 
   defp check_kind(ctx, field, :input_object, _has_selections) do
     Context.add_error(

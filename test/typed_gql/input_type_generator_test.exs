@@ -440,6 +440,7 @@ defmodule TypedGql.InputTypeGeneratorTest do
         )
 
       assert :when in variables_module.__schema__(:fields)
+      assert variables_module.__schema__(:type, :when) == TypedGql.Types.DateTime
     end
   end
 

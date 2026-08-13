@@ -9,7 +9,7 @@ defmodule TypedGql.Generation.Schema do
       (child nodes for embedded objects). Lowers to one
       `typed_embedded_schema` module.
     * union node — `kind: :union`, carries `union_module`,
-      `typename_to_module`, and `children` (one object node per concrete
+      `typename_to_module`, `typename_key`, and `children` (one object node per concrete
       type). Lowers to the concrete-type modules; the parameterized
       `TypedGql.Types.Union` type module is created eagerly during resolve
       because Ecto validates parameterized type modules exist at schema
@@ -32,6 +32,7 @@ defmodule TypedGql.Generation.Schema do
     field :children, [t()], default: []
     field :union_module, module()
     field :typename_to_module, %{String.t() => module()}, default: %{}
+    field :typename_key, String.t(), default: "__typename"
   end
 
   @doc """

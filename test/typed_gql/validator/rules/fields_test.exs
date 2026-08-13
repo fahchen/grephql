@@ -201,7 +201,7 @@ defmodule TypedGql.Validator.Rules.FieldsTest do
   end
 
   describe "dangling type reference" do
-    test "field whose type is absent from the schema is skipped" do
+    test "field whose type is absent from the schema is reported" do
       types =
         Map.merge(SchemaHelper.default_types(), %{
           "Query" => %Type{
@@ -217,7 +217,8 @@ defmodule TypedGql.Validator.Rules.FieldsTest do
           }
         })
 
-      assert errors(validate("query { user }", types: types)) == []
+      assert [error] = errors(validate("query { user }", types: types))
+      assert error.message == ~s(type "Ghost" of field "user" is not defined in the schema)
     end
   end
 

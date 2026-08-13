@@ -30,7 +30,16 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.Union.Search.Result.Search.Post,
               TypedGql.Test.Union.Search.Result.Search.User,
               TypedGql.Test.UnionField.Search.Result.Result,
-              TypedGql.Test.UnionSharedOnly.Search.Result.Search
+              TypedGql.Test.UnionSharedOnly.Search.Result.Search,
+              TypedGql.Test.PartialUnion.Search.Result,
+              TypedGql.Test.PartialUnion.Search.Result.Search.Post,
+              TypedGql.Test.AbstractCondition.Search.Result,
+              TypedGql.Test.AbstractCondition.Search.Result.Search.Post,
+              TypedGql.Test.SpreadCondition.Search.Result.Search.Post,
+              TypedGql.Test.SpreadCondition.Search.Result.Search.User,
+              TypedGql.Test.AliasedTypename.Search.Result,
+              TypedGql.Test.AliasedTypename.Search.Result.Search.User,
+              TypedGql.Test.GhostCondition.Search.Result.Search.User
             ]}
 
   alias TypedGql.Schema.Field, as: SchemaField
@@ -584,6 +593,101 @@ defmodule TypedGql.TypeGeneratorTest do
       assert %{__struct__: TypedGql.Test.SingleUnion.GetNode.Result.Node.User} = result.node
       assert result.node.name == "Alice"
     end
+
+    test "a member with no inline fragment still decodes, carrying the shared fields" do
+      schema = schema_with_union()
+      operation = parse!("query { search { __typename id ... on User { email } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.PartialUnion,
+        function_name: :search
+      )
+
+      json = %{"search" => [%{"__typename" => "Post", "id" => "7"}]}
+      result = TypedGql.ResponseDecoder.decode!(TypedGql.Test.PartialUnion.Search.Result, json)
+
+      assert [%{__struct__: TypedGql.Test.PartialUnion.Search.Result.Search.Post} = post] =
+               result.search
+
+      assert post.id == "7"
+    end
+
+    test "an abstract type condition applies to every member it covers" do
+      schema = schema_with_union_of_nodes()
+      operation = parse!("query { search { __typename ... on Node { id } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.AbstractCondition,
+        function_name: :search
+      )
+
+      json = %{"search" => [%{"__typename" => "Post", "id" => "7"}]}
+
+      result =
+        TypedGql.ResponseDecoder.decode!(TypedGql.Test.AbstractCondition.Search.Result, json)
+
+      assert [%{__struct__: TypedGql.Test.AbstractCondition.Search.Result.Search.Post} = post] =
+               result.search
+
+      assert post.id == "7"
+    end
+
+    test "a named fragment spread keeps its type condition" do
+      schema = schema_with_union()
+
+      {:ok, %{definitions: [fragment]}} =
+        TypedGql.Parser.parse("fragment UserFields on User { email }")
+
+      operation = parse!("query { search { __typename ...UserFields } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.SpreadCondition,
+        function_name: :search,
+        fragments: %{
+          "UserFields" => %{source: "", fragment: fragment, result_module: nil}
+        }
+      )
+
+      user_fields = TypedGql.Test.SpreadCondition.Search.Result.Search.User.__schema__(:fields)
+      post_fields = TypedGql.Test.SpreadCondition.Search.Result.Search.Post.__schema__(:fields)
+
+      # `email` belongs to the User variant only; Post keeps just the shared field.
+      assert :email in user_fields
+      refute :email in post_fields
+    end
+
+    # Rules.Fragments rejects this before generation runs, but generate/3 is
+    # public and does not validate, so it degrades instead of crashing.
+    test "a type condition the schema does not declare contributes to no member" do
+      schema = schema_with_union()
+      operation = parse!("query { search { __typename ... on Ghost { id } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.GhostCondition,
+        function_name: :search
+      )
+
+      fields = TypedGql.Test.GhostCondition.Search.Result.Search.User.__schema__(:fields)
+      assert fields == [:__typename]
+    end
+
+    test "an aliased __typename still drives union dispatch" do
+      schema = schema_with_union()
+      operation = parse!("query { search { kind: __typename ... on User { email } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.AliasedTypename,
+        function_name: :search
+      )
+
+      json = %{"search" => [%{"kind" => "User", "email" => "a@b.com"}]}
+      result = TypedGql.ResponseDecoder.decode!(TypedGql.Test.AliasedTypename.Search.Result, json)
+
+      assert [%{__struct__: TypedGql.Test.AliasedTypename.Search.Result.Search.User} = user] =
+               result.search
+
+      assert user.email == "a@b.com"
+    end
   end
 
   describe "generate_fragment/4" do
@@ -781,6 +885,23 @@ defmodule TypedGql.TypeGeneratorTest do
               name: "title",
               type: %TypeRef{kind: :scalar, name: "String"}
             }
+          }
+        }
+      })
+
+    SchemaHelper.build_schema(types: types)
+  end
+
+  defp schema_with_union_of_nodes do
+    types =
+      Map.put(schema_with_union().types, "Node", %Type{
+        kind: :interface,
+        name: "Node",
+        possible_types: ["User", "Post"],
+        fields: %{
+          "id" => %SchemaField{
+            name: "id",
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
           }
         }
       })

@@ -168,6 +168,20 @@ defmodule TypedGql.Validator.Rules.DirectivesTest do
         assert errors(validate(query, directives: directives)) == []
       end
     end
+
+    # "no errors" alone would also hold if the parser dropped the directive, so
+    # prove the rule really inspected it by giving it a badly typed argument.
+    test "arguments of a variable definition directive are checked" do
+      directives = [@variable_definition_directive | default_directives()]
+
+      for query <- [
+            ~s|query Q($id: ID @lower(by: "one")) { user(id: "1") { name } }|,
+            ~s|query Q($id: ID = "1" @lower(by: "one")) { user(id: "1") { name } }|
+          ] do
+        assert [error] = errors(validate(query, directives: directives))
+        assert error.message =~ ~s(type mismatch for argument "by" on directive "@lower")
+      end
+    end
   end
 
   describe "directive location labels" do
