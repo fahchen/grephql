@@ -52,6 +52,12 @@ defmodule TypedGql.Validator.Rules.DirectivesTest do
     }
   }
 
+  @variable_definition_directive %SchemaDirective{
+    name: "lower",
+    locations: [:variable_definition],
+    args: %{"by" => %InputValue{name: "by", type: %TypeRef{kind: :scalar, name: "Int"}}}
+  }
+
   describe "directive existence" do
     test "known directive passes" do
       ctx = validate(~s|query { user(id: "1") { name @skip(if: true) } }|)
@@ -134,6 +140,31 @@ defmodule TypedGql.Validator.Rules.DirectivesTest do
       location_errors = Enum.filter(errors(ctx), &(&1.message =~ "not allowed"))
       assert [error] = location_errors
       assert error.message =~ "not allowed on fragment definitions"
+    end
+
+    # Both spellings must reach the rule — upstream drops the directives on the
+    # one without a default value; see BDR-0008 G3.
+    test "directive on a variable definition shows the variable definition label" do
+      for query <- [
+            ~s|query Q($id: ID @skip(if: true)) { user(id: "1") { name } }|,
+            ~s|query Q($id: ID = "1" @skip(if: true)) { user(id: "1") { name } }|
+          ] do
+        ctx = validate(query)
+        location_errors = Enum.filter(errors(ctx), &(&1.message =~ "not allowed"))
+        assert [error] = location_errors
+        assert error.message =~ "not allowed on variable definitions"
+      end
+    end
+
+    test "directive on a variable definition passes when allowed on VARIABLE_DEFINITION" do
+      directives = [@variable_definition_directive | default_directives()]
+
+      for query <- [
+            ~s|query Q($id: ID @lower(by: 1)) { user(id: "1") { name } }|,
+            ~s|query Q($id: ID = "1" @lower(by: 1)) { user(id: "1") { name } }|
+          ] do
+        assert errors(validate(query, directives: directives)) == []
+      end
     end
   end
 

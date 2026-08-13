@@ -59,7 +59,8 @@ VariableDefinitions -> '(' VariableDefinitionList ')' : '$2'.
 VariableDefinitionList -> VariableDefinition : ['$1'].
 VariableDefinitionList -> VariableDefinition VariableDefinitionList : ['$1'|'$2'].
 VariableDefinition -> Variable ':' Type : build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3'}, extract_child_location('$1')).
-VariableDefinition -> Variable ':' Type DirectivesConst: build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3'}, extract_child_location('$1')).
+% Keeps the directives, like the DefaultValue production below already does.
+VariableDefinition -> Variable ':' Type DirectivesConst: build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3', 'directives' => '$4'}, extract_child_location('$1')).
 VariableDefinition -> Variable ':' Type DefaultValue : build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3', 'default_value' => '$4'}, extract_child_location('$1')).
 VariableDefinition -> Variable ':' Type DefaultValue DirectivesConst : build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3', 'default_value' => '$4', 'directives' => '$5'}, extract_child_location('$1')).
 Variable -> '$' NameWithoutOn : build_ast_node('Variable', #{'name' => extract_binary('$2')}, extract_location('$1')).
@@ -156,7 +157,9 @@ NameWithoutOn -> 'extend' : '$1'.
 NameWithoutOn -> 'directive' : '$1'.
 
 Name -> NameWithoutOn : '$1'.
-Name -> 'on' : extract_binary('$1').
+% Kept as the raw token (not extract_binary/1) so that a name spelled `on`
+% carries a location like every other name.
+Name -> 'on' : '$1'.
 
 Value -> Variable : '$1'.
 Value -> int_value :     build_ast_node('IntValue',     #{'value' => extract_integer('$1')},             extract_location('$1')).
@@ -179,6 +182,8 @@ ValueConst -> EnumValue :     build_ast_node('EnumValue',    #{'value' => extrac
 ValueConst -> ListValueConst :     build_ast_node('ListValue',    #{'values' => '$1'}, extract_child_location('$1')).
 ValueConst -> ObjectValueConst :   build_ast_node('ObjectValue',  #{'fields' => '$1'}, extract_child_location('$1')).
 
+% Passes the token through so both consumers (Value/ValueConst and
+% EnumValueDefinition) can read its location; each extracts the binary itself.
 EnumValue -> Name : '$1'.
 
 ListValueConst -> '[' ']' : [].

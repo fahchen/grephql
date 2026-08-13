@@ -99,6 +99,27 @@ defmodule TypedGql.ParserTest do
                }
              } = var_def
     end
+
+    # Upstream keeps directives only on the default-value production; see
+    # BDR-0008 G3.
+    test "variable definition directives are kept, with or without a default value" do
+      for input <- [
+            "query($limit: Int @lower(by: 1)) { users { name } }",
+            "query($limit: Int = 10 @lower(by: 1)) { users { name } }"
+          ] do
+        assert {:ok, %Language.Document{definitions: [op]}} = Parser.parse(input)
+        [var_def] = op.variable_definitions
+
+        assert [
+                 %Language.Directive{
+                   name: "lower",
+                   arguments: [
+                     %Language.Argument{name: "by", value: %Language.IntValue{value: 1}}
+                   ]
+                 }
+               ] = var_def.directives
+      end
+    end
   end
 
   describe "parse/1 arguments" do
@@ -350,6 +371,15 @@ defmodule TypedGql.ParserTest do
       assert {:error, message} = Parser.parse("\x00")
       assert is_binary(message)
     end
+
+    # The grammar has no empty-selection-set production, so no downstream
+    # consumer (generator, validator rules, traversal) can ever see one.
+    test "an empty selection set is a syntax error" do
+      assert {:error, _message} = Parser.parse("query { }")
+      assert {:error, _message} = Parser.parse("query { user { } }")
+      assert {:error, _message} = Parser.parse("fragment F on User { }")
+      assert {:error, _message} = Parser.parse("query { ... on User { } }")
+    end
   end
 
   describe "parse/1 location tracking" do
@@ -358,5 +388,119 @@ defmodule TypedGql.ParserTest do
 
       assert %{line: 1, column: _} = op.loc
     end
+
+    test "an enum value points at its own token, not the argument" do
+      assert [%Language.EnumValue{value: "GUEST", loc: %{line: 1, column: 27}}] =
+               enum_values("query { usersByRole(role: GUEST) { name } }")
+    end
+
+    test "each enum value in a list keeps its own location" do
+      assert [
+               %{value: "ADMIN", loc: %{line: 1, column: 30}},
+               %{value: "GUEST", loc: %{line: 1, column: 37}}
+             ] = enum_values("query { usersByRoles(roles: [ADMIN, GUEST]) { name } }")
+    end
+
+    test "an enum value nested in an input object is located" do
+      assert [%{value: "GUEST", loc: %{line: 1, column: 37}}] =
+               enum_values(~s|mutation { createUser(input: {role: GUEST}) { id } }|)
+    end
+
+    test "an enum value on a later line keeps its line" do
+      query = """
+      query {
+        usersByRole(
+          role: GUEST
+        ) { name }
+      }
+      """
+
+      assert [%{loc: %{line: 3, column: 11}}] = enum_values(query)
+    end
+
+    test "an SDL enum value definition is located" do
+      assert {:ok, %Language.Document{definitions: [enum]}} =
+               Parser.parse("enum Role { ADMIN GUEST }")
+
+      assert [
+               %Language.EnumValueDefinition{value: "ADMIN", loc: %{line: 1, column: 13}},
+               %Language.EnumValueDefinition{value: "GUEST", loc: %{line: 1, column: 19}}
+             ] = enum.values
+    end
+
+    # `on` is a keyword to the lexer, so it reaches the grammar as a different
+    # token shape than every other name.
+    test "a name spelled `on` is located like any other name" do
+      assert {:ok, %Language.Document{definitions: [op]}} = Parser.parse("query { on { x } }")
+
+      assert [%Language.Field{name: "on", loc: %{line: 1, column: 9}}] =
+               op.selection_set.selections
+
+      assert [%Language.EnumValue{value: "on", loc: %{line: 1, column: 17}}] =
+               enum_values("query { f(role: on) { x } }")
+    end
+
+    test "`ON` is an ordinary name, not the fragment keyword" do
+      assert {:ok, %Language.Document{definitions: [op]}} = Parser.parse("query { ON { x } }")
+
+      assert [%Language.Field{name: "ON", loc: %{line: 1, column: 9}}] =
+               op.selection_set.selections
+
+      assert [%Language.EnumValue{value: "ON", loc: %{line: 1, column: 17}}] =
+               enum_values("query { f(role: ON) { x } }")
+
+      assert {:ok, %Language.Document{definitions: [%Language.Fragment{name: "ON"}]}} =
+               Parser.parse("fragment ON on User { name }")
+    end
   end
+
+  # https://spec.graphql.org/draft/#sec-Appendix-Grammar-Summary.Source-Text —
+  # some positions take Value[Const], where a variable is not a valid value.
+  # The grammar rejects them outright, so no validator rule is needed.
+  describe "parse/1 constant-only positions" do
+    test "a variable definition's default value cannot be a variable" do
+      assert {:error, _message} = Parser.parse(~s|query Q($size: Int = $var) { user { name } }|)
+    end
+
+    test "a constant list or input object cannot contain a variable" do
+      assert {:error, _message} =
+               Parser.parse(~s|query Q($size: [Int] = [$var]) { user { name } }|)
+
+      assert {:error, _message} = Parser.parse(~s|query Q($p: P = {x: $var}) { user { name } }|)
+    end
+
+    test "a variable definition's directive arguments cannot be variables" do
+      assert {:error, _message} =
+               Parser.parse(~s|query Q($size: Int @feature(name: $n)) { user { name } }|)
+
+      assert {:error, _message} =
+               Parser.parse(~s|query Q($size: Int = 1 @feature(name: $n)) { user { name } }|)
+    end
+
+    test "SDL directive arguments cannot be variables" do
+      assert {:error, _message} = Parser.parse(~s|scalar Sweet @feature(name: $name)|)
+      assert {:error, _message} = Parser.parse(~s|type Comment @feature(name: $name) { id: ID }|)
+    end
+
+    test "field arguments still accept variables" do
+      assert {:ok, %Language.Document{}} =
+               Parser.parse(~s|query Q($id: ID!) { user(id: $id) { name } }|)
+    end
+  end
+
+  defp enum_values(query) do
+    {:ok, document} = Parser.parse(query)
+    collect_enum_values(document)
+  end
+
+  defp collect_enum_values(%Language.EnumValue{} = node), do: [node]
+
+  defp collect_enum_values(%_struct{} = node) do
+    node |> Map.from_struct() |> Map.values() |> collect_enum_values()
+  end
+
+  defp collect_enum_values(values) when is_list(values),
+    do: Enum.flat_map(values, &collect_enum_values/1)
+
+  defp collect_enum_values(_other), do: []
 end
