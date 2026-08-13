@@ -155,6 +155,9 @@ NameWithoutOn -> 'enum' : '$1'.
 NameWithoutOn -> 'input' : '$1'.
 NameWithoutOn -> 'extend' : '$1'.
 NameWithoutOn -> 'directive' : '$1'.
+% GraphQL keywords are contextual: `repeatable` is only a keyword inside a
+% directive definition, and is a legal name everywhere else.
+NameWithoutOn -> 'repeatable' : '$1'.
 
 Name -> NameWithoutOn : '$1'.
 % Kept as the raw token (not extract_binary/1) so that a name spelled `on`
@@ -326,6 +329,8 @@ UnionTypeDefinition -> 'union' Name DirectivesConst '=' UnionMembers :
 UnionMembers -> NamedType : ['$1'].
 UnionMembers -> NamedType '|' UnionMembers : ['$1'|'$3'].
 UnionMembers -> '|' NamedType '|' UnionMembers : ['$2'|'$4'].
+% A leading pipe is permitted on a one-entry list too.
+UnionMembers -> '|' NamedType : ['$2'].
 
 ScalarTypeDefinition -> 'scalar' Name : build_ast_node('ScalarTypeDefinition', #{'name' => extract_binary('$2')}, extract_location('$2')).
 ScalarTypeDefinition -> 'scalar' Name DirectivesConst : build_ast_node('ScalarTypeDefinition', #{'name' => extract_binary('$2'), 'directives' => '$3'}, extract_location('$2')).
@@ -348,6 +353,8 @@ EnumValueDefinitionList -> DescriptionDefinition EnumValueDefinition EnumValueDe
 DirectiveDefinitionLocations -> Name : [extract_binary('$1')].
 DirectiveDefinitionLocations -> Name '|' DirectiveDefinitionLocations : [extract_binary('$1')|'$3'].
 DirectiveDefinitionLocations -> '|' Name '|' DirectiveDefinitionLocations : [extract_binary('$2')|'$4'].
+% A leading pipe is permitted on a one-entry list too.
+DirectiveDefinitionLocations -> '|' Name : [extract_binary('$2')].
 
 EnumValueDefinition -> EnumValue : build_ast_node('EnumValueDefinition', #{'value' => extract_binary('$1')}, extract_location('$1')).
 EnumValueDefinition -> EnumValue DirectivesConst : build_ast_node('EnumValueDefinition', #{'value' => extract_binary('$1'), 'directives' => '$2'}, extract_location('$1')).

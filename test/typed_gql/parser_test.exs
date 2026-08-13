@@ -396,6 +396,23 @@ defmodule TypedGql.ParserTest do
       assert productions == ["Field", "FragmentSpread", "InlineFragment"]
     end
 
+    # `repeatable` is only a keyword inside a directive definition; see BDR-0008 G4.
+    test "a field spelled `repeatable` is an ordinary name" do
+      assert {:ok, %Language.Document{definitions: [op]}} = Parser.parse("query { repeatable }")
+      assert [%Language.Field{name: "repeatable"}] = op.selection_set.selections
+    end
+
+    # See BDR-0008 G5.
+    test "a leading pipe is allowed on a one-entry SDL list" do
+      assert {:ok, %Language.Document{definitions: [union]}} = Parser.parse("union S = | User")
+      assert [%Language.NamedType{name: "User"}] = union.types
+
+      assert {:ok, %Language.Document{definitions: [directive]}} =
+               Parser.parse("directive @d on | FIELD")
+
+      assert directive.locations == [:field]
+    end
+
     test "a selection is only ever a Field, FragmentSpread or InlineFragment" do
       assert {:ok, %Language.Document{definitions: [op]}} =
                Parser.parse("query { a b { c } ...F ... on User { d } ... { e } }")

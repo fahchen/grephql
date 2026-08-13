@@ -44,7 +44,7 @@ Last verified against Absinthe `main` at commit `de0e411f` (2026-07-14, v1.11.0 
 
 ## Reason
 
-Hand-re-applying forces a human to look at each divergence against the new upstream text. Four of the nine hunks exist because a location is silently lost otherwise, and a fifth because a whole field is — failure modes with no compile error and no test failure inside Absinthe itself, since Absinthe reports errors from its own phases while TypedGql reports them at compile time with a line and column. A merge that "succeeds" while quietly reordering an `extract_binary/1` call is exactly the outcome to avoid, and there are only six divergences to re-apply.
+Hand-re-applying forces a human to look at each divergence against the new upstream text. Four of the twelve hunks exist because a location is silently lost otherwise, and a fifth because a whole field is — failure modes with no compile error and no test failure inside Absinthe itself, since Absinthe reports errors from its own phases while TypedGql reports them at compile time with a line and column. A merge that "succeeds" while quietly reordering an `extract_binary/1` call is exactly the outcome to avoid, and there are only eight divergences to re-apply.
 
 ## Rejected Alternatives
 
@@ -159,6 +159,37 @@ The spec's `VariableDefinition : Variable : Type DefaultValue? Directives[Const]
 Both productions arrived together in Absinthe [#1145](https://github.com/absinthe-graphql/absinthe/pull/1145) (`b298824e`), which split `Value[Const]` out of `Value`. Before it, directives without a default value were not parseable at all, so nothing regressed — the new rule was simply written without the key.
 
 Without this hunk `TypedGql.Validator.Rules.Directives` is half-blind: `validate_variable_definition_directives/3` only ever sees a non-empty list for the default-value spelling, so an `@skip` on a variable definition goes unreported in the more common one.
+
+### G4 — `repeatable` is a legal name
+
+```diff
+--- a/src/absinthe_parser.yrl
++++ b/src/typed_gql_parser.yrl
+ NameWithoutOn -> 'directive' : '$1'.
++% GraphQL keywords are contextual: `repeatable` is only a keyword inside a
++% directive definition, and is a legal name everywhere else.
++NameWithoutOn -> 'repeatable' : '$1'.
+```
+
+**Why**: this is an upstream bug, not a feature — expect a sync to drop it, and re-apply this hunk. Same shape as L2: the lexer emits a dedicated token that no `Name` production accepts, so `query { repeatable }` fails to parse against a schema that declares such a field.
+
+`true`, `false` and `null` have the identical problem and are **deliberately not fixed**. Adding them to `NameWithoutOn` puts them in both value and name position, which LALR(1) cannot separate — `{a: null}` is ambiguous between `ObjectField -> Name ':' Value` and a null value — and yecc reports 118 reduce/reduce conflicts. Supporting them needs a grammar restructure, not a divergence hunk.
+
+### G5 — A leading pipe is allowed on a one-entry list
+
+```diff
+--- a/src/absinthe_parser.yrl
++++ b/src/typed_gql_parser.yrl
+ UnionMembers -> '|' NamedType '|' UnionMembers : ['$2'|'$4'].
++% A leading pipe is permitted on a one-entry list too.
++UnionMembers -> '|' NamedType : ['$2'].
+
+ DirectiveDefinitionLocations -> '|' Name '|' DirectiveDefinitionLocations : [extract_binary('$2')|'$4'].
++% A leading pipe is permitted on a one-entry list too.
++DirectiveDefinitionLocations -> '|' Name : [extract_binary('$2')].
+```
+
+**Why**: this is an upstream bug, not a feature — expect a sync to drop it, and re-apply this hunk. The spec's `UnionMemberTypes: = |? NamedType` and `DirectiveLocations: |? DirectiveLocation` allow the pipe before a single entry, but upstream only has the recursive production, so `union Search = | User` and `directive @d on | FIELD` fail at EOF.
 
 ### L1 — Module name and attribution header
 
