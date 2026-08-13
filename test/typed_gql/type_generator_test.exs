@@ -58,7 +58,8 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.PartialInterface.Search.Result.Search.Post,
               TypedGql.Test.PartialInterface.Search.Result.Search.User,
               TypedGql.Test.TransitiveInterface.GetNode.Result,
-              TypedGql.Test.TransitiveInterface.GetNode.Result.Node
+              TypedGql.Test.TransitiveInterface.GetNode.Result.Node,
+              TypedGql.Test.EqualArgs.Search.Result
             ]}
 
   alias TypedGql.Schema.Field, as: SchemaField
@@ -877,7 +878,11 @@ defmodule TypedGql.TypeGeneratorTest do
           TypedGql.Test.MergedConditional
         )
 
-      assert variant_field(tree, "User", :id).resolved.nullable
+      merged = variant_field(tree, "User", :id)
+      assert merged.resolved.nullable
+      # Both conditions survive the merge; keeping only the first would also
+      # leave the field nullable, so count them.
+      assert length(merged.query_field.directives) == 2
     end
 
     test "a no-op @include(if: true) copy makes the merged field unconditional" do
@@ -920,6 +925,24 @@ defmodule TypedGql.TypeGeneratorTest do
           function_name: :get_user
         )
       end
+    end
+
+    test "the same field selected twice with equal arguments merges" do
+      schema = schema_with_two_interfaces()
+
+      # Same arguments, written twice and in different order — identical
+      # selections, not a conflict.
+      operation =
+        parse!(
+          ~s|query { search(first: 1, after: "a") { __typename } search(after: "a", first: 1) { __typename } }|
+        )
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.EqualArgs,
+        function_name: :search
+      )
+
+      assert :search in TypedGql.Test.EqualArgs.Search.Result.__schema__(:embeds)
     end
 
     test "an interface that covers only some members still produces variants" do
@@ -1276,10 +1299,32 @@ defmodule TypedGql.TypeGeneratorTest do
     SchemaHelper.build_schema(types: types)
   end
 
-  # Named covers only one of the union's members, so its fields are not shared.
+  # Content implements Named, but Named covers only one of Content's members, so
+  # its fields cannot be shared with the other.
   defp schema_partial_interface do
     types =
-      Map.put(schema_with_union().types, "Named", %Type{
+      schema_with_union().types
+      |> Map.put("Query", %Type{
+        kind: :object,
+        name: "Query",
+        fields: %{
+          "search" => %SchemaField{
+            name: "search",
+            type: %TypeRef{kind: :list, of_type: %TypeRef{kind: :interface, name: "Content"}},
+            args: %{}
+          }
+        }
+      })
+      |> Map.put("Content", %Type{
+        kind: :interface,
+        name: "Content",
+        interfaces: ["Named"],
+        possible_types: ["User", "Post"],
+        fields: %{
+          "name" => %SchemaField{name: "name", type: %TypeRef{kind: :scalar, name: "String"}}
+        }
+      })
+      |> Map.put("Named", %Type{
         kind: :interface,
         name: "Named",
         possible_types: ["User"],
@@ -1287,6 +1332,16 @@ defmodule TypedGql.TypeGeneratorTest do
           "name" => %SchemaField{name: "name", type: %TypeRef{kind: :scalar, name: "String"}}
         }
       })
+      |> Map.update!("User", fn type ->
+        %{
+          type
+          | fields:
+              Map.put(type.fields, "name", %SchemaField{
+                name: "name",
+                type: %TypeRef{kind: :scalar, name: "String"}
+              })
+        }
+      end)
 
     SchemaHelper.build_schema(types: types)
   end

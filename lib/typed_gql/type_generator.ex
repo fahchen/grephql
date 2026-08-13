@@ -390,7 +390,7 @@ defmodule TypedGql.TypeGenerator do
   end
 
   defp merge_field(%QueryField{name: name} = existing, %QueryField{name: name} = field) do
-    if existing.arguments != field.arguments do
+    if not same_arguments?(existing.arguments, field.arguments) do
       raise CompileError,
         description:
           "conflicting selections for \"#{field_name(field)}\": " <>
@@ -412,6 +412,31 @@ defmodule TypedGql.TypeGenerator do
         "conflicting selections for \"#{field_name(field)}\": " <>
           "it names both \"#{existing.name}\" and \"#{field.name}\""
   end
+
+  # Two argument lists are the same when they name the same values, whatever the
+  # order they were written in and wherever in the source they came from — the
+  # nodes carry a `loc`, so comparing them as-is would call every second
+  # occurrence a conflict.
+  defp same_arguments?(arguments, other) do
+    comparable_arguments(arguments) == comparable_arguments(other)
+  end
+
+  defp comparable_arguments(arguments) do
+    arguments |> Enum.sort_by(& &1.name) |> without_locations()
+  end
+
+  defp without_locations(%struct{} = node) do
+    fields =
+      node
+      |> Map.from_struct()
+      |> Map.delete(:loc)
+      |> Map.new(fn {key, value} -> {key, without_locations(value)} end)
+
+    {struct, fields}
+  end
+
+  defp without_locations(values) when is_list(values), do: Enum.map(values, &without_locations/1)
+  defp without_locations(other), do: other
 
   # Selected unconditionally anywhere means always present, so a copy that
   # cannot be removed clears the other's @skip/@include.
