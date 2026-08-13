@@ -52,7 +52,14 @@ defmodule TypedGql.Generation.Plugins.SkipInclude do
     end
   end
 
-  defp conditional?(directives) do
+  @doc """
+  Whether `directives` can remove the field from the response.
+
+  `TypedGql.TypeGenerator` shares this when merging repeated selections: a copy
+  that cannot be removed makes the merged field unconditional.
+  """
+  @spec conditional?([TypedGql.Language.Directive.t()]) :: boolean()
+  def conditional?(directives) do
     Enum.any?(directives, fn directive ->
       directive.name in @conditional_directives and directive_omits?(directive)
     end)

@@ -49,11 +49,16 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.TwoTypenames.Search.Result.Search.User,
               TypedGql.Test.SkippableTypename.Search.Result,
               TypedGql.Test.SkippableTypename.Search.Result.Search.User,
-              TypedGql.Test.OnlyConditionalTypename.Search.Result.Search,
+              TypedGql.Test.OnlyConditionalTypename.Search.Result,
+              TypedGql.Test.OnlyConditionalTypename.Search.Result.Search.User,
               TypedGql.Test.OverlappingConditions.Search.Result.Search.User,
               TypedGql.Test.ImplementedInterface.GetNode.Result,
               TypedGql.Test.ImplementedInterface.GetNode.Result.Node,
-              TypedGql.Test.MergedSubSelections.Search.Result.Search.User.Profile
+              TypedGql.Test.MergedSubSelections.Search.Result.Search.User.Profile,
+              TypedGql.Test.PartialInterface.Search.Result.Search.Post,
+              TypedGql.Test.PartialInterface.Search.Result.Search.User,
+              TypedGql.Test.TransitiveInterface.GetNode.Result,
+              TypedGql.Test.TransitiveInterface.GetNode.Result.Node
             ]}
 
   alias TypedGql.Schema.Field, as: SchemaField
@@ -787,16 +792,27 @@ defmodule TypedGql.TypeGeneratorTest do
       schema = schema_with_union()
 
       operation =
-        parse!("query Q($show: Boolean!) { search { __typename @include(if: $show) } }")
+        parse!(
+          "query Q($show: Boolean!) { search { __typename @include(if: $show) ... on User { email } } }"
+        )
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.OnlyConditionalTypename,
         function_name: :search
       )
 
-      assert :__typename in TypedGql.Test.OnlyConditionalTypename.Search.Result.Search.__schema__(
-               :fields
-             )
+      # A variant fragment forces the dispatch path, so the conditional copy has
+      # to serve as the key.
+      json = %{"search" => [%{"__typename" => "User", "email" => "a@b.com"}]}
+
+      result =
+        TypedGql.ResponseDecoder.decode!(
+          TypedGql.Test.OnlyConditionalTypename.Search.Result,
+          json
+        )
+
+      assert [%{__struct__: TypedGql.Test.OnlyConditionalTypename.Search.Result.Search.User}] =
+               result.search
     end
 
     test "the same field selected by two overlapping conditions is merged once" do
@@ -846,7 +862,9 @@ defmodule TypedGql.TypeGeneratorTest do
           TypedGql.Test.MergedUnconditional
         )
 
-      refute variant_field(tree, "User", :id).resolved.nullable
+      merged = variant_field(tree, "User", :id)
+      refute merged.resolved.nullable
+      assert merged.query_field.directives == []
     end
 
     test "a merged field conditional on both sides stays conditional" do
@@ -860,6 +878,80 @@ defmodule TypedGql.TypeGeneratorTest do
         )
 
       assert variant_field(tree, "User", :id).resolved.nullable
+    end
+
+    test "a no-op @include(if: true) copy makes the merged field unconditional" do
+      schema = schema_with_two_interfaces()
+
+      tree =
+        resolved_tree(
+          schema,
+          "query Q($a: Boolean!) { search { __typename ... on Node { id @include(if: $a) } ... on Named { id @include(if: true) } } }",
+          TypedGql.Test.MergedNoOpDirective
+        )
+
+      # `@include(if: true)` always selects, so the merged field is always there.
+      refute variant_field(tree, "User", :id).resolved.nullable
+    end
+
+    test "the same response key naming two different fields is rejected" do
+      schema = schema_with_two_interfaces()
+
+      operation =
+        parse!("query { search { __typename ... on Named { x: id x: name } } }")
+
+      assert_raise CompileError, ~r/names both "id" and "name"/, fn ->
+        TypeGenerator.generate(operation, schema,
+          client_module: TypedGql.Test.ConflictingKey,
+          function_name: :search
+        )
+      end
+    end
+
+    test "the same field selected with different arguments is rejected" do
+      schema = schema_with_two_interfaces()
+
+      operation =
+        parse!(~s|query { user(id: "1") { name } user(id: "2") { name } }|)
+
+      assert_raise CompileError, ~r/different arguments/, fn ->
+        TypeGenerator.generate(operation, schema,
+          client_module: TypedGql.Test.ConflictingArgs,
+          function_name: :get_user
+        )
+      end
+    end
+
+    test "an interface that covers only some members still produces variants" do
+      schema = schema_partial_interface()
+      operation = parse!("query { search { __typename ... on Named { name } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.PartialInterface,
+        function_name: :search
+      )
+
+      # Named covers User but not Post, so hoisting would hand `name` to Post too.
+      user_fields = TypedGql.Test.PartialInterface.Search.Result.Search.User.__schema__(:fields)
+      post_fields = TypedGql.Test.PartialInterface.Search.Result.Search.Post.__schema__(:fields)
+
+      assert :name in user_fields
+      refute :name in post_fields
+    end
+
+    test "an interface implemented through another interface is still shared" do
+      schema = schema_transitive_interfaces()
+      operation = parse!("query { node { ... on Base { id } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.TransitiveInterface,
+        function_name: :get_node
+      )
+
+      # Parent implements Mid, Mid implements Base — so Parent declares `id` and
+      # no dispatch is needed.
+      assert :node in TypedGql.Test.TransitiveInterface.GetNode.Result.__schema__(:embeds)
+      assert :id in TypedGql.Test.TransitiveInterface.GetNode.Result.Node.__schema__(:fields)
     end
 
     test "a fragment on an interface the parent implements stays a plain object" do
@@ -1179,6 +1271,60 @@ defmodule TypedGql.TypeGeneratorTest do
           "bio" => %SchemaField{name: "bio", type: %TypeRef{kind: :scalar, name: "String"}},
           "avatar" => %SchemaField{name: "avatar", type: %TypeRef{kind: :scalar, name: "String"}}
         }
+      })
+
+    SchemaHelper.build_schema(types: types)
+  end
+
+  # Named covers only one of the union's members, so its fields are not shared.
+  defp schema_partial_interface do
+    types =
+      Map.put(schema_with_union().types, "Named", %Type{
+        kind: :interface,
+        name: "Named",
+        possible_types: ["User"],
+        fields: %{
+          "name" => %SchemaField{name: "name", type: %TypeRef{kind: :scalar, name: "String"}}
+        }
+      })
+
+    SchemaHelper.build_schema(types: types)
+  end
+
+  # Parent implements Mid, Mid implements Base: a `... on Base` fragment under a
+  # Parent still selects fields Parent declares.
+  defp schema_transitive_interfaces do
+    id_field = %SchemaField{
+      name: "id",
+      type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+    }
+
+    interface = fn name, interfaces ->
+      %Type{
+        kind: :interface,
+        name: name,
+        interfaces: interfaces,
+        possible_types: ["User"],
+        fields: %{"id" => id_field}
+      }
+    end
+
+    types =
+      Map.merge(SchemaHelper.default_types(), %{
+        "Query" => %Type{
+          kind: :object,
+          name: "Query",
+          fields: %{
+            "node" => %SchemaField{
+              name: "node",
+              type: %TypeRef{kind: :interface, name: "Parent"},
+              args: %{}
+            }
+          }
+        },
+        "Base" => interface.("Base", []),
+        "Mid" => interface.("Mid", ["Base"]),
+        "Parent" => interface.("Parent", ["Mid"])
       })
 
     SchemaHelper.build_schema(types: types)

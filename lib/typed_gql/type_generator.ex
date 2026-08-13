@@ -221,20 +221,39 @@ defmodule TypedGql.TypeGenerator do
     end
   end
 
-  # A fragment with no type condition, on the parent itself, or on an interface
-  # the parent implements selects fields every member shares — and the parent
-  # declares them, so they resolve without a variant. Hoisting keeps them out of
-  # resolve_union/5, which would otherwise invent a __typename dispatch the
-  # response has no reason to satisfy.
+  # A fragment with no type condition, or on the parent itself, selects fields
+  # every member shares. So does one on an interface the parent implements —
+  # directly or through another interface — provided that interface covers every
+  # member, or the fields would be shared with a member they do not apply to.
+  # Hoisting keeps such fragments out of resolve_union/5, which would otherwise
+  # invent a __typename dispatch the response has no reason to satisfy.
   defp shared_condition?(_schema, nil, _parent_type_name), do: true
 
   defp shared_condition?(schema, condition, parent_type_name) do
-    condition == parent_type_name or condition in interfaces_of(schema, parent_type_name)
+    condition == parent_type_name or
+      (condition in implemented_interfaces(schema, parent_type_name) and
+         covers_every_member?(schema, condition, parent_type_name))
   end
 
-  defp interfaces_of(schema, type_name) do
+  defp implemented_interfaces(schema, type_name, seen \\ []) do
+    interfaces = type_name |> fetch_type(schema) |> Map.fetch!(:interfaces)
+    fresh = interfaces -- seen
+
+    Enum.reduce(fresh, seen ++ fresh, fn interface, acc ->
+      implemented_interfaces(schema, interface, acc)
+    end)
+  end
+
+  defp covers_every_member?(schema, condition, parent_type_name) do
+    covered = condition |> fetch_type(schema) |> Map.fetch!(:possible_types)
+    members = parent_type_name |> fetch_type(schema) |> Map.fetch!(:possible_types)
+
+    members -- covered == []
+  end
+
+  defp fetch_type(type_name, schema) do
     {:ok, type} = Schema.get_type(schema, type_name)
-    type.interfaces
+    type
   end
 
   # Normalizes a field's own sub-selection set under its child type. A field's
@@ -370,7 +389,14 @@ defmodule TypedGql.TypeGenerator do
     order |> :lists.reverse() |> Enum.map(&Map.fetch!(by_key, &1))
   end
 
-  defp merge_field(existing, field) do
+  defp merge_field(%QueryField{name: name} = existing, %QueryField{name: name} = field) do
+    if existing.arguments != field.arguments do
+      raise CompileError,
+        description:
+          "conflicting selections for \"#{field_name(field)}\": " <>
+            "the same response key is selected with different arguments"
+    end
+
     %{
       existing
       | directives: merge_directives(existing.directives, field.directives),
@@ -378,11 +404,22 @@ defmodule TypedGql.TypeGenerator do
     }
   end
 
-  # Selected unconditionally anywhere means always present, so an unconditional
-  # copy clears the other's @skip/@include.
-  defp merge_directives([], _other), do: []
-  defp merge_directives(_directives, []), do: []
-  defp merge_directives(directives, other), do: directives ++ other
+  # Same response key, different underlying field: the GraphQL spec forbids it
+  # (FieldsInSetCanMerge) because a single response key cannot hold both.
+  defp merge_field(existing, field) do
+    raise CompileError,
+      description:
+        "conflicting selections for \"#{field_name(field)}\": " <>
+          "it names both \"#{existing.name}\" and \"#{field.name}\""
+  end
+
+  # Selected unconditionally anywhere means always present, so a copy that
+  # cannot be removed clears the other's @skip/@include.
+  defp merge_directives(directives, other) do
+    if SkipInclude.conditional?(directives) and SkipInclude.conditional?(other),
+      do: directives ++ other,
+      else: []
+  end
 
   # Both copies are the same schema field, so either both are leaves or neither is.
   defp merge_selection_sets(nil, _other), do: nil
