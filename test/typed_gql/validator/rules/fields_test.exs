@@ -31,13 +31,17 @@ defmodule TypedGql.Validator.Rules.FieldsTest do
       assert errors(ctx) == []
     end
 
+    # A real introspection result lists __Schema and __Type among its types, so
+    # the meta-fields resolve like any other.
     test "__type introspection field passes" do
-      ctx = validate(~s|query { __type(name: "User") { name } }|)
+      ctx = validate(~s|query { __type(name: "User") { name } }|, types: introspection_types())
       assert errors(ctx) == []
     end
 
     test "__schema introspection field passes" do
-      ctx = validate("query { __schema { queryType { name } } }")
+      ctx =
+        validate("query { __schema { queryType { name } } }", types: introspection_types())
+
       assert errors(ctx) == []
     end
   end
@@ -220,6 +224,28 @@ defmodule TypedGql.Validator.Rules.FieldsTest do
       assert [error] = errors(validate("query { user }", types: types))
       assert error.message == ~s(type "Ghost" of field "user" is not defined in the schema)
     end
+  end
+
+  defp introspection_types do
+    Map.merge(SchemaHelper.default_types(), %{
+      "__Schema" => %Type{
+        kind: :object,
+        name: "__Schema",
+        fields: %{
+          "queryType" => %SchemaField{
+            name: "queryType",
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :object, name: "__Type"}}
+          }
+        }
+      },
+      "__Type" => %Type{
+        kind: :object,
+        name: "__Type",
+        fields: %{
+          "name" => %SchemaField{name: "name", type: %TypeRef{kind: :scalar, name: "String"}}
+        }
+      }
+    })
   end
 
   defp parse!(query) do

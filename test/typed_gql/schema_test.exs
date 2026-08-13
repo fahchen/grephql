@@ -44,5 +44,34 @@ defmodule TypedGql.SchemaTest do
     test "returns :error for unknown type" do
       assert :error = Schema.get_field(@schema, "Unknown", "user")
     end
+
+    # An introspection result never lists these among Query's own fields, but the
+    # spec puts them on the query root.
+    test "synthesizes __schema and __type on the query root" do
+      assert {:ok, %Field{name: "__schema", type: %TypeRef{of_type: %TypeRef{name: "__Schema"}}}} =
+               Schema.get_field(@schema, "Query", "__schema")
+
+      assert {:ok, %Field{name: "__type", args: %{"name" => _name_arg}}} =
+               Schema.get_field(@schema, "Query", "__type")
+    end
+
+    test "does not synthesize them on any other type" do
+      assert :error = Schema.get_field(@schema, "User", "__schema")
+      assert :error = Schema.get_field(@schema, "User", "__type")
+    end
+
+    test "a schema that declares __schema itself wins" do
+      declared = %Field{name: "__schema", type: %TypeRef{kind: :scalar, name: "String"}}
+
+      schema = %{
+        @schema
+        | types:
+            Map.update!(@schema.types, "Query", fn type ->
+              %{type | fields: Map.put(type.fields, "__schema", declared)}
+            end)
+      }
+
+      assert {:ok, ^declared} = Schema.get_field(schema, "Query", "__schema")
+    end
   end
 end

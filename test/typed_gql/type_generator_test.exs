@@ -40,6 +40,8 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.GhostCondition.Search.Result.Search.User,
               TypedGql.Test.UnusableTypename.Search.Result,
               TypedGql.Test.UnusableTypename.Search.Result.Search.User,
+              TypedGql.Test.Covariant.Search.Result.Search.User.Friend,
+              TypedGql.Test.Introspection.Introspect.Result.Schema.QueryType,
               TypedGql.Test.NestedAbstract.Search.Result.Search.Post,
               TypedGql.Test.NestedAbstract.Search.Result.Search.User,
               TypedGql.Test.AbstractSpread.Search.Result.Search.User,
@@ -243,6 +245,36 @@ defmodule TypedGql.TypeGeneratorTest do
       )
 
       assert :posts in TypedGql.Test.ListEmbed.GetUser.Result.User.__schema__(:embeds)
+    end
+  end
+
+  describe "response key collisions" do
+    test "two aliases that underscore to the same struct field are rejected" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!(~s|query { user(id: "1") { typeName: __typename type_name: id } }|)
+
+      assert_raise CompileError, ~r/both map to the struct field :type_name/, fn ->
+        TypeGenerator.generate(operation, schema,
+          client_module: TypedGql.Test.KeyCollision,
+          function_name: :get_user
+        )
+      end
+    end
+  end
+
+  describe "root introspection fields" do
+    test "__schema resolves against the introspection types" do
+      schema = schema_with_introspection()
+      operation = parse!("query { __schema { queryType { name } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.Introspection,
+        function_name: :introspect
+      )
+
+      assert :name in TypedGql.Test.Introspection.Introspect.Result.Schema.QueryType.__schema__(
+               :fields
+             )
     end
   end
 
@@ -778,6 +810,24 @@ defmodule TypedGql.TypeGeneratorTest do
       assert TypedGql.EnsureTypename.transform(sdl, schema) == sdl
     end
 
+    test "a covariant field keeps resolving when its type narrows to a member" do
+      schema = schema_covariant_interface()
+
+      operation =
+        parse!("query { search { __typename ... on Node { friend { ... on User { email } } } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.Covariant,
+        function_name: :search
+      )
+
+      # User.friend narrows Node.friend to User, so the inline fragment left over
+      # from normalizing under Node has to be flattened against User.
+      assert :email in TypedGql.Test.Covariant.Search.Result.Search.User.Friend.__schema__(
+               :fields
+             )
+    end
+
     test "an aliased or conditional __typename does not serve as the discriminator" do
       schema = schema_with_union()
 
@@ -1295,6 +1345,78 @@ defmodule TypedGql.TypeGeneratorTest do
 
   # Content implements Named, but Named covers only one of Content's members, so
   # its fields cannot be shared with the other.
+  # A real introspection result lists __Schema and __Type among its types.
+  defp schema_with_introspection do
+    types =
+      Map.merge(SchemaHelper.default_types(), %{
+        "__Schema" => %Type{
+          kind: :object,
+          name: "__Schema",
+          fields: %{
+            "queryType" => %SchemaField{
+              name: "queryType",
+              type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :object, name: "__Type"}}
+            }
+          }
+        },
+        "__Type" => %Type{
+          kind: :object,
+          name: "__Type",
+          fields: %{
+            "name" => %SchemaField{name: "name", type: %TypeRef{kind: :scalar, name: "String"}}
+          }
+        }
+      })
+
+    SchemaHelper.build_schema(types: types)
+  end
+
+  # Node.friend returns Node, but User.friend narrows it to User.
+  defp schema_covariant_interface do
+    friend = fn type_name ->
+      %SchemaField{name: "friend", type: %TypeRef{kind: :object, name: type_name}}
+    end
+
+    SchemaHelper.build_schema(
+      types: %{
+        "Query" => %Type{
+          kind: :object,
+          name: "Query",
+          fields: %{
+            "search" => %SchemaField{
+              name: "search",
+              type: %TypeRef{kind: :union, name: "Search"},
+              args: %{}
+            }
+          }
+        },
+        "Search" => %Type{kind: :union, name: "Search", possible_types: ["User", "Post"]},
+        "Node" => %Type{
+          kind: :interface,
+          name: "Node",
+          possible_types: ["User", "Post"],
+          fields: %{"friend" => friend.("Node")}
+        },
+        "User" => %Type{
+          kind: :object,
+          name: "User",
+          interfaces: ["Node"],
+          fields: %{
+            "friend" => friend.("User"),
+            "email" => %SchemaField{name: "email", type: %TypeRef{kind: :scalar, name: "String"}}
+          }
+        },
+        "Post" => %Type{
+          kind: :object,
+          name: "Post",
+          interfaces: ["Node"],
+          fields: %{"friend" => friend.("Node")}
+        },
+        "String" => %Type{kind: :scalar, name: "String"}
+      }
+    )
+  end
+
   defp schema_partial_interface do
     types =
       schema_with_union().types

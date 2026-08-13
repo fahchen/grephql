@@ -350,7 +350,16 @@ defmodule TypedGql.TypeGenerator do
     # On a concrete object type `__typename` can only ever be that type's name;
     # abstract parents override this with their possible types.
     opts = Keyword.put_new(opts, :typename_values, [parent_type_name])
-    fields = merge_fields(fields)
+
+    # Selections can still carry inline fragments here: a field normalized under
+    # an abstract type keeps them, and a covariant schema may then resolve that
+    # field against a concrete member (`friend: Node` narrowing to `friend: User`
+    # on User). Flattening against the type actually being resolved is what makes
+    # the list the fields-only one the reducer below needs.
+    fields =
+      fields
+      |> member_selections(parent_type_name, context)
+      |> merge_fields()
 
     {gen_fields, children} =
       Enum.reduce(fields, {[], []}, fn %QueryField{} = field, {fields_acc, children_acc} ->
@@ -364,9 +373,29 @@ defmodule TypedGql.TypeGenerator do
       kind: :object,
       module: parent_module,
       parent_type: parent_type_name,
-      fields: :lists.reverse(gen_fields),
+      fields: gen_fields |> :lists.reverse() |> reject_colliding_names(),
       children: :lists.reverse(children)
     }
+  end
+
+  # Response keys are distinct but their struct field names may not be:
+  # `typeName` and `type_name` both underscore to :type_name, and Ecto refuses
+  # the second. Say so here rather than let it surface as a schema error.
+  defp reject_colliding_names(gen_fields) do
+    gen_fields
+    |> Enum.group_by(& &1.name)
+    |> Enum.each(fn
+      {_name, [_single]} ->
+        :ok
+
+      {name, colliding} ->
+        keys = Enum.map_join(colliding, " and ", &~s("#{&1.original_name}"))
+
+        raise CompileError,
+          description: "response keys #{keys} both map to the struct field :#{name}"
+    end)
+
+    gen_fields
   end
 
   defp maybe_prepend(nil, acc), do: acc
@@ -446,6 +475,13 @@ defmodule TypedGql.TypeGenerator do
 
   # Selected unconditionally anywhere means always present, so a copy that
   # cannot be removed clears the other's @skip/@include.
+  #
+  # Deliberately not proven further: complementary conditions such as
+  # `id @include(if: $x)` and `id @skip(if: $x)` also guarantee the field, but
+  # deciding that in general means proving a boolean formula over the variables.
+  # Keeping both directives marks the field nullable, which is the safe
+  # direction — the value still decodes, only the typespec is wider than it has
+  # to be, whereas guessing non-null would make the typespec lie.
   defp merge_directives(directives, other) do
     if SkipInclude.conditional?(directives) and SkipInclude.conditional?(other),
       do: directives ++ other,
