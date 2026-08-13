@@ -186,6 +186,43 @@ defmodule TypedGqlTest do
       assert result.data.user.name == "Url"
     end
 
+    defmodule StubbedClient do
+      use TypedGql,
+        otp_app: :typed_gql,
+        source: "support/schemas/minimal.json",
+        endpoint: "https://api.example.com/graphql",
+        req_options: [plug: {Req.Test, TypedGqlTest.StubbedClient}]
+
+      defgql(:get_user, "query { user(id: \"1\") { name } }")
+    end
+
+    test "execute/1 uses the default variables and options" do
+      Req.Test.stub(StubbedClient, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(200, Jason.encode!(%{"errors" => [%{"message" => "boom"}]}))
+      end)
+
+      query = %TypedGql.Query{
+        document: "query { user(id: \"1\") { name } }",
+        operation_type: "query",
+        client_module: StubbedClient,
+        result_module: nil
+      }
+
+      assert {:ok, %Result{data: nil}} = TypedGql.execute(query)
+    end
+
+    test "a non-JSON body is reported as an error" do
+      Req.Test.stub(StubbedClient, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/plain")
+        |> Plug.Conn.send_resp(200, "not json at all")
+      end)
+
+      assert {:error, %RuntimeError{}} = StubbedClient.get_user()
+    end
+
     test "no URL at all fails in Req" do
       assert_raise ArgumentError, ~r/scheme is required/, fn ->
         NoEndpointClient.get_user()
@@ -392,6 +429,21 @@ defmodule TypedGqlTest do
 
       assert {:ok, %Result{}} =
                client.get_default_user(req_options: [plug: {Req.Test, client}])
+    end
+
+    test "attached step is a no-op on requests that carry no query" do
+      req =
+        [url: "https://api.example.com/graphql", plug: {Req.Test, OpInfoClient}]
+        |> Req.new()
+        |> OperationInfo.attach()
+
+      Req.Test.expect(OpInfoClient, fn conn ->
+        assert OperationInfo.get(conn) == %{function: nil, client: nil, operation: nil}
+
+        json_ok(conn, %{})
+      end)
+
+      assert {:ok, %Req.Response{status: 200}} = Req.post(req)
     end
 
     test "distinguishes multiple functions on the same client" do

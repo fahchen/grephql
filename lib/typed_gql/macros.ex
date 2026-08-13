@@ -186,8 +186,6 @@ defmodule TypedGql.Macros do
   defp spread_name(%{selection_set: selection_set}),
     do: ast_spread_names(selection_set)
 
-  defp spread_name(_other), do: []
-
   @doc """
   Defines a reusable named GraphQL fragment.
 

@@ -113,5 +113,53 @@ defmodule TypedGql.MacrosTest do
       assert doc =~ ~s|`\#{__MODULE__}.GetUser.Result.User.Posts`|
       assert doc =~ ~s|`\#{__MODULE__}.GetUser.Result.User.Posts.Author`|
     end
+
+    test "modules outside the client module are listed by their full name" do
+      query = %Query{
+        document: "query { user { name } }",
+        operation_type: "query",
+        result_module: Other.App.Result,
+        result_modules: [Other.App.Result],
+        client_module: @client
+      }
+
+      assert Macros.__build_doc__(query) =~ "`Other.App.Result`"
+    end
+  end
+
+  describe "__resolve_fragments__/2" do
+    test "stops at a nested spread that is not registered" do
+      entry = fragment_entry("fragment UserFields on User { ...Missing name }")
+
+      assert {query, used} =
+               Macros.__resolve_fragments__("query { user { ...UserFields } }", [entry])
+
+      assert query =~ "fragment UserFields on User"
+      assert Map.keys(used) == ["UserFields"]
+    end
+
+    # Field, InlineFragment and FragmentSpread are the only three selection
+    # shapes, so the walk needs no fallback clause.
+    test "descends through nested fields and inline fragments" do
+      entry = fragment_entry("fragment UserFields on User { email }")
+
+      assert {_query, used} =
+               Macros.__resolve_fragments__(
+                 "query { user { profile { ... on User { ...UserFields } } } }",
+                 [entry]
+               )
+
+      assert Map.keys(used) == ["UserFields"]
+    end
+
+    test "ignores definitions that have no selection set" do
+      assert {"scalar DateTime", used} = Macros.__resolve_fragments__("scalar DateTime", [])
+      assert used == %{}
+    end
+  end
+
+  defp fragment_entry(source) do
+    {:ok, %{definitions: [fragment | _rest]}} = TypedGql.Parser.parse(source)
+    %{source: source, fragment: fragment, result_module: nil}
   end
 end

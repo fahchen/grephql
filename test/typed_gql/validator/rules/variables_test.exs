@@ -120,6 +120,66 @@ defmodule TypedGql.Validator.Rules.VariablesTest do
     end
   end
 
+  describe "selections without a resolvable type" do
+    test "unknown field skips argument type checks" do
+      ctx = validate(~s|query($id: ID!) { bogus(id: $id) }|)
+      assert type_errors(ctx) == []
+    end
+
+    test "missing root type skips argument type checks" do
+      ctx = validate(~s|query($id: ID!) { user(id: $id) { name } }|, query_type: nil)
+      assert type_errors(ctx) == []
+    end
+  end
+
+  describe "fragment selections" do
+    test "inline fragment directive argument is type checked" do
+      ctx =
+        validate(
+          ~s|query($showEmail: String!) { user(id: "1") { ... on User @include(if: $showEmail) { email } } }|,
+          directives: [include_directive()]
+        )
+
+      assert [error] = type_errors(ctx)
+      assert error.message =~ "variable \"$showEmail\" of type \"String!\""
+    end
+
+    test "fragment spread directive argument is type checked" do
+      query = """
+      query($showEmail: String!) { user(id: "1") { ...UserFields @include(if: $showEmail) } }
+      fragment UserFields on User { email }
+      """
+
+      ctx = validate(query, directives: [include_directive()])
+
+      assert [error] = type_errors(ctx)
+      assert error.message =~ "variable \"$showEmail\" of type \"String!\""
+    end
+  end
+
+  describe "type rendering" do
+    test "unknown directive skips argument type checks" do
+      ctx = validate(~s|query($flag: Boolean!) { user(id: "1") { name @nope(if: $flag) } }|)
+      assert type_errors(ctx) == []
+    end
+
+    test "list variable type is rendered with brackets" do
+      ctx = validate(~s|query($ids: [ID]) { user(id: $ids) { name } }|)
+      assert [error] = type_errors(ctx)
+      assert error.message =~ "of type \"[ID]\""
+    end
+
+    test "list argument type is rendered with brackets" do
+      ctx =
+        validate(~s|query($id: ID!) { usersByIds(ids: $id) { name } }|,
+          types: types_with_list_arg()
+        )
+
+      assert [error] = type_errors(ctx)
+      assert error.message =~ "argument \"ids\" of type \"[ID!]!\""
+    end
+  end
+
   defp parse!(query) do
     {:ok, doc} = TypedGql.Parser.parse(query)
     doc

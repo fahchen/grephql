@@ -44,7 +44,6 @@ defmodule TypedGql.Validator.Rules.Directives do
   end
 
   defp validate_selection_set_directives(ctx, nil, _schema), do: ctx
-  defp validate_selection_set_directives(ctx, %SelectionSet{selections: []}, _schema), do: ctx
 
   defp validate_selection_set_directives(ctx, %SelectionSet{selections: sels}, schema) do
     Enum.reduce(sels, ctx, fn sel, acc ->

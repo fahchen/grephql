@@ -380,6 +380,22 @@ defmodule TypedGql.ParserTest do
       assert {:error, _message} = Parser.parse("fragment F on User { }")
       assert {:error, _message} = Parser.parse("query { ... on User { } }")
     end
+
+    # The validator walks (Traversal, Variables, Fragments, Directives) and
+    # Macros.__resolve_fragments__/2 match these three shapes with no fallback
+    # clause. A fourth selection kind would have to be handled in each of them.
+    test "a selection is only ever a Field, FragmentSpread or InlineFragment" do
+      assert {:ok, %Language.Document{definitions: [op]}} =
+               Parser.parse("query { a b { c } ...F ... on User { d } ... { e } }")
+
+      kinds =
+        op.selection_set.selections
+        |> Enum.map(& &1.__struct__)
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      assert kinds == [Language.Field, Language.FragmentSpread, Language.InlineFragment]
+    end
   end
 
   describe "parse/1 location tracking" do

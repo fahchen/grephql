@@ -11,6 +11,12 @@ defmodule TypedGql.Validator.Rules.OperationsTest do
       assert errors(ctx) == []
     end
 
+    test "query without query root type fails" do
+      ctx = validate("query { user { name } }", query_type: nil)
+      assert [error] = errors(ctx)
+      assert error.message =~ "queries"
+    end
+
     test "mutation without mutation root type fails" do
       ctx = validate("mutation { createUser { id } }")
       assert [error] = errors(ctx)

@@ -46,9 +46,6 @@ defmodule TypedGql.Validator.Traversal do
   # nil type_name is valid — Operations rule already reported the missing root type
   defp traverse_selection_set(nil, _type_name, _schema, ctx, _cb), do: ctx
 
-  defp traverse_selection_set(%SelectionSet{selections: []}, _type_name, _schema, ctx, _cb),
-    do: ctx
-
   defp traverse_selection_set(%SelectionSet{selections: selections}, type_name, schema, ctx, cb) do
     Enum.reduce(selections, ctx, fn selection, acc ->
       traverse_selection(selection, type_name, schema, acc, cb)

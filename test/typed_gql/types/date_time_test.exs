@@ -58,5 +58,9 @@ defmodule TypedGql.Types.DateTimeTest do
     test "rejects invalid string" do
       assert :error = DateTimeType.load("not-a-date")
     end
+
+    test "rejects non-string, non-DateTime values" do
+      assert :error = DateTimeType.load(123)
+    end
   end
 end

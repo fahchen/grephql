@@ -69,4 +69,13 @@ defmodule TypedGql.ErrorTest do
       assert error.locations == []
     end
   end
+
+  describe "Access" do
+    test "fields are readable with bracket syntax" do
+      error = Error.from_json(%{"message" => "boom"})
+
+      assert error[:message] == "boom"
+      assert get_in(error, [:extensions]) == nil
+    end
+  end
 end

@@ -654,4 +654,22 @@ defmodule TypedGql.PrinterTest do
              """
     end
   end
+
+  describe "hand-built documents" do
+    test "prints nothing for a missing or empty selection set" do
+      for selection_set <- [nil, %TypedGql.Language.SelectionSet{selections: []}] do
+        doc = %TypedGql.Language.Document{
+          definitions: [
+            %TypedGql.Language.OperationDefinition{
+              operation: :query,
+              shorthand: true,
+              selection_set: selection_set
+            }
+          ]
+        }
+
+        assert Printer.print(doc) == ""
+      end
+    end
+  end
 end

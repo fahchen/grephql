@@ -58,6 +58,8 @@ defmodule TypedGql.Validator.Rules.DirectivesTest do
     args: %{"by" => %InputValue{name: "by", type: %TypeRef{kind: :scalar, name: "Int"}}}
   }
 
+  @query_only_directive %SchemaDirective{name: "trace", locations: [:query], args: %{}}
+
   describe "directive existence" do
     test "known directive passes" do
       ctx = validate(~s|query { user(id: "1") { name @skip(if: true) } }|)
@@ -168,6 +170,33 @@ defmodule TypedGql.Validator.Rules.DirectivesTest do
     end
   end
 
+  describe "directive location labels" do
+    setup do
+      %{directives: [@query_only_directive | default_directives()]}
+    end
+
+    test "field label", %{directives: directives} do
+      ctx = validate(~s|query { user(id: "1") { name @trace } }|, directives: directives)
+      assert location_error(ctx) =~ "not allowed on fields"
+    end
+
+    test "inline fragment label", %{directives: directives} do
+      ctx =
+        validate(~s|query { user(id: "1") { ... on User @trace { name } } }|,
+          directives: directives
+        )
+
+      assert location_error(ctx) =~ "not allowed on inline fragments"
+    end
+
+    test "subscription label", %{directives: directives} do
+      ctx =
+        validate(~s|subscription @trace { user(id: "1") { name } }|, directives: directives)
+
+      assert location_error(ctx) =~ "not allowed on subscription operations"
+    end
+  end
+
   describe "directive uniqueness" do
     test "unique directives pass" do
       ctx = validate(~s|query { user(id: "1") { name @skip(if: true) @include(if: false) } }|)
@@ -258,6 +287,11 @@ defmodule TypedGql.Validator.Rules.DirectivesTest do
   end
 
   defp errors(ctx), do: Context.errors_by_severity(ctx, :error)
+
+  defp location_error(ctx) do
+    [error] = Enum.filter(errors(ctx), &(&1.message =~ "not allowed"))
+    error.message
+  end
 
   defp default_directives do
     [@skip_directive, @include_directive, @deprecated_directive]

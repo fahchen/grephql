@@ -65,6 +65,10 @@ defmodule TypedGql.Validator.Rules.ValuesTest do
       assert [error] = errors(ctx)
       assert error.message =~ "enum value \"BOGUS\" is not valid for type \"Role\""
     end
+
+    test "list value against a non-list argument type is skipped" do
+      assert errors(validate(~s|query { user(id: ["1"]) { name } }|)) == []
+    end
   end
 
   defp parse!(query) do

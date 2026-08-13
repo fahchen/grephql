@@ -47,8 +47,7 @@ defmodule TypedGql.ValidatorTest do
     test "collects errors from multiple rules" do
       schema = SchemaHelper.build_schema()
       doc = parse!("mutation { bogusField }")
-      assert {:error, errors} = Validator.validate(doc, schema)
-      assert errors != []
+      assert {:error, [_first | _rest]} = Validator.validate(doc, schema)
     end
   end
 

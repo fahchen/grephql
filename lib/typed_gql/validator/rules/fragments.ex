@@ -52,7 +52,6 @@ defmodule TypedGql.Validator.Rules.Fragments do
   end
 
   defp validate_selection_set(ctx, nil, _parent_type, _schema), do: ctx
-  defp validate_selection_set(ctx, %SelectionSet{selections: []}, _parent_type, _schema), do: ctx
 
   defp validate_selection_set(ctx, %SelectionSet{selections: sels}, parent_type, schema) do
     Enum.reduce(sels, ctx, fn sel, acc ->

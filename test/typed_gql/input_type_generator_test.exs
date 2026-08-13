@@ -427,6 +427,20 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       assert modules == []
     end
+
+    test "a variable type missing from the schema is treated as a scalar" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!(~s|query Q($when: Unknown) { user(id: "1") { name } }|)
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: TypedGql.Test.Input.UnknownScalar,
+          function_name: :q,
+          scalar_types: %{"Unknown" => TypedGql.Types.DateTime}
+        )
+
+      assert :when in variables_module.__schema__(:fields)
+    end
   end
 
   describe "generate_variables/3" do

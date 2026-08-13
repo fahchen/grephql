@@ -250,6 +250,14 @@ defmodule TypedGql.Generation.SkipIncludeTest do
       end
     end
 
+    test "a directive without an if: argument is not conditional", %{context: context} do
+      directive = %TypedGql.Language.Directive{name: "skip", arguments: []}
+      tree = object_with_field(scalar_field(:id, false, [directive]))
+
+      out = SkipInclude.after_resolve(tree, context)
+      assert hd(out.fields).resolved.nullable == false
+    end
+
     test "embeds_many fields are left unchanged even when conditional", %{context: context} do
       embed = %Field{
         kind: :embeds_many,

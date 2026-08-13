@@ -89,6 +89,10 @@ defmodule TypedGql.Validator.Rules.Fields do
     ctx
   end
 
+  # Dangling type reference — nothing to check against, and the schema itself is
+  # already suspect; other rules report what they can.
+  defp check_kind(ctx, _field, nil, _has_selections), do: ctx
+
   defp check_kind(ctx, field, :input_object, _has_selections) do
     Context.add_error(
       ctx,

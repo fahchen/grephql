@@ -225,15 +225,14 @@ defmodule TypedGql.TypeGenerator do
   defp normalize_field(%QueryField{selection_set: nil} = field, _parent_type_name, _context),
     do: field
 
+  # child_type is nil only for a field the schema does not declare, which the
+  # validator rejects before generation runs — see defgql_test's "raises
+  # CompileError on validation error". normalize/3 tolerates a nil parent anyway
+  # (Schema.get_type/2 returns :error for it), so there is nothing to guard.
   defp normalize_field(%QueryField{} = field, parent_type_name, context) do
-    case Helpers.resolve_field_type(context.schema, parent_type_name, field.name) do
-      nil ->
-        field
-
-      child_type ->
-        normalized = normalize(field.selection_set.selections, child_type, context)
-        %{field | selection_set: %{field.selection_set | selections: normalized}}
-    end
+    child_type = Helpers.resolve_field_type(context.schema, parent_type_name, field.name)
+    normalized = normalize(field.selection_set.selections, child_type, context)
+    %{field | selection_set: %{field.selection_set | selections: normalized}}
   end
 
   defp expand_spreads(selections, context) do
@@ -279,7 +278,7 @@ defmodule TypedGql.TypeGenerator do
 
       case inline_fragments do
         [] ->
-          resolve_object(shared_fields, parent_type_name, parent_module, context)
+          resolve_abstract_fields(shared_fields, parent_type_name, parent_module, context)
 
         _fragments ->
           resolve_union(shared_fields, inline_fragments, parent_module, context)
@@ -289,7 +288,21 @@ defmodule TypedGql.TypeGenerator do
     end
   end
 
+  # Only fields common to every possible type were selected, so no per-variant
+  # struct is needed — but `__typename` can still be any of the possible types.
+  defp resolve_abstract_fields(fields, parent_type_name, parent_module, context) do
+    {:ok, parent} = Schema.get_type(context.schema, parent_type_name)
+
+    resolve_object(fields, parent_type_name, parent_module, context,
+      typename_values: parent.possible_types
+    )
+  end
+
   defp resolve_object(fields, parent_type_name, parent_module, context, opts \\ []) do
+    # On a concrete object type `__typename` can only ever be that type's name;
+    # abstract parents override this with their possible types.
+    opts = Keyword.put_new(opts, :typename_values, [parent_type_name])
+
     {gen_fields, children} =
       Enum.reduce(fields, {[], []}, fn %QueryField{} = field, {fields_acc, children_acc} ->
         {gen_field, child} =

@@ -74,6 +74,39 @@ defmodule TypedGql.Validator.Rules.FragmentsTest do
     end
   end
 
+  describe "unresolvable parent type" do
+    test "inline fragment under a missing root type is skipped" do
+      ctx = validate(~s|query { ... on User { name } }|, query_type: nil)
+      assert errors(ctx) == []
+    end
+
+    test "inline fragment under a parent type absent from the schema is not applicable" do
+      ctx =
+        validate(~s|query { user(id: "1") { ... on User { name } } }|,
+          types: types_with_dangling_field_type()
+        )
+
+      assert [error] = errors(ctx)
+      assert error.message =~ "type \"User\" is not applicable to \"Ghost\""
+    end
+  end
+
+  defp types_with_dangling_field_type do
+    Map.merge(SchemaHelper.default_types(), %{
+      "Query" => %Type{
+        kind: :object,
+        name: "Query",
+        fields: %{
+          "user" => %SchemaField{
+            name: "user",
+            type: %TypeRef{kind: :object, name: "Ghost"},
+            args: %{}
+          }
+        }
+      }
+    })
+  end
+
   defp parse!(query) do
     {:ok, doc} = TypedGql.Parser.parse(query)
     doc

@@ -13,6 +13,7 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.AliasMulti.GetUsers.Result.Author,
               TypedGql.Test.AliasMulti.GetUsers.Result.SimpleUser,
               TypedGql.Test.AutoTypename.GetNode.Result.Node.User,
+              TypedGql.Test.FragmentNoPlugins.Fragments.UserFields,
               TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.AppSubscription,
               TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.Shop,
               TypedGql.Test.Isolation.GetUser.Result.User,
@@ -23,11 +24,13 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.NoPK.GetUser.Result.User,
               TypedGql.Test.NonNull.GetUser.Result.User,
               TypedGql.Test.ObjectInlineFrag.GetUser.Result.User,
+              TypedGql.Test.ObjectTypename.GetUser.Result.User,
               TypedGql.Test.ResultRoot.GetUser.Result,
               TypedGql.Test.ResultRoot.GetUser.Result.User,
               TypedGql.Test.Union.Search.Result.Search.Post,
               TypedGql.Test.Union.Search.Result.Search.User,
-              TypedGql.Test.UnionField.Search.Result.Result
+              TypedGql.Test.UnionField.Search.Result.Result,
+              TypedGql.Test.UnionSharedOnly.Search.Result.Search
             ]}
 
   alias TypedGql.Schema.Field, as: SchemaField
@@ -396,6 +399,42 @@ defmodule TypedGql.TypeGeneratorTest do
       assert :title in post_fields
     end
 
+    test "a union selected without inline fragments generates a plain object" do
+      schema = schema_with_union()
+      operation = parse!("query { search { __typename } }")
+
+      modules =
+        TypeGenerator.generate(operation, schema,
+          client_module: TypedGql.Test.UnionSharedOnly,
+          function_name: :search
+        )
+
+      assert TypedGql.Test.UnionSharedOnly.Search.Result.Search in modules
+
+      search_module = TypedGql.Test.UnionSharedOnly.Search.Result.Search
+      assert :__typename in search_module.__schema__(:fields)
+
+      # No variant module was generated, so __typename still has to accept every
+      # member of the union.
+      assert {:parameterized, {TypedGql.Types.Typename, values}} =
+               search_module.__schema__(:type, :__typename)
+
+      assert values == %{"User" => :user, "Post" => :post}
+    end
+
+    test "__typename on a concrete object type is that type's own name" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!(~s|query { user(id: "1") { __typename name } }|)
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.ObjectTypename,
+        function_name: :get_user
+      )
+
+      assert {:parameterized, {TypedGql.Types.Typename, %{"User" => :user}}} =
+               TypedGql.Test.ObjectTypename.GetUser.Result.User.__schema__(:type, :__typename)
+    end
+
     test "union field uses parameterized type, not embed" do
       schema = schema_with_union()
 
@@ -544,6 +583,25 @@ defmodule TypedGql.TypeGeneratorTest do
 
       assert %{__struct__: TypedGql.Test.SingleUnion.GetNode.Result.Node.User} = result.node
       assert result.node.name == "Alice"
+    end
+  end
+
+  describe "generate_fragment/4" do
+    test "generates the fragment module without a plugin list" do
+      schema = SchemaHelper.build_schema()
+      fragment = parse!("fragment UserFields on User { name email }")
+
+      assert TypedGql.Test.FragmentNoPlugins.Fragments.UserFields ==
+               TypeGenerator.generate_fragment(
+                 fragment,
+                 schema,
+                 TypedGql.Test.FragmentNoPlugins,
+                 %{}
+               )
+
+      fields = TypedGql.Test.FragmentNoPlugins.Fragments.UserFields.__schema__(:fields)
+      assert :name in fields
+      assert :email in fields
     end
   end
 

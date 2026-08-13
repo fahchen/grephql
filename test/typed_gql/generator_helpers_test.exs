@@ -1,6 +1,9 @@
 defmodule TypedGql.GeneratorHelpersTest do
   use ExUnit.Case, async: true
 
+  # Defined at test runtime by create_modules/1, so the compiler cannot see it.
+  @compile {:no_warn_undefined, TypedGql.Test.CreateModulesSequential}
+
   alias TypedGql.GeneratorHelpers
 
   describe "enum_type_ast/2" do
@@ -110,6 +113,55 @@ defmodule TypedGql.GeneratorHelpersTest do
 
       assert opts == [null: true]
       refute Keyword.has_key?(opts, :type)
+    end
+  end
+
+  describe "typed opts producers" do
+    # nullable_from_opts/1 reads `:typed` with Keyword.get/3 and has no fallback
+    # for a non-list, so every producer feeding {:typed, opts} must return one.
+    test "always return a keyword list, whatever the resolved type looks like" do
+      for nullable <- [true, false],
+          enum_values <- [nil, ["OPEN", "CLOSED"]],
+          inner_nullable <- [nil, true, false] do
+        resolved = %{
+          nullable: nullable,
+          enum_values: enum_values,
+          inner_nullable: inner_nullable
+        }
+
+        assert Keyword.keyword?(GeneratorHelpers.scalar_typed_opts(resolved))
+        assert Keyword.keyword?(GeneratorHelpers.embed_typed_opts(:embeds_one, resolved))
+        assert Keyword.keyword?(GeneratorHelpers.embed_typed_opts(:embeds_many, resolved))
+      end
+    end
+  end
+
+  describe "ecto_type_to_type_ast/1" do
+    test "maps each built-in scalar to its typespec AST" do
+      assert GeneratorHelpers.ecto_type_to_type_ast(:string) == quote(do: String.t())
+      assert GeneratorHelpers.ecto_type_to_type_ast(:integer) == quote(do: integer())
+      assert GeneratorHelpers.ecto_type_to_type_ast(:float) == quote(do: float())
+      assert GeneratorHelpers.ecto_type_to_type_ast(:boolean) == quote(do: boolean())
+    end
+
+    test "wraps arrays and delegates custom types to their t/0" do
+      assert GeneratorHelpers.ecto_type_to_type_ast({:array, :integer}) == quote(do: [integer()])
+
+      ast = GeneratorHelpers.ecto_type_to_type_ast(TypedGql.Types.DateTime)
+      assert Macro.to_string(ast) == "TypedGql.Types.DateTime.t()"
+    end
+  end
+
+  describe "create_modules/1" do
+    test "falls back to sequential creation outside a compiler session" do
+      # A test process is never a Kernel.ParallelCompiler worker, so pmap/2
+      # raises here and the sequential path runs.
+      ast = quote(do: def(hello, do: :world))
+
+      assert GeneratorHelpers.create_modules([{TypedGql.Test.CreateModulesSequential, ast}]) ==
+               :ok
+
+      assert TypedGql.Test.CreateModulesSequential.hello() == :world
     end
   end
 end

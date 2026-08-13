@@ -137,10 +137,7 @@ defmodule TypedGql.GeneratorHelpers do
   end
 
   defp nullable_from_opts(opts) do
-    case Keyword.get(opts, :typed, []) do
-      typed when is_list(typed) -> Keyword.get(typed, :null, true)
-      _other -> true
-    end
+    opts |> Keyword.get(:typed, []) |> Keyword.get(:null, true)
   end
 
   @spec ecto_type_to_type_ast(TypedGql.TypeMapper.ecto_type()) :: Macro.t()
@@ -171,18 +168,15 @@ defmodule TypedGql.GeneratorHelpers do
     location = Macro.Env.location(__ENV__)
     create_fn = fn {mod, ast} -> Module.create(mod, ast, location) end
 
-    # Remove function_exported? guard when dropping Elixir 1.15 support
-    if function_exported?(Kernel.ParallelCompiler, :pmap, 2) do
-      try do
-        Kernel.ParallelCompiler.pmap(module_asts, create_fn)
-      rescue
-        # pmap/2 raises when no compiler session is active or when the
-        # session is interrupted (e.g. inside capture_io in tests).
-        _error in [ArgumentError, MatchError] ->
-          Enum.each(module_asts, create_fn)
-      end
-    else
-      Enum.each(module_asts, create_fn)
+    try do
+      # apply/3 so Elixir 1.15 (no pmap/2) still compiles; the rescue covers both
+      # UndefinedFunctionError there and pmap/2 raising when no compiler session
+      # is active or the session is interrupted (e.g. inside capture_io in tests).
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
+      apply(Kernel.ParallelCompiler, :pmap, [module_asts, create_fn])
+    rescue
+      _error in [ArgumentError, MatchError, UndefinedFunctionError] ->
+        Enum.each(module_asts, create_fn)
     end
 
     :ok
