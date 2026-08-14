@@ -235,14 +235,9 @@ defmodule TypedGql do
         decode_response(%{response | body: decoded}, result_module)
 
       {:error, reason} ->
-        {:error, wrap_json_error(reason)}
+        {:error, TypedGql.JSON.normalize_error(reason)}
     end
   end
-
-  # The configured JSON library decides the shape: Jason returns an exception
-  # struct, Elixir's JSON a plain tuple, and a custom one anything at all.
-  defp wrap_json_error(reason) when is_exception(reason), do: reason
-  defp wrap_json_error(reason), do: RuntimeError.exception(inspect(reason))
 
   @spec build_request(module(), keyword(), keyword()) :: Req.Request.t()
   defp build_request(client_module, execute_opts, base_opts) do

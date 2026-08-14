@@ -68,4 +68,17 @@ defmodule TypedGql.Language do
           do: {fragment.name, fragment}
     end
   end
+
+  @doc """
+  Every fragment spread name in a selection set, depth first, duplicates kept.
+  """
+  @spec spread_names(TypedGql.Language.SelectionSet.t() | nil) :: [String.t()]
+  def spread_names(nil), do: []
+
+  def spread_names(%TypedGql.Language.SelectionSet{selections: selections}) do
+    Enum.flat_map(selections, fn
+      %TypedGql.Language.FragmentSpread{name: name} -> [name]
+      %{selection_set: selection_set} -> spread_names(selection_set)
+    end)
+  end
 end

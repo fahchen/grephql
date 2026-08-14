@@ -475,37 +475,6 @@ defmodule TypedGql.InputTypeGeneratorTest do
     end
   end
 
-  defp types_with_nested_input do
-    Map.merge(SchemaHelper.default_types(), %{
-      "Query" => %Type{
-        kind: :object,
-        name: "Query",
-        fields: %{
-          "find" => %SchemaField{
-            name: "find",
-            type: %TypeRef{kind: :scalar, name: "String"},
-            args: %{
-              "filters" => %InputValue{
-                name: "filters",
-                type: %TypeRef{
-                  kind: :list,
-                  of_type: %TypeRef{kind: :input_object, name: "Filter"}
-                }
-              }
-            }
-          }
-        }
-      },
-      "Filter" => %Type{
-        kind: :input_object,
-        name: "Filter",
-        input_fields: %{
-          "term" => %InputValue{name: "term", type: %TypeRef{kind: :scalar, name: "String"}}
-        }
-      }
-    })
-  end
-
   describe "generate_variables/3" do
     test "$id variable does not conflict with Ecto primary key" do
       schema = SchemaHelper.build_schema()
@@ -1088,5 +1057,36 @@ defmodule TypedGql.InputTypeGeneratorTest do
       })
 
     SchemaHelper.build_schema(types: types, mutation_type: "Mutation")
+  end
+
+  defp types_with_nested_input do
+    Map.merge(SchemaHelper.default_types(), %{
+      "Query" => %Type{
+        kind: :object,
+        name: "Query",
+        fields: %{
+          "find" => %SchemaField{
+            name: "find",
+            type: %TypeRef{kind: :scalar, name: "String"},
+            args: %{
+              "filters" => %InputValue{
+                name: "filters",
+                type: %TypeRef{
+                  kind: :list,
+                  of_type: %TypeRef{kind: :input_object, name: "Filter"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "Filter" => %Type{
+        kind: :input_object,
+        name: "Filter",
+        input_fields: %{
+          "term" => %InputValue{name: "term", type: %TypeRef{kind: :scalar, name: "String"}}
+        }
+      }
+    })
   end
 end

@@ -544,11 +544,6 @@ defmodule TypedGql.ParserTest do
   # https://spec.graphql.org/draft/#sec-Appendix-Grammar-Summary.Source-Text —
   # some positions take Value[Const], where a variable is not a valid value.
   # The grammar rejects them outright, so no validator rule is needed.
-  defp string_argument(%Language.Document{definitions: [op]}) do
-    [field] = op.selection_set.selections
-    [argument] = field.arguments
-    argument.value.value
-  end
 
   describe "parse/1 constant-only positions" do
     test "a variable definition's default value cannot be a variable" do
@@ -596,4 +591,10 @@ defmodule TypedGql.ParserTest do
     do: Enum.flat_map(values, &collect_enum_values/1)
 
   defp collect_enum_values(_other), do: []
+
+  defp string_argument(%Language.Document{definitions: [op]}) do
+    [field] = op.selection_set.selections
+    [argument] = field.arguments
+    argument.value.value
+  end
 end

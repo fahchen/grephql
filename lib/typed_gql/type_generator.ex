@@ -219,7 +219,7 @@ defmodule TypedGql.TypeGenerator do
   # resolve step can build per-variant modules) with their directives already
   # propagated onto member fields.
   defp normalize(selections, parent_type_name, context) do
-    if union_or_interface?(context.schema, parent_type_name) do
+    if Schema.abstract?(context.schema, parent_type_name) do
       normalize_union_selections(selections, parent_type_name, context)
     else
       normalize_object_selections(selections, parent_type_name, context)
@@ -423,18 +423,11 @@ defmodule TypedGql.TypeGenerator do
     end)
   end
 
-  defp union_or_interface?(schema, type_name) do
-    match?(
-      {:ok, %{kind: kind}} when kind in [:union, :interface],
-      Schema.get_type(schema, type_name)
-    )
-  end
-
   # ── resolve ────────────────────────────────────────────────────────────
 
   # Builds the generated-schema tree from canonical selections.
   defp resolve(selections, parent_type_name, parent_module, context) do
-    if union_or_interface?(context.schema, parent_type_name) do
+    if Schema.abstract?(context.schema, parent_type_name) do
       {shared_fields, inline_fragments} =
         Enum.split_with(selections, &match?(%QueryField{}, &1))
 

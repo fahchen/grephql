@@ -186,7 +186,7 @@ defmodule TypedGql.Macros do
 
     case Map.fetch(fragment_map, name) do
       {:ok, entry} ->
-        nested_names = ast_spread_names(entry.fragment.selection_set)
+        nested_names = TypedGql.Language.spread_names(entry.fragment.selection_set)
         resolve_spread_names(nested_names, fragment_map, seen, [name | acc])
 
       :error ->
@@ -195,17 +195,9 @@ defmodule TypedGql.Macros do
   end
 
   defp selection_spread_names(%{selection_set: selection_set}),
-    do: ast_spread_names(selection_set)
+    do: TypedGql.Language.spread_names(selection_set)
 
   defp selection_spread_names(_definition), do: []
-
-  defp ast_spread_names(nil), do: []
-  defp ast_spread_names(%{selections: selections}), do: Enum.flat_map(selections, &spread_name/1)
-
-  defp spread_name(%TypedGql.Language.FragmentSpread{name: name}), do: [name]
-
-  defp spread_name(%{selection_set: selection_set}),
-    do: ast_spread_names(selection_set)
 
   @doc """
   Defines a reusable named GraphQL fragment.

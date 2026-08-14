@@ -18,6 +18,17 @@ defmodule TypedGql.Schema do
     Map.fetch(types, name)
   end
 
+  @doc """
+  Whether `type_name` names an abstract type — a union or an interface.
+
+  A name the schema does not define is not abstract; the callers that care
+  about that distinction check existence separately.
+  """
+  @spec abstract?(t(), String.t()) :: boolean()
+  def abstract?(%__MODULE__{} = schema, type_name) do
+    match?({:ok, %{kind: kind}} when kind in [:union, :interface], get_type(schema, type_name))
+  end
+
   # Introspection meta-fields exist on the query root per the spec, but an
   # introspection result never lists them among Query's own fields. Their
   # return types "__Schema"/"__Type" have to be present in the loaded schema

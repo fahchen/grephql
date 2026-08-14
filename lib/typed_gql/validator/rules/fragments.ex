@@ -59,7 +59,7 @@ defmodule TypedGql.Validator.Rules.Fragments do
     reachable =
       definitions
       |> Enum.filter(&match?(%OperationDefinition{}, &1))
-      |> Enum.flat_map(&spread_names(&1.selection_set))
+      |> Enum.flat_map(&TypedGql.Language.spread_names(&1.selection_set))
       |> reach(by_name, %{})
 
     fragments
@@ -79,7 +79,11 @@ defmodule TypedGql.Validator.Rules.Fragments do
         reach(rest, by_name, seen)
 
       {false, %{^name => fragment}} ->
-        reach(spread_names(fragment.selection_set) ++ rest, by_name, Map.put(seen, name, true))
+        reach(
+          TypedGql.Language.spread_names(fragment.selection_set) ++ rest,
+          by_name,
+          Map.put(seen, name, true)
+        )
 
       # A spread of a registered fragment: not defined here, nothing to mark.
       {false, _by_name} ->
@@ -91,7 +95,7 @@ defmodule TypedGql.Validator.Rules.Fragments do
   # TypeGenerator's spread expansion loop forever, so this has to be caught here
   # rather than left to fail somewhere downstream.
   defp check_cycles(ctx, fragments) do
-    spreads = Map.new(fragments, &{&1.name, spread_names(&1.selection_set)})
+    spreads = Map.new(fragments, &{&1.name, TypedGql.Language.spread_names(&1.selection_set)})
 
     Enum.reduce(fragments, ctx, fn fragment, acc ->
       if cycles_back?(spreads, fragment.name, spreads[fragment.name], %{}) do
@@ -130,16 +134,6 @@ defmodule TypedGql.Validator.Rules.Fragments do
           Map.put(seen, current, true)
         )
     end
-  end
-
-  defp spread_names(nil), do: []
-
-  defp spread_names(%SelectionSet{selections: selections}) do
-    Enum.flat_map(selections, fn
-      %FragmentSpread{name: name} -> [name]
-      %Field{} = field -> spread_names(field.selection_set)
-      %InlineFragment{} = fragment -> spread_names(fragment.selection_set)
-    end)
   end
 
   defp validate_fragment_type_condition(ctx, frag, type_name) do
