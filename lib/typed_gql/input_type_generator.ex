@@ -148,7 +148,7 @@ defmodule TypedGql.InputTypeGenerator do
     case unwrap_object_list(resolved.ecto_type) do
       {nested_type_name, depth} ->
         collect_embed(
-          depth,
+          embed_kind!(depth, atom_name),
           atom_name,
           nested_type_name,
           resolved,
@@ -174,8 +174,18 @@ defmodule TypedGql.InputTypeGenerator do
   # `Ecto.Embedded` implements only load/3 and dump/3, and a variables struct is
   # built through a changeset, which needs cast/2. Say so rather than fail later
   # with an opaque error about an unknown Ecto type.
+  defp embed_kind!(0, _atom_name), do: :embeds_one
+  defp embed_kind!(1, _atom_name), do: :embeds_many
+
+  defp embed_kind!(depth, atom_name) do
+    raise CompileError,
+      description:
+        "variable \"#{atom_name}\" nests an input object #{depth} lists deep; " <>
+          "typedGql can generate input types for a list of input objects, but not a list of lists"
+  end
+
   defp collect_embed(
-         depth,
+         kind,
          atom_name,
          nested_type_name,
          resolved,
@@ -188,33 +198,9 @@ defmodule TypedGql.InputTypeGenerator do
     {_schema, _scalar_types, inputs_module} = context
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     nested_module = Module.concat(inputs_module, Macro.camelize(nested_type_name))
-
-    {defs, embeds, reqs} =
-      embed_field_def(depth, atom_name, nested_module, resolved, source_opt, {defs, embeds, reqs})
-
-    {defs, embeds, reqs, collect_acc}
-  end
-
-  defp embed_field_def(
-         depth,
-         atom_name,
-         nested_module,
-         resolved,
-         source_opt,
-         {defs, embeds, reqs}
-       )
-       when depth in [0, 1] do
-    kind = if depth == 0, do: :embeds_one, else: :embeds_many
     typed_opts = GeneratorHelpers.embed_typed_opts(kind, resolved)
     field_def = {kind, atom_name, nested_module, [{:typed, typed_opts} | source_opt]}
-    {[field_def | defs], [atom_name | embeds], reqs}
-  end
-
-  defp embed_field_def(depth, atom_name, _nested_module, _resolved, _source_opt, _acc) do
-    raise CompileError,
-      description:
-        "variable \"#{atom_name}\" nests an input object #{depth} lists deep; " <>
-          "typedGql can generate input types for a list of input objects, but not a list of lists"
+    {[field_def | defs], [atom_name | embeds], reqs, collect_acc}
   end
 
   # An input object behind however many list levels: returns the type name and
