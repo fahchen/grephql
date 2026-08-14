@@ -8,5 +8,9 @@ defmodule TypedGql.DecodeError do
   functions, alongside the other transport-level error tuples.
   """
 
-  defexception [:message]
+  use TypedStructor
+
+  typed_structor definer: :defexception, enforce: true do
+    field :message, String.t()
+  end
 end
