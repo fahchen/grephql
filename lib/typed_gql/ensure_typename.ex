@@ -77,10 +77,30 @@ defmodule TypedGql.EnsureTypename do
   defp transform_selection(%FragmentSpread{} = spread, _type_name, _schema), do: spread
 
   defp with_typename(selections, type_name, schema) do
-    if abstract?(schema, type_name) and not Enum.any?(selections, &dispatchable_typename?/1),
-      do: [%Field{name: "__typename"} | selections],
-      else: selections
+    cond do
+      not abstract?(schema, type_name) -> selections
+      Enum.any?(selections, &dispatchable_typename?/1) -> selections
+      true -> [%Field{name: "__typename"} | reject_typename_key!(selections)]
+    end
   end
+
+  # `__typename: id` is legal GraphQL, but it takes the response key dispatch
+  # needs. Adding ours anyway would put two different fields under one key in the
+  # sent document, which the server rejects — so say what is wrong here instead.
+  # Another copy of __typename itself is fine: same field, same key, they merge.
+  defp reject_typename_key!(selections) do
+    if Enum.any?(selections, &borrowed_typename_key?/1) do
+      raise CompileError,
+        description:
+          "\"__typename\" is aliased to another field on a union or interface " <>
+            "selection, leaving no response key to dispatch on"
+    end
+
+    selections
+  end
+
+  defp borrowed_typename_key?(%Field{alias: "__typename", name: name}), do: name != "__typename"
+  defp borrowed_typename_key?(_selection), do: false
 
   defp abstract?(schema, type_name) do
     match?(

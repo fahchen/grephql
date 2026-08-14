@@ -798,6 +798,31 @@ defmodule TypedGql.TypeGeneratorTest do
       assert printed =~ "__typename"
     end
 
+    test "an alias occupying the __typename response key is rejected" do
+      schema = schema_with_union()
+
+      document = parse_document!("query { search { __typename: id ... on User { email } } }")
+
+      assert_raise CompileError, ~r/leaving no response key to dispatch on/, fn ->
+        TypedGql.EnsureTypename.transform(document, schema)
+      end
+    end
+
+    test "an abstract selection inside a named fragment definition gets one too" do
+      schema = schema_with_union()
+
+      document =
+        parse_document!(
+          "query { ...F }\nfragment F on Query { search { ... on User { email } } }"
+        )
+
+      printed = document |> TypedGql.EnsureTypename.transform(schema) |> TypedGql.Printer.print()
+
+      # The abstract set lives in the fragment, not the operation, so this fails
+      # if only operations are walked.
+      assert printed =~ "__typename"
+    end
+
     test "a selection that already dispatches is left alone, and SDL passes through" do
       schema = schema_with_union()
 
@@ -836,10 +861,20 @@ defmodule TypedGql.TypeGeneratorTest do
     test "an aliased or conditional __typename does not serve as the discriminator" do
       schema = schema_with_union()
 
-      operation =
-        parse!(
-          "query Q($hide: Boolean!) { search { kind: __typename __typename @skip(if: $hide) ... on User { email } } }"
-        )
+      source =
+        "query Q($hide: Boolean!) { search { kind: __typename __typename @skip(if: $hide) ... on User { email } } }"
+
+      # Neither copy can be dispatched on, so the transform adds a plain one to
+      # the document that gets sent.
+      printed =
+        source
+        |> parse_document!()
+        |> TypedGql.EnsureTypename.transform(schema)
+        |> TypedGql.Printer.print()
+
+      assert printed |> String.split("__typename") |> length() == 4
+
+      operation = parse!(source)
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.UnusableTypename,
