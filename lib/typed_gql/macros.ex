@@ -28,7 +28,8 @@ defmodule TypedGql.Macros do
 
   @doc false
   @spec __execute_with_variables__(TypedGql.Query.t(), map(), keyword()) ::
-          {:ok, TypedGql.Result.t()} | {:error, Ecto.Changeset.t() | Req.Response.t()}
+          {:ok, TypedGql.Result.t()}
+          | {:error, Ecto.Changeset.t() | Req.Response.t() | Exception.t()}
   def __execute_with_variables__(%TypedGql.Query{} = query, variables, opts) do
     with {:ok, struct} <- query.variables_module.build(variables) do
       # Dump here, where the caller's original params are still in hand, so
