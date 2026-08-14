@@ -348,9 +348,7 @@ end
 
 The `posts: [Posts.t()]` above assumes the schema declares it `[Post!]!`. A list
 typespec mirrors the schema's nullability at every level — `[Post]` generates
-`[Posts.t() | nil] | nil` — and only `[Post!]!` is an `embeds_many`; every other
-shape is a plain field, so its default is `nil` rather than `[]`. See
-`spec/client/decisions/BDR-0009-object-lists-not-always-embeds.md`.
+`[Posts.t() | nil] | nil` — and a nullable list's struct default is `nil`, not `[]`.
 
 ## Access Behaviour
 
