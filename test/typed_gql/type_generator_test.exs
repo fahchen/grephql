@@ -937,6 +937,41 @@ defmodule TypedGql.TypeGeneratorTest do
       assert post.id == "7"
     end
 
+    # Each fragment body normalizes once per parent type, not once per route to
+    # it. Walking every route is 2^layers — this document took minutes before
+    # the memo, so the timeout is the assertion.
+    @tag timeout: 5_000
+    test "a fragment graph that fans out and rejoins compiles in linear time" do
+      schema = schema_with_union()
+      layers = 24
+
+      fragment_sources =
+        for layer <- 0..(layers - 1), side <- 0..1 do
+          body =
+            if layer == layers - 1,
+              do: "name",
+              else: "...F#{layer + 1}_0 ...F#{layer + 1}_1"
+
+          "fragment F#{layer}_#{side} on User { #{body} }"
+        end
+
+      fragments =
+        Map.new(fragment_sources, fn source ->
+          {:ok, %{definitions: [fragment]}} = TypedGql.Parser.parse(source)
+          {fragment.name, fragment}
+        end)
+
+      operation = parse!("query { search { __typename ... on User { ...F0_0 ...F0_1 } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.DiamondFragments,
+        function_name: :search,
+        fragments: fragments
+      )
+
+      assert :name in TypedGql.Test.DiamondFragments.Search.Result.Search.User.__schema__(:fields)
+    end
+
     test "a named fragment spread keeps its type condition" do
       schema = schema_with_union()
 

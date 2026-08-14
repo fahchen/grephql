@@ -84,7 +84,8 @@ defmodule TypedGql.Compiler do
       scalar_types: Keyword.get(opts, :scalar_types, %{}),
       # A fragment defined in the document shadows a registered one of the same
       # name: it is the definition the server will see.
-      fragments: opts |> registered_fragments() |> Map.merge(Document.fragments_by_name(document)),
+      fragments:
+        opts |> registered_fragments() |> Map.merge(Document.fragments_by_name(document)),
       generation_plugins: Keyword.get(opts, :generation_plugins, [])
     ]
 
@@ -119,7 +120,6 @@ defmodule TypedGql.Compiler do
     |> Keyword.get(:fragments, %{})
     |> Map.new(fn {name, entry} -> {name, entry.fragment} end)
   end
-
 
   @doc """
   Compiles a GraphQL fragment string into a fragment entry map.

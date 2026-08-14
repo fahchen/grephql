@@ -62,6 +62,7 @@ defmodule TypedGql.ValidatorTest do
       schema = SchemaHelper.build_schema()
       doc = parse!("fragment UserFields on User { name email }")
       assert :ok = Validator.validate_fragment(doc, schema)
+      assert :ok = Validator.validate_fragment(doc, schema, nil)
     end
 
     test "returns {:error, errors} for an invalid fragment" do

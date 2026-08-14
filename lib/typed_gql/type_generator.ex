@@ -68,6 +68,7 @@ defmodule TypedGql.TypeGenerator do
   alias TypedGql.Validator.Helpers
 
   @builtin_plugins [SkipInclude]
+  @fragment_memo_key {__MODULE__, :fragment_memo}
 
   @type option() ::
           {:client_module, module()}
@@ -173,7 +174,7 @@ defmodule TypedGql.TypeGenerator do
     canonical =
       selections
       |> run_after(plugins, :before_normalize, context)
-      |> normalize(parent_type_name, context)
+      |> normalize_with_fresh_memo(parent_type_name, context)
       |> run_after(plugins, :after_normalize, context)
 
     tree =
@@ -199,14 +200,25 @@ defmodule TypedGql.TypeGenerator do
 
   # ── normalize ──────────────────────────────────────────────────────────
 
+  # The fragment-body memo (see normalized_fragment_body/3) holds for one
+  # pipeline run only: the next compilation on this process may bind the same
+  # fragment name to a different definition.
+  defp normalize_with_fresh_memo(selections, parent_type_name, context) do
+    Process.delete(@fragment_memo_key)
+
+    try do
+      normalize(selections, parent_type_name, context)
+    after
+      Process.delete(@fragment_memo_key)
+    end
+  end
+
   # Produces canonical selections: fragment spreads expanded, inline fragments
   # on object types flattened, and ancestor fragment directives propagated onto
   # each field. For union/interface parents, inline fragments are kept (so the
   # resolve step can build per-variant modules) with their directives already
   # propagated onto member fields.
   defp normalize(selections, parent_type_name, context) do
-    selections = expand_spreads(selections, context)
-
     if union_or_interface?(context.schema, parent_type_name) do
       normalize_union_selections(selections, parent_type_name, context)
     else
@@ -228,6 +240,14 @@ defmodule TypedGql.TypeGenerator do
         fragment.selection_set.selections
         |> prepend_directives(fragment.directives)
         |> normalize(parent_type_name, context)
+
+      # The spread's condition applies here (the validator checked it against
+      # this very position), so its members merge into the parent exactly as an
+      # inline fragment's would.
+      %FragmentSpread{name: name, directives: directives} ->
+        name
+        |> normalized_fragment_body(parent_type_name, context)
+        |> prepend_directives(directives)
     end)
   end
 
@@ -238,7 +258,37 @@ defmodule TypedGql.TypeGenerator do
 
       %InlineFragment{} = fragment ->
         normalize_union_fragment(fragment, parent_type_name, context)
+
+      %FragmentSpread{name: name, directives: directives} ->
+        normalize_union_spread(name, directives, parent_type_name, context)
     end)
+  end
+
+  # The union-mode mirror of normalize_union_fragment/3, sharing the memoized
+  # body: a shared condition hoists the members, any other condition keeps the
+  # wrapper so resolve_union/5 can build per-variant modules.
+  defp normalize_union_spread(name, directives, parent_type_name, context) do
+    fragment = fetch_fragment!(name, context)
+    condition = fragment.type_condition && fragment.type_condition.name
+
+    if shared_condition?(context.schema, condition, parent_type_name) do
+      name
+      |> normalized_fragment_body(parent_type_name, context)
+      |> prepend_directives(directives)
+    else
+      members =
+        name
+        |> normalized_fragment_body(condition, context)
+        |> prepend_directives(directives)
+
+      [
+        %InlineFragment{
+          type_condition: fragment.type_condition,
+          directives: [],
+          selection_set: %{fragment.selection_set | selections: members}
+        }
+      ]
+    end
   end
 
   defp normalize_union_fragment(fragment, parent_type_name, context) do
@@ -318,32 +368,45 @@ defmodule TypedGql.TypeGenerator do
     %{field | selection_set: %{field.selection_set | selections: normalized}}
   end
 
-  # A spread becomes an inline fragment rather than being spliced in: its type
-  # condition decides which concrete type the members belong to, which matters
-  # under a union or interface parent. Under an object parent the inline
-  # fragment is flattened right back, so nothing changes there.
-  defp expand_spreads(selections, context) do
-    Enum.flat_map(selections, fn
-      %FragmentSpread{name: name, directives: directives} ->
-        [expand_spread(name, directives, context)]
+  # A fragment's body normalizes the same way at every spread site under the
+  # same parent type, so the result is memoized per {name, parent_type} — a
+  # fragment graph that fans out and rejoins otherwise costs 2^depth walks (the
+  # validator's cycle check measured 6.6s at 24 layers for exactly this shape).
+  # Site directives are prepended onto the memoized copy afterwards, which is
+  # equivalent to propagating them through: an object-mode body is flat, and a
+  # union-mode wrapper's directives are re-propagated by member_selections/3.
+  #
+  # The memo lives in the process dictionary for the span of one pipeline run:
+  # normalization is a deep recursion across a dozen clauses, and threading an
+  # accumulator through every one of them would obscure what it computes.
+  # TypedGql.Validator.Rules.Fragments rejects a spread that reaches itself, so
+  # the recursion terminates on any document that went through validation.
+  defp normalized_fragment_body(name, parent_type_name, context) do
+    memo = Process.get(@fragment_memo_key, %{})
 
-      other ->
-        [other]
-    end)
+    with nil <- memo[{name, parent_type_name}] do
+      fragment = fetch_fragment!(name, context)
+
+      # Merging here, not only at resolve, is what keeps the memo effective: a
+      # flattened body is a concatenation of its spreads' bodies, so without
+      # merging its length doubles per layer even though the elements are shared.
+      body =
+        fragment.selection_set.selections
+        |> normalize(parent_type_name, context)
+        |> merge_fields()
+
+      # Re-read before writing: the normalize above memoized every nested
+      # fragment, and writing through the map read at entry would drop them.
+      memo = Process.get(@fragment_memo_key, %{})
+      Process.put(@fragment_memo_key, Map.put(memo, {name, parent_type_name}, body))
+      body
+    end
   end
 
-  # TypedGql.Validator.Rules.Fragments rejects a spread that reaches itself, so
-  # the recursion here terminates on any document that went through validation.
-  defp expand_spread(name, directives, context) do
+  defp fetch_fragment!(name, context) do
     case Map.fetch(context.fragments, name) do
       {:ok, fragment} ->
-        expanded = expand_spreads(fragment.selection_set.selections, context)
-
-        %InlineFragment{
-          type_condition: fragment.type_condition,
-          directives: directives,
-          selection_set: %{fragment.selection_set | selections: expanded}
-        }
+        fragment
 
       # Dropping the spread would generate a struct missing every field it
       # selected, and the request would still ask the server for them.
@@ -735,8 +798,7 @@ defmodule TypedGql.TypeGenerator do
         end)
 
       raise CompileError,
-        description:
-          "cannot generate variant modules for \"#{parent_type_name}\": #{details}"
+        description: "cannot generate variant modules for \"#{parent_type_name}\": #{details}"
     end
   end
 

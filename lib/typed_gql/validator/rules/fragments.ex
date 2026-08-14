@@ -60,28 +60,30 @@ defmodule TypedGql.Validator.Rules.Fragments do
       definitions
       |> Enum.filter(&match?(%OperationDefinition{}, &1))
       |> Enum.flat_map(&spread_names(&1.selection_set))
-      |> reach(by_name, MapSet.new())
+      |> reach(by_name, %{})
 
     fragments
-    |> Enum.reject(&MapSet.member?(reachable, &1.name))
+    |> Enum.reject(&is_map_key(reachable, &1.name))
     |> Enum.reduce(ctx, fn fragment, acc ->
       Context.add_error(acc, "fragment \"#{fragment.name}\" is defined but never used", fragment)
     end)
   end
 
+  # `seen` is a map rather than a MapSet: dialyzer reads MapSet as opaque
+  # across a recursive private call and rejects the accumulator.
   defp reach([], _by_name, seen), do: seen
 
   defp reach([name | rest], by_name, seen) do
-    case {MapSet.member?(seen, name), by_name} do
+    case {is_map_key(seen, name), by_name} do
       {true, _by_name} ->
         reach(rest, by_name, seen)
 
       {false, %{^name => fragment}} ->
-        reach(spread_names(fragment.selection_set) ++ rest, by_name, MapSet.put(seen, name))
+        reach(spread_names(fragment.selection_set) ++ rest, by_name, Map.put(seen, name, true))
 
       # A spread of a registered fragment: not defined here, nothing to mark.
       {false, _by_name} ->
-        reach(rest, by_name, MapSet.put(seen, name))
+        reach(rest, by_name, Map.put(seen, name, true))
     end
   end
 
