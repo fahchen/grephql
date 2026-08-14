@@ -187,6 +187,29 @@ defmodule TypedGql.Validator.Rules.FragmentsTest do
 
       assert errors(validate(query)) == []
     end
+
+    # Walking every route rather than every fragment took 6.6s at 24 layers, so
+    # the timeout is the assertion: a document a server would accept must not
+    # cost more than the document it describes.
+    @tag timeout: 5_000
+    test "a document whose fragments fan out and rejoin is checked in linear time" do
+      layers = 24
+
+      definitions =
+        for layer <- 0..(layers - 1), side <- 0..1 do
+          spreads =
+            if layer == layers - 1,
+              do: "name",
+              else: "...F#{layer + 1}_0 ...F#{layer + 1}_1"
+
+          "fragment F#{layer}_#{side} on User { #{spreads} }"
+        end
+
+      query =
+        Enum.join(["query { user(id: \"1\") { ...F0_0 ...F0_1 } }" | definitions], "\n")
+
+      assert errors(validate(query)) == []
+    end
   end
 
   defp types_with_author_cycle do

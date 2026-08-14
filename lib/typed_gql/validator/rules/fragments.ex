@@ -68,7 +68,7 @@ defmodule TypedGql.Validator.Rules.Fragments do
     spreads = Map.new(fragments, &{&1.name, spread_names(&1.selection_set)})
 
     Enum.reduce(fragments, ctx, fn fragment, acc ->
-      if cycles_back?(spreads, fragment.name, [fragment.name]) do
+      if cycles_back?(spreads, fragment.name, spreads[fragment.name], %{}) do
         Context.add_error(
           acc,
           "fragment \"#{fragment.name}\" spreads itself, directly or through another fragment",
@@ -80,16 +80,30 @@ defmodule TypedGql.Validator.Rules.Fragments do
     end)
   end
 
-  defp cycles_back?(spreads, start, [current | _rest] = path) do
-    spreads
-    |> Map.get(current, [])
-    |> Enum.any?(fn name ->
-      cond do
-        name == start -> true
-        name in path -> false
-        true -> cycles_back?(spreads, start, [name | path])
-      end
-    end)
+  # Whether a fragment reaches `start` does not depend on the route taken there,
+  # so a fragment already walked can be skipped rather than walked again per
+  # route. Enumerating routes instead is exponential: two fragments per layer,
+  # each spreading both of the next layer, took 6.6s at 24 layers.
+  # `seen` is a map rather than a MapSet: dialyzer reads MapSet as opaque across
+  # a recursive private call and rejects the accumulator.
+  defp cycles_back?(_spreads, _start, [], _seen), do: false
+
+  defp cycles_back?(spreads, start, [current | rest], seen) do
+    cond do
+      current == start ->
+        true
+
+      Map.has_key?(seen, current) ->
+        cycles_back?(spreads, start, rest, seen)
+
+      true ->
+        cycles_back?(
+          spreads,
+          start,
+          Map.get(spreads, current, []) ++ rest,
+          Map.put(seen, current, true)
+        )
+    end
   end
 
   defp spread_names(nil), do: []
