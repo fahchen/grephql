@@ -77,13 +77,11 @@ defmodule TypedGql.Compiler do
 
     client_module = Keyword.fetch!(opts, :client_module)
 
-    fragments = Keyword.get(opts, :fragments, %{})
-
     generator_opts = [
       client_module: client_module,
       function_name: Keyword.fetch!(opts, :function_name),
       scalar_types: Keyword.get(opts, :scalar_types, %{}),
-      fragments: fragments,
+      fragments: opts |> registered_fragments() |> Map.merge(document_fragments(document)),
       generation_plugins: Keyword.get(opts, :generation_plugins, [])
     ]
 
@@ -110,12 +108,31 @@ defmodule TypedGql.Compiler do
     }
   end
 
+  # The generator only ever needs the fragment definition, so the registry's
+  # entries are unwrapped here — that is what makes a fragment defined in the
+  # query string itself interchangeable with a registered one.
+  defp registered_fragments(opts) do
+    opts
+    |> Keyword.get(:fragments, %{})
+    |> Map.new(fn {name, entry} -> {name, entry.fragment} end)
+  end
+
+  # A fragment defined in the document shadows a registered one of the same
+  # name: it is the definition the server will see.
+  defp document_fragments(%{definitions: definitions}) do
+    definitions
+    |> Enum.filter(&match?(%Fragment{}, &1))
+    |> Map.new(&{&1.name, &1})
+  end
+
   @doc """
   Compiles a GraphQL fragment string into a fragment entry map.
 
-  Parses the fragment, validates it, and generates a result struct module
-  under `ClientModule.Fragments.FragmentName`. Returns a map with `:source`,
-  `:fragment`, and `:result_module` keys.
+  Parses the fragment, validates it, and generates its result modules under
+  `ClientModule.Fragments.FragmentName`. Returns a map with `:source`,
+  `:fragment`, and `:result_module` keys — see
+  `TypedGql.TypeGenerator.generate_fragment/4` for which module
+  `:result_module` names.
 
   Raises `CompileError` on parse or validation failure.
   """
@@ -141,17 +158,17 @@ defmodule TypedGql.Compiler do
     )
 
     client_module = Keyword.fetch!(opts, :client_module)
-    scalar_types = Keyword.get(opts, :scalar_types, %{})
-    generation_plugins = Keyword.get(opts, :generation_plugins, [])
+
+    generator_opts = [
+      scalar_types: Keyword.get(opts, :scalar_types, %{}),
+      generation_plugins: Keyword.get(opts, :generation_plugins, []),
+      # The fragment's own definition is deliberately left out: a body may only
+      # spread fragments registered before it, so it can never spread itself.
+      fragments: registered_fragments(opts)
+    ]
 
     result_module =
-      TypeGenerator.generate_fragment(
-        fragment,
-        schema,
-        client_module,
-        scalar_types,
-        generation_plugins
-      )
+      TypeGenerator.generate_fragment(fragment, schema, client_module, generator_opts)
 
     %{
       source: String.trim(fragment_string),

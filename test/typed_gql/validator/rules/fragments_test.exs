@@ -29,7 +29,8 @@ defmodule TypedGql.Validator.Rules.FragmentsTest do
       """
 
       ctx = validate(query)
-      assert [error] = errors(ctx)
+      kind_errors = Enum.filter(errors(ctx), &(&1.message =~ "cannot be defined on"))
+      assert [error] = kind_errors
       assert error.message =~ "fragment \"BadFrag\" cannot be defined on scalar type \"String\""
     end
   end
@@ -76,6 +77,66 @@ defmodule TypedGql.Validator.Rules.FragmentsTest do
 
   # Spec 5.5.2.2. Without this the document is infinite, and TypeGenerator's
   # spread expansion loops forever rather than failing.
+  # Spec 5.5.1.4 — a server rejects a document that defines a fragment it never
+  # spreads, so transmitting one fails every call.
+  describe "unused fragments" do
+    test "a fragment the document never spreads is rejected" do
+      query = """
+      query { user(id: "1") { name } }
+      fragment Unused on User { email }
+      """
+
+      assert [error] = errors(validate(query))
+      assert error.message =~ ~s(fragment "Unused" is defined but never used)
+    end
+
+    test "a fragment reached only through another fragment counts as used" do
+      query = """
+      query { user(id: "1") { ...Outer } }
+      fragment Outer on User { ...Inner }
+      fragment Inner on User { name }
+      """
+
+      assert errors(validate(query)) == []
+    end
+
+    test "a document with no operation is not checked" do
+      # deffragment compiles a fragment on its own; it has no operation to be
+      # spread from.
+      assert errors(validate("fragment Alone on User { name }")) == []
+    end
+  end
+
+  # A spread's condition has to apply where it is spread, exactly as an inline
+  # fragment's does — otherwise generation resolves it against the wrong type.
+  describe "fragment spread applicability" do
+    test "a spread whose condition does not apply is rejected" do
+      query = """
+      query { user(id: "1") { ...P } }
+      fragment P on Post { title }
+      """
+
+      ctx = validate(query, types: types_with_union())
+      applicability = Enum.filter(errors(ctx), &(&1.message =~ "not applicable"))
+
+      assert [error] = applicability
+      assert error.message =~ ~s(type "Post" is not applicable to "User")
+    end
+
+    test "a spread whose condition applies passes" do
+      query = """
+      query { user(id: "1") { ...U } }
+      fragment U on User { name }
+      """
+
+      assert errors(validate(query)) == []
+    end
+
+    test "a spread of an unregistered fragment is left to the macro to report" do
+      assert errors(validate(~s|query { user(id: "1") { ...Missing } }|)) == []
+    end
+  end
+
   describe "fragment spread cycles" do
     test "a fragment that spreads itself is rejected" do
       query = """

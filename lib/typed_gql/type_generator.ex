@@ -34,6 +34,18 @@ defmodule TypedGql.TypeGenerator do
 
   Field aliases override both struct field names and module path segments.
 
+  ## Lists of objects
+
+  Only `[T!]!` becomes `embeds_many`: Ecto loads a null many-embed as `[]` and
+  raises on a null element, so that is the one shape it models faithfully.
+  Every other list of a composite — `[T]`, `[T]!`, `[T!]`, and any nesting such
+  as `[[T]]` — becomes a plain field over the parameterized `Ecto.Embedded`
+  type with `cardinality: :one`, which loads `nil` as `nil` at every level.
+
+  The one shape that still cannot be represented: a `[T!]!` field carrying
+  `@skip`/`@include` decodes to `[]` rather than `nil` when the server omits
+  it, because `embeds_many` pins `default: []`.
+
   ## Union/Interface support
 
   When a field's type is a union or interface, inline fragments determine
@@ -61,7 +73,7 @@ defmodule TypedGql.TypeGenerator do
           {:client_module, module()}
           | {:function_name, atom()}
           | {:scalar_types, map()}
-          | {:fragments, map()}
+          | {:fragments, %{String.t() => TypedGql.Language.Fragment.t()}}
           | {:generation_plugins, [module()]}
 
   @doc """
@@ -74,7 +86,9 @@ defmodule TypedGql.TypeGenerator do
     - `:client_module` — the parent client module (e.g., `MyApp.UserService`)
     - `:function_name` — the defgql function name (e.g., `:get_user`)
     - `:scalar_types` — custom scalar type mappings (default: `%{}`)
-    - `:fragments` — named fragment entries for spread expansion (default: `%{}`)
+    - `:fragments` — `TypedGql.Language.Fragment` definitions by name, for
+      spread expansion; a spread naming one that is absent raises
+      `CompileError` (default: `%{}`)
     - `:generation_plugins` — user `TypedGql.Generation.Plugin` modules,
       appended after the built-in plugins (default: `[]`)
   """
@@ -95,29 +109,46 @@ defmodule TypedGql.TypeGenerator do
   end
 
   @doc """
-  Generates an embedded schema module for a named fragment under
+  Generates the result modules for a named fragment under
   `ClientModule.Fragments.FragmentName`.
+
+  Takes the same options as `generate/3` except `:client_module` and
+  `:function_name`, which the fragment's own name replaces.
+
+  Returns the module that stands for the fragment's result. For an object
+  type condition — and for an abstract one whose selections every member
+  shares — that is the embedded schema at `Fragments.FragmentName`. For a
+  condition with per-member selections there is no single struct: the return
+  is the `TypedGql.Types.Union` parameterized type at
+  `Fragments.FragmentName.Union`, which dispatches on `__typename` to the
+  per-member embedded schemas at `Fragments.FragmentName.MemberType`.
   """
-  @spec generate_fragment(TypedGql.Language.Fragment.t(), Schema.t(), module(), map(), [module()]) ::
+  @spec generate_fragment(TypedGql.Language.Fragment.t(), Schema.t(), module(), [option()]) ::
           module()
-  def generate_fragment(fragment, schema, client_module, scalar_types, generation_plugins \\ []) do
+  def generate_fragment(fragment, schema, client_module, opts \\ []) do
     # Fragment module names from schema, bounded set
     # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
     base_module =
       Module.concat([client_module, Fragments, GeneratorHelpers.camelize(fragment.name)])
 
     type_name = fragment.type_condition.name
-    context = build_context(schema, scalar_types: scalar_types)
 
-    run_pipeline(
-      fragment.selection_set.selections,
-      type_name,
-      base_module,
-      context,
-      plugins(generation_plugins: generation_plugins)
-    )
+    tree =
+      run_pipeline(
+        fragment.selection_set.selections,
+        type_name,
+        base_module,
+        build_context(schema, opts),
+        plugins(opts)
+      )
 
-    base_module
+    # base_module is the naming root the pipeline was given, not necessarily a
+    # module it created: the union branch emits the variants and the dispatching
+    # union type instead, so return what actually exists.
+    case tree do
+      %GenSchema{kind: :union, union_module: union_module} -> union_module
+      %GenSchema{kind: :object, module: module} -> module
+    end
   end
 
   defp build_context(schema, opts) do
@@ -289,25 +320,31 @@ defmodule TypedGql.TypeGenerator do
   defp expand_spreads(selections, context) do
     Enum.flat_map(selections, fn
       %FragmentSpread{name: name, directives: directives} ->
-        case Map.fetch(context.fragments, name) do
-          {:ok, entry} ->
-            expanded = expand_spreads(entry.fragment.selection_set.selections, context)
-
-            [
-              %InlineFragment{
-                type_condition: entry.fragment.type_condition,
-                directives: directives,
-                selection_set: %{entry.fragment.selection_set | selections: expanded}
-              }
-            ]
-
-          :error ->
-            []
-        end
+        [expand_spread(name, directives, context)]
 
       other ->
         [other]
     end)
+  end
+
+  # TypedGql.Validator.Rules.Fragments rejects a spread that reaches itself, so
+  # the recursion here terminates on any document that went through validation.
+  defp expand_spread(name, directives, context) do
+    case Map.fetch(context.fragments, name) do
+      {:ok, fragment} ->
+        expanded = expand_spreads(fragment.selection_set.selections, context)
+
+        %InlineFragment{
+          type_condition: fragment.type_condition,
+          directives: directives,
+          selection_set: %{fragment.selection_set | selections: expanded}
+        }
+
+      # Dropping the spread would generate a struct missing every field it
+      # selected, and the request would still ask the server for them.
+      :error ->
+        raise CompileError, description: "undefined fragment spread: ...#{name}"
+    end
   end
 
   defp prepend_directives(selections, []), do: selections
@@ -561,19 +598,26 @@ defmodule TypedGql.TypeGenerator do
       schema_field: schema_field
     }
 
-    case resolved.ecto_type do
-      {:object, type_name} ->
-        resolve_embed(:embeds_one, base, type_name, parent_module, context)
-
-      {:array, {:object, type_name}} ->
-        resolve_embed(:embeds_many, base, type_name, parent_module, context)
+    case unwrap_list(resolved.ecto_type) do
+      {{:object, type_name}, depth} ->
+        resolve_embed(depth, base, type_name, parent_module, context)
 
       _scalar ->
         {base, nil}
     end
   end
 
-  defp resolve_embed(kind, %GenField{} = base, type_name, parent_module, context) do
+  defp unwrap_list({:array, inner}) do
+    {leaf, depth} = unwrap_list(inner)
+    {leaf, depth + 1}
+  end
+
+  defp unwrap_list(leaf), do: {leaf, 0}
+
+  defp wrap_list(0, type), do: type
+  defp wrap_list(depth, type), do: {:array, wrap_list(depth - 1, type)}
+
+  defp resolve_embed(depth, %GenField{} = base, type_name, parent_module, context) do
     # Nested module names from schema field paths
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     nested_module = Module.concat(parent_module, GeneratorHelpers.camelize(base.original_name))
@@ -585,15 +629,45 @@ defmodule TypedGql.TypeGenerator do
         # Union/interface: lower to a plain field carrying the parameterized
         # TypedGql.Types.Union type instead of an embeds_one/embeds_many embed.
         %GenSchema{kind: :union, union_module: union_module} ->
-          ecto_type = if kind == :embeds_many, do: {:array, union_module}, else: union_module
-          %{base | resolved: %{base.resolved | ecto_type: ecto_type, enum_values: nil}}
+          %{
+            base
+            | embed_module: union_module,
+              resolved: %{
+                base.resolved
+                | ecto_type: wrap_list(depth, union_module),
+                  enum_values: nil
+              }
+          }
 
         %GenSchema{kind: :object, module: object_module} ->
-          %{base | kind: kind, embed_module: object_module}
+          resolve_object_embed(base, depth, object_module)
       end
 
     {gen_field, child}
   end
+
+  defp resolve_object_embed(%GenField{} = base, 0, object_module) do
+    %{base | kind: :embeds_one, embed_module: object_module}
+  end
+
+  # `embeds_many` pins `default: []` and raises on a nil element, so it models
+  # only `[T!]!` faithfully. Every other list shape becomes a plain field over
+  # `Ecto.Embedded` with `cardinality: :one`, which loads nil as nil at every
+  # level and so nests to any depth.
+  defp resolve_object_embed(%GenField{} = base, depth, object_module) do
+    if depth == 1 and faithful_many?(base.resolved) do
+      %{base | kind: :embeds_many, embed_module: object_module}
+    else
+      %{
+        base
+        | embed_module: object_module,
+          resolved: %{base.resolved | ecto_type: wrap_list(depth, Ecto.Embedded)}
+      }
+    end
+  end
+
+  defp faithful_many?(%{nullable: false, inner_nullable: false}), do: true
+  defp faithful_many?(_resolved), do: false
 
   # A variant per possible type of the abstract parent, not per inline fragment:
   # the server may return any member, including one no fragment selected, and it
@@ -731,11 +805,14 @@ defmodule TypedGql.TypeGenerator do
 
   defp lower_field(%GenField{kind: :field} = field) do
     resolved = field.resolved
-    typed_opts = GeneratorHelpers.scalar_typed_opts(resolved)
+    typed_opts = GeneratorHelpers.scalar_typed_opts(resolved) ++ composite_type_opts(field)
     source_opt = GeneratorHelpers.source_opt(field.name, field.original_name)
     enum_opts = GeneratorHelpers.enum_opts(resolved)
     typename_opts = GeneratorHelpers.typename_opts(resolved)
-    opts = [{:typed, typed_opts} | source_opt] ++ enum_opts ++ typename_opts
+
+    opts =
+      [{:typed, typed_opts} | source_opt] ++ enum_opts ++ typename_opts ++ embedded_opts(field)
+
     {:field, field.name, resolved.ecto_type, opts}
   end
 
@@ -743,6 +820,25 @@ defmodule TypedGql.TypeGenerator do
     source_opt = GeneratorHelpers.source_opt(field.name, field.original_name)
     typed_opts = GeneratorHelpers.embed_typed_opts(kind, field.resolved)
     {kind, field.name, field.embed_module, [{:typed, typed_opts} | source_opt]}
+  end
+
+  # A composite leaf — a union dispatcher, or an object behind `Ecto.Embedded` —
+  # gets its typespec from the GraphQL type, because the Ecto type says nothing
+  # about which list levels and elements are nullable.
+  defp composite_type_opts(%GenField{embed_module: nil}), do: []
+
+  defp composite_type_opts(%GenField{embed_module: module} = field) do
+    leaf_ast = quote(do: unquote(module).t())
+    [type: TypeMapper.list_type_ast(field.schema_field.type, leaf_ast)]
+  end
+
+  # `Ecto.Embedded` is itself a parameterized type, so it takes its target
+  # through field options rather than through `embeds_one`/`embeds_many`.
+  defp embedded_opts(%GenField{} = field) do
+    case unwrap_list(field.resolved.ecto_type) do
+      {Ecto.Embedded, _depth} -> [cardinality: :one, related: field.embed_module]
+      _other -> []
+    end
   end
 
   defp build_embedded_schema_ast(module_name, field_defs) do

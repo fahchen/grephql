@@ -79,6 +79,19 @@ Feature: GraphQL query definition and execution
       When the module is compiled
       Then both fragment A and B are concatenated to the query string
 
+    Scenario: A query string defines its own fragment
+      Given a client module with a valid schema
+      When the developer defines defgql :get_user with a query that spreads ...UserName
+      And the same query string defines fragment UserName on User
+      Then the local definition is used to generate the result struct
+      And it shadows a deffragment of the same name, whose source is not appended
+
+    Scenario: A fragment body spreading a fragment defined later is rejected
+      Given fragment A spreads fragment B
+      And fragment B is defined after fragment A
+      When the module is compiled
+      Then compilation fails with "undefined fragment spread: ...B"
+
     Scenario: Later fragment definitions override earlier ones for subsequent queries
       Given fragment UserFields is defined before defgql :get_user_name with field name
       And fragment UserFields is redefined before defgql :get_user_email with field email

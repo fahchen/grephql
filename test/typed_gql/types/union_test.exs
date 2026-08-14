@@ -1,6 +1,7 @@
 defmodule TypedGql.Types.UnionTest do
   use ExUnit.Case, async: true
 
+  alias TypedGql.Test.UnionTypes.Address
   alias TypedGql.Test.UnionTypes.Post
   alias TypedGql.Test.UnionTypes.SearchUnion
   alias TypedGql.Test.UnionTypes.User
@@ -32,13 +33,16 @@ defmodule TypedGql.Types.UnionTest do
     end
 
     test "returns error for missing __typename" do
-      assert {:error, "missing __typename field"} =
-               SearchUnion.load(%{"name" => "X"}, nil, %{})
+      assert :error = SearchUnion.load(%{"name" => "X"}, nil, %{})
     end
 
     test "returns error for unknown __typename" do
-      assert {:error, "unknown __typename: \"Comment\""} =
-               SearchUnion.load(%{"__typename" => "Comment"}, nil, %{})
+      assert :error = SearchUnion.load(%{"__typename" => "Comment"}, nil, %{})
+    end
+
+    test "loads a map whose __typename key is an atom, as Ecto's dumper emits" do
+      assert {:ok, %User{__typename: :user, name: "Alice"}} =
+               SearchUnion.load(%{__typename: "User", name: "Alice"}, nil, %{})
     end
   end
 
@@ -55,6 +59,10 @@ defmodule TypedGql.Types.UnionTest do
       assert {:ok, ^struct} = SearchUnion.cast(struct, %{})
     end
 
+    test "rejects a struct that is not a union member" do
+      assert :error = SearchUnion.cast(%Address{zip: "12345"}, %{})
+    end
+
     test "casts nil" do
       assert {:ok, nil} = SearchUnion.cast(nil, %{})
     end
@@ -66,6 +74,33 @@ defmodule TypedGql.Types.UnionTest do
       assert {:ok, map} = SearchUnion.dump(struct, nil, %{})
       assert map.name == "Alice"
       assert map.email == "a@b.com"
+    end
+
+    test "dumps through the variant's own field dumpers" do
+      {:ok, user} =
+        SearchUnion.load(
+          %{"__typename" => "User", "role" => "ADMIN", "address" => %{"zip" => "12345"}},
+          nil,
+          %{}
+        )
+
+      assert {:ok, map} = SearchUnion.dump(user, nil, %{})
+      assert map.__typename == "User"
+      assert map.role == "ADMIN"
+      assert map.address == %{zip: "12345"}
+      assert {:ok, _json} = Jason.encode(map)
+    end
+
+    test "round-trips back to the loaded struct" do
+      {:ok, user} =
+        SearchUnion.load(%{"__typename" => "User", "name" => "Alice"}, nil, %{})
+
+      assert {:ok, dumped} = SearchUnion.dump(user, nil, %{})
+      assert {:ok, ^user} = SearchUnion.load(dumped, nil, %{})
+    end
+
+    test "rejects a struct that is not a union member" do
+      assert :error = SearchUnion.dump(%Address{zip: "12345"}, nil, %{})
     end
 
     test "dumps nil" do

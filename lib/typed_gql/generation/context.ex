@@ -13,6 +13,6 @@ defmodule TypedGql.Generation.Context do
   typed_structor do
     field :schema, Schema.t(), enforce: true
     field :scalar_types, %{String.t() => module()}, default: %{}
-    field :fragments, %{String.t() => map()}, default: %{}
+    field :fragments, %{String.t() => TypedGql.Language.Fragment.t()}, default: %{}
   end
 end

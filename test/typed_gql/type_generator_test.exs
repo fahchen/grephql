@@ -14,11 +14,18 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.AliasMulti.GetUsers.Result.SimpleUser,
               TypedGql.Test.AutoTypename.GetNode.Result.Node.User,
               TypedGql.Test.FragmentNoPlugins.Fragments.UserFields,
+              TypedGql.Test.FragmentSpreadBody.Fragments.UserDetails,
+              TypedGql.Test.SharedFrag.Fragments.NodeFields,
+              TypedGql.Test.UnionFrag.Fragments.SearchFields.User,
               TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.AppSubscription,
               TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.Shop,
               TypedGql.Test.Isolation.GetUser.Result.User,
               TypedGql.Test.Isolation.ListUsers.Result.User,
               TypedGql.Test.ListEmbed.GetUser.Result.User,
+              TypedGql.Test.ManyEmbed.GetUser.Result.User,
+              TypedGql.Test.PostMatrix.GetUser.Result.User,
+              TypedGql.Test.TagMatrix.GetUser.Result.User,
+              TypedGql.Test.UnionGrid.Search.Result,
               TypedGql.Test.Nested.GetUser.Result.User,
               TypedGql.Test.NoDupTypename.GetNode.Result.Node.User,
               TypedGql.Test.NoPK.GetUser.Result.User,
@@ -58,7 +65,9 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.TransitiveInterface.GetNode.Result,
               TypedGql.Test.TransitiveInterface.GetNode.Result.Node,
               TypedGql.Test.EqualArgs.Search.Result,
-              TypedGql.Test.EqualObjectArgs.Search.Result
+              TypedGql.Test.EqualObjectArgs.Search.Result,
+              TypedGql.Test.NullableListNonNull.GetUser.Result.User,
+              TypedGql.Test.NonNullMatrix.GetUser.Result.User
             ]}
 
   alias TypedGql.Schema.Field, as: SchemaField
@@ -236,7 +245,20 @@ defmodule TypedGql.TypeGeneratorTest do
       assert TypedGql.Test.Deep.GetUser.Result.User.Posts.Author in modules
     end
 
-    test "list field generates embeds_many" do
+    test "a [T!]! list field generates embeds_many" do
+      types = types_with_non_null_list_posts()
+      schema = SchemaHelper.build_schema(types: types)
+      operation = parse!("query { user(id: \"1\") { name posts { title } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.ManyEmbed,
+        function_name: :get_user
+      )
+
+      assert :posts in TypedGql.Test.ManyEmbed.GetUser.Result.User.__schema__(:embeds)
+    end
+
+    test "a list field with nullable elements is a plain field, not embeds_many" do
       types = types_with_list_posts()
       schema = SchemaHelper.build_schema(types: types)
       operation = parse!("query { user(id: \"1\") { name posts { title } } }")
@@ -246,7 +268,145 @@ defmodule TypedGql.TypeGeneratorTest do
         function_name: :get_user
       )
 
-      assert :posts in TypedGql.Test.ListEmbed.GetUser.Result.User.__schema__(:embeds)
+      # [Post]! — embeds_many raises on a nil element, so the field lowers to
+      # Ecto.Embedded with cardinality: :one instead.
+      assert_embedded_list(
+        TypedGql.Test.ListEmbed.GetUser.Result.User,
+        :posts,
+        TypedGql.Test.ListEmbed.GetUser.Result.User.Posts
+      )
+    end
+
+    # [Post!] — the elements cannot be nil but the list itself can, and
+    # embeds_many has no way to say "nil list", so this must not be one.
+    test "a nullable list of non-null elements is a plain field, not embeds_many" do
+      types = types_with_nullable_list_non_null_posts()
+      schema = SchemaHelper.build_schema(types: types)
+      operation = parse!("query { user(id: \"1\") { name posts { title } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.NullableListNonNull,
+        function_name: :get_user
+      )
+
+      module = TypedGql.Test.NullableListNonNull.GetUser.Result.User
+      refute :posts in module.__schema__(:embeds)
+
+      assert %{posts: nil} =
+               Ecto.embedded_load(module, %{"name" => "Alice", "posts" => nil}, :json)
+    end
+
+    # [[Post!]!]! is faithful at both levels, so only the depth guard keeps it
+    # off embeds_many — which cannot nest.
+    test "a nested list is never embeds_many, however non-null its levels" do
+      types = types_with_non_null_matrix()
+      schema = SchemaHelper.build_schema(types: types)
+      operation = parse!("query { user(id: \"1\") { name postGrid { title } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.NonNullMatrix,
+        function_name: :get_user
+      )
+
+      module = TypedGql.Test.NonNullMatrix.GetUser.Result.User
+      refute :post_grid in module.__schema__(:embeds)
+
+      assert %{post_grid: [[%{title: "a"}]]} =
+               Ecto.embedded_load(
+                 module,
+                 %{"name" => "Alice", "postGrid" => [[%{"title" => "a"}]]},
+                 :json
+               )
+    end
+
+    test "a nullable object list decodes null and null elements as nil" do
+      types = types_with_nullable_list_posts()
+      schema = SchemaHelper.build_schema(types: types)
+      operation = parse!("query { user(id: \"1\") { name posts { title } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.NullableList,
+        function_name: :get_user
+      )
+
+      decode = &TypedGql.ResponseDecoder.decode!(TypedGql.Test.NullableList.GetUser.Result, &1)
+
+      assert decode.(%{"user" => %{"posts" => nil}}).user.posts == nil
+
+      assert [nil, %{__struct__: posts_module, title: "t"}] =
+               decode.(%{"user" => %{"posts" => [nil, %{"title" => "t"}]}}).user.posts
+
+      assert posts_module == TypedGql.Test.NullableList.GetUser.Result.User.Posts
+    end
+  end
+
+  describe "nested list fields" do
+    test "a nested list of objects nests the parameterized embed" do
+      types = types_with_matrices()
+      schema = SchemaHelper.build_schema(types: types)
+      operation = parse!("query { user(id: \"1\") { postMatrix { title } } }")
+
+      modules =
+        TypeGenerator.generate(operation, schema,
+          client_module: TypedGql.Test.PostMatrix,
+          function_name: :get_user
+        )
+
+      assert TypedGql.Test.PostMatrix.GetUser.Result.User.PostMatrix in modules
+
+      assert {:array, {:array, {:parameterized, {Ecto.Embedded, embedded}}}} =
+               TypedGql.Test.PostMatrix.GetUser.Result.User.__schema__(:type, :post_matrix)
+
+      assert %Ecto.Embedded{
+               cardinality: :one,
+               related: TypedGql.Test.PostMatrix.GetUser.Result.User.PostMatrix
+             } = embedded
+
+      json = %{"user" => %{"postMatrix" => [[%{"title" => "t"}, nil], nil]}}
+      result = TypedGql.ResponseDecoder.decode!(TypedGql.Test.PostMatrix.GetUser.Result, json)
+
+      assert [[%{title: "t"}, nil], nil] = result.user.post_matrix
+    end
+
+    test "a nested list of scalars stays a plain nested array" do
+      types = types_with_matrices()
+      schema = SchemaHelper.build_schema(types: types)
+      operation = parse!("query { user(id: \"1\") { tagMatrix } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.TagMatrix,
+        function_name: :get_user
+      )
+
+      assert TypedGql.Test.TagMatrix.GetUser.Result.User.__schema__(:type, :tag_matrix) ==
+               {:array, {:array, :string}}
+    end
+
+    test "a nested list of a union nests the union type" do
+      schema = schema_with_union_grid()
+
+      operation =
+        parse!("query { grid { __typename ... on User { email } ... on Post { title } } }")
+
+      modules =
+        TypeGenerator.generate(operation, schema,
+          client_module: TypedGql.Test.UnionGrid,
+          function_name: :search
+        )
+
+      assert TypedGql.Test.UnionGrid.Search.Result.Grid.User in modules
+      assert TypedGql.Test.UnionGrid.Search.Result.Grid.Post in modules
+
+      assert {:array, {:array, {:parameterized, {union_module, _params}}}} =
+               TypedGql.Test.UnionGrid.Search.Result.__schema__(:type, :grid)
+
+      assert union_module == TypedGql.Test.UnionGrid.Search.Result.Grid.Union
+
+      json = %{"grid" => [[%{"__typename" => "User", "email" => "a@b.com"}, nil], nil]}
+      result = TypedGql.ResponseDecoder.decode!(TypedGql.Test.UnionGrid.Search.Result, json)
+
+      assert [[%{__struct__: user_module, email: "a@b.com"}, nil], nil] = result.grid
+      assert user_module == TypedGql.Test.UnionGrid.Search.Result.Grid.User
     end
   end
 
@@ -488,7 +648,7 @@ defmodule TypedGql.TypeGeneratorTest do
       assert {:parameterized, {TypedGql.Types.Typename, values}} =
                search_module.__schema__(:type, :__typename)
 
-      assert values == %{"User" => :user, "Post" => :post}
+      assert values.string_to_atom == %{"User" => :user, "Post" => :post}
     end
 
     test "__typename on a concrete object type is that type's own name" do
@@ -500,8 +660,10 @@ defmodule TypedGql.TypeGeneratorTest do
         function_name: :get_user
       )
 
-      assert {:parameterized, {TypedGql.Types.Typename, %{"User" => :user}}} =
+      assert {:parameterized, {TypedGql.Types.Typename, values}} =
                TypedGql.Test.ObjectTypename.GetUser.Result.User.__schema__(:type, :__typename)
+
+      assert values.string_to_atom == %{"User" => :user}
     end
 
     test "union field uses parameterized type, not embed" do
@@ -522,6 +684,12 @@ defmodule TypedGql.TypeGeneratorTest do
 
       fields = result_module.__schema__(:fields)
       assert :search in fields
+
+      # A depth-1 list of a union stays one array around the dispatch type.
+      assert {:array, {:parameterized, {union_module, _params}}} =
+               result_module.__schema__(:type, :search)
+
+      assert union_module == Module.safe_concat(result_module, "Search.Union")
     end
 
     test "end-to-end decode with union field" do
@@ -551,6 +719,26 @@ defmodule TypedGql.TypeGeneratorTest do
       assert %{__struct__: TypedGql.Test.UnionE2E.Search.Result.Search.Post} = post
       assert post.id == "2"
       assert post.title == "Hello"
+    end
+
+    test "decoding a union member the query never selected raises ArgumentError" do
+      schema = schema_with_union()
+
+      operation =
+        parse!("query { search { __typename id ... on User { email } ... on Post { title } } }")
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.UnionUnknownTypename,
+        function_name: :search
+      )
+
+      json = %{"search" => [%{"__typename" => "Comment", "id" => "1"}]}
+
+      # The union type returns :error, per the Ecto.ParameterizedType contract,
+      # and Ecto turns that into an ArgumentError naming the offending map.
+      assert_raise ArgumentError, ~r/cannot load .*Comment/, fn ->
+        TypedGql.ResponseDecoder.decode!(TypedGql.Test.UnionUnknownTypename.Search.Result, json)
+      end
     end
 
     test "an unselected __typename stays out of the generated struct" do
@@ -594,7 +782,7 @@ defmodule TypedGql.TypeGeneratorTest do
       assert {:parameterized, {TypedGql.Types.Typename, values}} =
                TypedGql.Test.NoDupTypename.GetNode.Result.Node.User.__schema__(:type, :__typename)
 
-      assert values == %{"User" => :user, "Post" => :post}
+      assert values.string_to_atom == %{"User" => :user, "Post" => :post}
     end
 
     test "handles __typename when not in introspection fields" do
@@ -706,9 +894,7 @@ defmodule TypedGql.TypeGeneratorTest do
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.SpreadCondition,
         function_name: :search,
-        fragments: %{
-          "UserFields" => %{source: "", fragment: fragment, result_module: nil}
-        }
+        fragments: %{"UserFields" => fragment}
       )
 
       user_fields = TypedGql.Test.SpreadCondition.Search.Result.Search.User.__schema__(:fields)
@@ -752,7 +938,7 @@ defmodule TypedGql.TypeGeneratorTest do
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.AbstractSpread,
         function_name: :search,
-        fragments: %{"SearchFields" => %{source: "", fragment: fragment, result_module: nil}}
+        fragments: %{"SearchFields" => fragment}
       )
 
       user_fields = TypedGql.Test.AbstractSpread.Search.Result.Search.User.__schema__(:fields)
@@ -771,13 +957,17 @@ defmodule TypedGql.TypeGeneratorTest do
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.SharedSpread,
         function_name: :search,
-        fragments: %{"ResultFields" => %{source: "", fragment: fragment, result_module: nil}}
+        fragments: %{"ResultFields" => fragment}
       )
 
       # A plain embed, not a __typename-dispatched union: a shared-only selection
       # needs no variants, and forcing dispatch would demand a discriminator the
       # response has no reason to carry.
-      assert :search in TypedGql.Test.SharedSpread.Search.Result.__schema__(:embeds)
+      assert_embedded_list(
+        TypedGql.Test.SharedSpread.Search.Result,
+        :search,
+        TypedGql.Test.SharedSpread.Search.Result.Search
+      )
 
       assert :__typename in TypedGql.Test.SharedSpread.Search.Result.Search.__schema__(:fields)
     end
@@ -1093,7 +1283,11 @@ defmodule TypedGql.TypeGeneratorTest do
         function_name: :search
       )
 
-      assert :search in TypedGql.Test.EqualArgs.Search.Result.__schema__(:embeds)
+      assert_embedded_list(
+        TypedGql.Test.EqualArgs.Search.Result,
+        :search,
+        TypedGql.Test.EqualArgs.Search.Result.Search
+      )
     end
 
     test "input object arguments compare by field, not by written order" do
@@ -1111,7 +1305,11 @@ defmodule TypedGql.TypeGeneratorTest do
         function_name: :search
       )
 
-      assert :search in TypedGql.Test.EqualObjectArgs.Search.Result.__schema__(:embeds)
+      assert_embedded_list(
+        TypedGql.Test.EqualObjectArgs.Search.Result,
+        :search,
+        TypedGql.Test.EqualObjectArgs.Search.Result.Search
+      )
     end
 
     test "an interface that covers only some members still produces variants" do
@@ -1178,7 +1376,7 @@ defmodule TypedGql.TypeGeneratorTest do
   end
 
   describe "generate_fragment/4" do
-    test "generates the fragment module without a plugin list" do
+    test "generates the fragment module without options" do
       schema = SchemaHelper.build_schema()
       fragment = parse!("fragment UserFields on User { name email }")
 
@@ -1186,13 +1384,60 @@ defmodule TypedGql.TypeGeneratorTest do
                TypeGenerator.generate_fragment(
                  fragment,
                  schema,
-                 TypedGql.Test.FragmentNoPlugins,
-                 %{}
+                 TypedGql.Test.FragmentNoPlugins
                )
 
       fields = TypedGql.Test.FragmentNoPlugins.Fragments.UserFields.__schema__(:fields)
       assert :name in fields
       assert :email in fields
+    end
+
+    test "a fragment body may spread another fragment" do
+      schema = SchemaHelper.build_schema()
+      fragment = parse!("fragment UserDetails on User { ...UserName email }")
+
+      TypeGenerator.generate_fragment(fragment, schema, TypedGql.Test.FragmentSpreadBody,
+        fragments: %{"UserName" => parse!("fragment UserName on User { name }")}
+      )
+
+      fields = TypedGql.Test.FragmentSpreadBody.Fragments.UserDetails.__schema__(:fields)
+      assert :name in fields
+      assert :email in fields
+    end
+
+    test "a fragment on a union points at the dispatching union type" do
+      schema = schema_with_union()
+      fragment = parse!("fragment SearchFields on SearchResult { ... on User { email } }")
+
+      assert TypedGql.Test.UnionFrag.Fragments.SearchFields.Union ==
+               TypeGenerator.generate_fragment(fragment, schema, TypedGql.Test.UnionFrag)
+
+      assert Code.ensure_loaded?(TypedGql.Test.UnionFrag.Fragments.SearchFields.Union)
+      assert :email in TypedGql.Test.UnionFrag.Fragments.SearchFields.User.__schema__(:fields)
+    end
+
+    test "a fragment selecting only an interface's shared fields stays a plain schema" do
+      schema = schema_with_union_of_nodes()
+      fragment = parse!("fragment NodeFields on SearchResult { __typename }")
+
+      assert TypedGql.Test.SharedFrag.Fragments.NodeFields ==
+               TypeGenerator.generate_fragment(fragment, schema, TypedGql.Test.SharedFrag)
+
+      assert TypedGql.Test.SharedFrag.Fragments.NodeFields.__schema__(:fields) == [:__typename]
+    end
+  end
+
+  describe "unresolvable fragment spreads" do
+    test "a spread with no definition is reported" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!(~s|query { user(id: "1") { ...Missing } }|)
+
+      assert_raise CompileError, ~r/undefined fragment spread: \.\.\.Missing/, fn ->
+        TypeGenerator.generate(operation, schema,
+          client_module: TypedGql.Test.MissingSpread,
+          function_name: :get_user
+        )
+      end
     end
   end
 
@@ -1220,6 +1465,15 @@ defmodule TypedGql.TypeGeneratorTest do
     [union_node] = tree.children
     variant = Enum.find(union_node.children, &(&1.parent_type == type_name))
     Enum.find(variant.fields, &(&1.name == field_name))
+  end
+
+  # Asserting the exact field type rather than absence from `__schema__(:embeds)`:
+  # `__schema__(:fields)` lists embeds too, so it would pass either way.
+  defp assert_embedded_list(schema_module, field_name, related) do
+    assert {:array, {:parameterized, {Ecto.Embedded, embedded}}} =
+             schema_module.__schema__(:type, field_name)
+
+    assert %Ecto.Embedded{cardinality: :one, related: ^related} = embedded
   end
 
   defp parse_document!(query) do
@@ -1317,6 +1571,90 @@ defmodule TypedGql.TypeGeneratorTest do
     })
   end
 
+  defp types_with_non_null_list_posts do
+    put_in(
+      types_with_list_posts(),
+      ["User", Access.key!(:fields), "posts", Access.key!(:type)],
+      %TypeRef{
+        kind: :non_null,
+        of_type: %TypeRef{
+          kind: :list,
+          of_type: %TypeRef{
+            kind: :non_null,
+            of_type: %TypeRef{kind: :object, name: "Post"}
+          }
+        }
+      }
+    )
+  end
+
+  defp types_with_nullable_list_posts do
+    put_in(
+      types_with_list_posts(),
+      ["User", Access.key!(:fields), "posts", Access.key!(:type)],
+      %TypeRef{kind: :list, of_type: %TypeRef{kind: :object, name: "Post"}}
+    )
+  end
+
+  # [[Post]] and [[String]] on the same type: a nested list of a composite and
+  # the scalar control that already worked.
+  # [Post!] — nullable list, non-null elements.
+  defp types_with_nullable_list_non_null_posts do
+    update_in(
+      types_with_list_posts(),
+      ["User", Access.key!(:fields)],
+      &Map.put(&1, "posts", %SchemaField{
+        name: "posts",
+        type: %TypeRef{
+          kind: :list,
+          of_type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :object, name: "Post"}}
+        }
+      })
+    )
+  end
+
+  # [[Post!]!]! — non-null at every level, so only the nesting depth keeps it
+  # off embeds_many.
+  defp types_with_non_null_matrix do
+    non_null = fn inner -> %TypeRef{kind: :non_null, of_type: inner} end
+
+    update_in(
+      types_with_list_posts(),
+      ["User", Access.key!(:fields)],
+      &Map.put(&1, "postGrid", %SchemaField{
+        name: "postGrid",
+        type:
+          non_null.(%TypeRef{
+            kind: :list,
+            of_type:
+              non_null.(%TypeRef{
+                kind: :list,
+                of_type: non_null.(%TypeRef{kind: :object, name: "Post"})
+              })
+          })
+      })
+    )
+  end
+
+  defp types_with_matrices do
+    matrix = fn inner -> %TypeRef{kind: :list, of_type: %TypeRef{kind: :list, of_type: inner}} end
+
+    update_in(
+      types_with_list_posts(),
+      ["User", Access.key!(:fields)],
+      &Map.merge(&1, %{
+        "postMatrix" => %SchemaField{
+          name: "postMatrix",
+          type: matrix.(%TypeRef{kind: :object, name: "Post"})
+        },
+        "tagMatrix" => %SchemaField{
+          name: "tagMatrix",
+          type: matrix.(%TypeRef{kind: :scalar, name: "String"})
+        }
+      })
+    )
+  end
+
   defp types_with_author do
     base = types_with_list_posts()
 
@@ -1406,6 +1744,24 @@ defmodule TypedGql.TypeGeneratorTest do
       })
 
     SchemaHelper.build_schema(types: types)
+  end
+
+  # The same union, reached through a [[SearchResult]] field.
+  defp schema_with_union_grid do
+    update_in(
+      schema_with_union(),
+      [Access.key!(:types), "Query", Access.key!(:fields)],
+      &Map.put(&1, "grid", %SchemaField{
+        name: "grid",
+        type: %TypeRef{
+          kind: :list,
+          of_type: %TypeRef{
+            kind: :list,
+            of_type: %TypeRef{kind: :union, name: "SearchResult"}
+          }
+        }
+      })
+    )
   end
 
   # A union whose members implement two interfaces, so one field can be reached

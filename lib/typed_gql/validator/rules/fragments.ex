@@ -14,24 +14,51 @@ defmodule TypedGql.Validator.Rules.Fragments do
 
   @spec validate(Document.t(), Context.t()) :: Context.t()
   def validate(%Document{definitions: definitions}, %Context{} = ctx) do
+    fragments = Enum.filter(definitions, &match?(%Fragment{}, &1))
+    by_name = Map.new(fragments, &{&1.name, &1})
+
     ctx =
       definitions
       |> Enum.filter(&match?(%OperationDefinition{}, &1))
       |> Enum.reduce(ctx, fn op, acc ->
         root_type_name = Helpers.root_type_name(acc.schema, op.operation)
-        validate_selection_set(acc, op.selection_set, root_type_name, acc.schema)
+        validate_selection_set(acc, op.selection_set, root_type_name, by_name)
       end)
-
-    fragments = Enum.filter(definitions, &match?(%Fragment{}, &1))
 
     ctx =
       Enum.reduce(fragments, ctx, fn frag, acc ->
         frag_type = frag.type_condition.name
         acc = validate_fragment_type_condition(acc, frag, frag_type)
-        validate_selection_set(acc, frag.selection_set, frag_type, acc.schema)
+        validate_selection_set(acc, frag.selection_set, frag_type, by_name)
       end)
 
-    check_cycles(ctx, fragments)
+    ctx
+    |> check_cycles(fragments)
+    |> check_unused(definitions, fragments)
+  end
+
+  # Spec 5.5.1.4: every fragment an executable document defines must be spread
+  # somewhere in it, or a server rejects the whole document. A document with no
+  # operation is not one we send — deffragment compiles a fragment on its own —
+  # so the rule does not apply there.
+  defp check_unused(ctx, definitions, fragments) do
+    if Enum.any?(definitions, &match?(%OperationDefinition{}, &1)),
+      do: reject_unused(ctx, definitions, fragments),
+      else: ctx
+  end
+
+  defp reject_unused(ctx, definitions, fragments) do
+    spread =
+      definitions
+      |> Enum.filter(&(match?(%OperationDefinition{}, &1) or match?(%Fragment{}, &1)))
+      |> Enum.flat_map(&spread_names(&1.selection_set))
+      |> MapSet.new()
+
+    fragments
+    |> Enum.reject(&MapSet.member?(spread, &1.name))
+    |> Enum.reduce(ctx, fn fragment, acc ->
+      Context.add_error(acc, "fragment \"#{fragment.name}\" is defined but never used", fragment)
+    end)
   end
 
   # Spec 5.5.2.2: a cycle would make the document infinite. It also makes
@@ -96,32 +123,55 @@ defmodule TypedGql.Validator.Rules.Fragments do
     end
   end
 
-  defp validate_selection_set(ctx, nil, _parent_type, _schema), do: ctx
+  defp validate_selection_set(ctx, nil, _parent_type, _fragments), do: ctx
 
-  defp validate_selection_set(ctx, %SelectionSet{selections: sels}, parent_type, schema) do
+  defp validate_selection_set(ctx, %SelectionSet{selections: sels}, parent_type, fragments) do
     Enum.reduce(sels, ctx, fn sel, acc ->
-      validate_selection(acc, sel, parent_type, schema)
+      validate_selection(acc, sel, parent_type, fragments)
     end)
   end
 
-  defp validate_selection(ctx, %Field{} = field, parent_type, schema) do
-    child_type = Helpers.resolve_field_type(schema, parent_type, field.name)
-    validate_selection_set(ctx, field.selection_set, child_type, schema)
+  defp validate_selection(ctx, %Field{} = field, parent_type, fragments) do
+    child_type = Helpers.resolve_field_type(ctx.schema, parent_type, field.name)
+    validate_selection_set(ctx, field.selection_set, child_type, fragments)
   end
 
-  defp validate_selection(ctx, %InlineFragment{type_condition: nil} = frag, parent_type, schema) do
-    validate_selection_set(ctx, frag.selection_set, parent_type, schema)
+  defp validate_selection(
+         ctx,
+         %InlineFragment{type_condition: nil} = frag,
+         parent_type,
+         fragments
+       ) do
+    validate_selection_set(ctx, frag.selection_set, parent_type, fragments)
   end
 
-  defp validate_selection(ctx, %InlineFragment{} = frag, parent_type, schema) do
+  defp validate_selection(ctx, %InlineFragment{} = frag, parent_type, fragments) do
     frag_type = frag.type_condition.name
 
     ctx
-    |> validate_type_condition(frag, frag_type, parent_type, schema)
-    |> validate_selection_set(frag.selection_set, frag_type, schema)
+    |> validate_type_condition(frag, frag_type, parent_type, ctx.schema)
+    |> validate_selection_set(frag.selection_set, frag_type, fragments)
   end
 
-  defp validate_selection(ctx, _selection, _parent_type, _schema), do: ctx
+  # A spread's type condition has to apply to where it is spread, exactly as an
+  # inline fragment's does. Without this the generator resolves the fragment's
+  # fields against the wrong type and dies on a bare MatchError. The definition's
+  # own body is walked where it is defined, so only the condition is checked here.
+  defp validate_selection(ctx, %FragmentSpread{} = spread, parent_type, fragments) do
+    case Map.fetch(fragments, spread.name) do
+      {:ok, fragment} ->
+        validate_type_condition(
+          ctx,
+          spread,
+          fragment.type_condition.name,
+          parent_type,
+          ctx.schema
+        )
+
+      :error ->
+        ctx
+    end
+  end
 
   defp validate_type_condition(ctx, frag, type_name, parent_type, schema) do
     case Schema.get_type(schema, type_name) do

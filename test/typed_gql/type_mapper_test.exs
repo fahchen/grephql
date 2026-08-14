@@ -306,7 +306,34 @@ defmodule TypedGql.TypeMapperTest do
     end
   end
 
+  describe "list_type_ast/2" do
+    test "a bare type is the leaf itself" do
+      assert render(object("Post")) == "Post.t()"
+    end
+
+    test "a nullable list makes its elements nullable" do
+      # The outer `| nil` comes from the field's `null:` option, not from here.
+      assert render(list(object("Post"))) == "[Post.t() | nil]"
+    end
+
+    test "a list of non-null elements keeps them non-null" do
+      assert render(list(non_null(object("Post")))) == "[Post.t()]"
+    end
+
+    test "a non-null list drops only the outer nullability" do
+      assert render(non_null(list(non_null(object("Post"))))) == "[Post.t()]"
+    end
+
+    test "a nested list is nullable at every level it says so" do
+      assert render(list(list(object("Post")))) == "[[Post.t() | nil] | nil]"
+    end
+  end
+
   # Helper constructors
+
+  defp render(type_ref) do
+    type_ref |> TypeMapper.list_type_ast(quote(do: Post.t())) |> Macro.to_string()
+  end
 
   defp scalar(name), do: %TypeRef{kind: :scalar, name: name}
   defp object(name), do: %TypeRef{kind: :object, name: name}

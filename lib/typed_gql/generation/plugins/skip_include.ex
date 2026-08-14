@@ -24,9 +24,10 @@ defmodule TypedGql.Generation.Plugins.SkipInclude do
   So `@include` is conditional unless `if:` is literal `true`, and `@skip`
   is conditional unless `if:` is literal `false`.
 
-  List fields (`embeds_many`) are forced to `default: []` downstream, which
-  cannot represent whole-absence as `nil`, so their nullability is left
-  unchanged (see the type generator docs).
+  A `[T!]!` object list is generated as `embeds_many`, which is forced to
+  `default: []` downstream and so cannot represent whole-absence as `nil`; its
+  nullability is left unchanged (see the type generator docs). Every other list
+  shape is a plain field and is marked nullable like any other.
   """
   use TypedGql.Generation.Plugin
 

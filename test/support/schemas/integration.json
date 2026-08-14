@@ -62,6 +62,14 @@
               "type": {"kind": "NON_NULL", "name": null, "ofType": {"kind": "LIST", "name": null, "ofType": {"kind": "INTERFACE", "name": "Node", "ofType": null}}},
               "isDeprecated": false,
               "deprecationReason": null
+            },
+            {
+              "name": "drafts",
+              "description": null,
+              "args": [],
+              "type": {"kind": "LIST", "name": null, "ofType": {"kind": "OBJECT", "name": "Post", "ofType": null}},
+              "isDeprecated": false,
+              "deprecationReason": null
             }
           ],
           "inputFields": null,
