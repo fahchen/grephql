@@ -6,11 +6,18 @@ defmodule TypedGql.Types.TypenameTest do
   @params Typename.init(values: ["User", "Post", "SearchResult"])
 
   describe "init/1" do
-    test "builds string-to-atom mapping" do
+    test "builds both directions of the mapping" do
       assert @params == %{
-               "User" => :user,
-               "Post" => :post,
-               "SearchResult" => :search_result
+               string_to_atom: %{
+                 "User" => :user,
+                 "Post" => :post,
+                 "SearchResult" => :search_result
+               },
+               atom_to_string: %{
+                 user: "User",
+                 post: "Post",
+                 search_result: "SearchResult"
+               }
              }
     end
   end
@@ -25,8 +32,12 @@ defmodule TypedGql.Types.TypenameTest do
       assert :error = Typename.cast("Comment", @params)
     end
 
-    test "passes through atom" do
+    test "passes through a declared atom" do
       assert {:ok, :user} = Typename.cast(:user, @params)
+    end
+
+    test "rejects an undeclared atom" do
+      assert :error = Typename.cast(:comment, @params)
     end
 
     test "casts nil" do
@@ -58,12 +69,18 @@ defmodule TypedGql.Types.TypenameTest do
   end
 
   describe "dump/3" do
-    test "converts atom to string" do
-      assert {:ok, "user"} = Typename.dump(:user, nil, @params)
+    test "converts atom back to its GraphQL type name" do
+      assert {:ok, "User"} = Typename.dump(:user, nil, @params)
+      assert {:ok, "SearchResult"} = Typename.dump(:search_result, nil, @params)
     end
 
-    test "passes through string" do
-      assert {:ok, "User"} = Typename.dump("User", nil, @params)
+    test "rejects an undeclared atom" do
+      assert :error = Typename.dump(:comment, nil, @params)
+    end
+
+    test "round-trips through load/3" do
+      assert {:ok, name} = Typename.dump(:search_result, nil, @params)
+      assert {:ok, :search_result} = Typename.load(name, nil, @params)
     end
 
     test "dumps nil" do
@@ -72,6 +89,12 @@ defmodule TypedGql.Types.TypenameTest do
 
     test "rejects other types" do
       assert :error = Typename.dump(123, nil, @params)
+    end
+
+    test "two names underscoring to one atom are rejected at init" do
+      assert_raise ArgumentError, ~r/FOOBar and FooBar both underscore to :foo_bar/, fn ->
+        Typename.init(values: ["FooBar", "FOOBar"])
+      end
     end
   end
 

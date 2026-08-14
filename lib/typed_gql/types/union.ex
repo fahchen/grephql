@@ -9,6 +9,14 @@ defmodule TypedGql.Types.Union do
   `embed_as: :dump` so that `Ecto.embedded_load/3` calls `load/3`,
   which reads `__typename` and delegates to the matched module via
   `Ecto.embedded_load/3`.
+
+  An unresolvable `__typename` returns `:error`, as the callback contract
+  requires; Ecto turns that into its own `ArgumentError` naming the offending
+  map, the field and the schema, so nothing is lost by not carrying a message.
+
+  `cast/2` accepts the wire shape — a decoded JSON map with a string
+  `"__typename"` — and reads the values inside the variant with load
+  semantics, so an already-cast value such as an enum atom is not accepted.
   """
 
   @doc """
@@ -34,6 +42,11 @@ defmodule TypedGql.Types.Union do
       use Ecto.ParameterizedType
 
       @typename_to_module unquote(Macro.escape(typename_to_module))
+      @module_to_typename unquote(
+                            Macro.escape(
+                              Map.new(typename_to_module, fn {name, mod} -> {mod, name} end)
+                            )
+                          )
 
       @type t() :: struct()
 
@@ -46,7 +59,12 @@ defmodule TypedGql.Types.Union do
       @impl Ecto.ParameterizedType
       def cast(nil, _params), do: {:ok, nil}
 
-      def cast(%{__struct__: _module} = struct, _params), do: {:ok, struct}
+      # A struct is also a map, so this clause has to answer for non-members
+      # itself: falling through to `cast(%{} = map, _params)` would report them
+      # as a missing `__typename` instead of rejecting them.
+      def cast(%{__struct__: module} = struct, _params) do
+        if is_map_key(@module_to_typename, module), do: {:ok, struct}, else: :error
+      end
 
       def cast(%{} = map, _params) do
         with {:ok, module} <- resolve_module(map) do
@@ -70,22 +88,37 @@ defmodule TypedGql.Types.Union do
       @impl Ecto.ParameterizedType
       def dump(nil, _dumper, _params), do: {:ok, nil}
 
-      def dump(%{__struct__: _module} = struct, _dumper, _params),
-        do: {:ok, Map.from_struct(struct)}
+      # Delegating to the variant's own dumpers is what makes the result
+      # JSON-encodable: enums become strings and nested embeds become maps.
+      # The struct's module is the variant's identity, so dump writes the
+      # __typename back into the map — the struct itself carries the field only
+      # when the query selected it, and without the key the dumped map could
+      # never be loaded again.
+      def dump(%{__struct__: module} = struct, _dumper, _params) do
+        case @module_to_typename do
+          %{^module => typename} ->
+            {:ok, struct |> Ecto.embedded_dump(:json) |> Map.put(:__typename, typename)}
+
+          _not_a_member ->
+            :error
+        end
+      end
 
       def dump(_other, _dumper, _params), do: :error
 
       @impl Ecto.ParameterizedType
       def embed_as(_format, _params), do: :dump
 
-      defp resolve_module(%{"__typename" => typename}) do
-        case Map.fetch(@typename_to_module, typename) do
-          {:ok, _module} = ok -> ok
-          :error -> {:error, "unknown __typename: #{inspect(typename)}"}
-        end
-      end
+      defp resolve_module(%{"__typename" => typename}),
+        do: Map.fetch(@typename_to_module, typename)
 
-      defp resolve_module(_map), do: {:error, "missing __typename field"}
+      # `Ecto.embedded_dump/2` emits atom keys, so a dumped union has to resolve
+      # too. The guard keeps a loaded variant struct, whose `:__typename` is an
+      # atom, out of this clause.
+      defp resolve_module(%{__typename: typename}) when is_binary(typename),
+        do: Map.fetch(@typename_to_module, typename)
+
+      defp resolve_module(_map), do: :error
     end
   end
 end

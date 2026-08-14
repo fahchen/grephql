@@ -85,15 +85,6 @@ defmodule TypedGql.Validator.Rules.Variables do
 
   defp check_variable_types_in_selections(
          ctx,
-         %SelectionSet{selections: []},
-         _type_name,
-         _defined,
-         _schema
-       ),
-       do: ctx
-
-  defp check_variable_types_in_selections(
-         ctx,
          %SelectionSet{selections: sels},
          type_name,
          defined,
@@ -121,8 +112,11 @@ defmodule TypedGql.Validator.Rules.Variables do
     |> check_variable_types_in_selections(field.selection_set, nil, defined, schema)
   end
 
-  defp check_selection_var_types(ctx, %InlineFragment{} = frag, _type_name, defined, schema) do
-    frag_type = if frag.type_condition, do: frag.type_condition.name, else: nil
+  # A condition-less inline fragment selects on the enclosing type, so the
+  # parent type carries through — dropping it to nil would skip argument
+  # checking for everything inside the fragment.
+  defp check_selection_var_types(ctx, %InlineFragment{} = frag, type_name, defined, schema) do
+    frag_type = if frag.type_condition, do: frag.type_condition.name, else: type_name
 
     ctx
     |> check_directive_arg_var_types(frag.directives, defined, schema)
@@ -132,8 +126,6 @@ defmodule TypedGql.Validator.Rules.Variables do
   defp check_selection_var_types(ctx, %FragmentSpread{} = spread, _type_name, defined, schema) do
     check_directive_arg_var_types(ctx, spread.directives, defined, schema)
   end
-
-  defp check_selection_var_types(ctx, _selection, _type_name, _defined, _schema), do: ctx
 
   defp check_field_arg_var_types(ctx, field, type_name, defined, schema) do
     case Schema.get_field(schema, type_name, field.name) do
@@ -257,8 +249,6 @@ defmodule TypedGql.Validator.Rules.Variables do
   defp collect_selection_vars(%FragmentSpread{} = spread, acc) do
     collect_directive_vars(acc, spread.directives)
   end
-
-  defp collect_selection_vars(_selection, acc), do: acc
 
   defp collect_arg_vars(arg, acc) do
     case arg.value do

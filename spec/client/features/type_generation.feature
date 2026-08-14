@@ -78,6 +78,8 @@ Feature: GraphQL to Elixir type generation
 
   Rule: List types follow nullable composition
 
+    # Honoured today for lists of objects, interfaces and unions. Lists of
+    # scalars and enums still drop element nullability — tracked separately.
     Scenario Outline: List nullability combinations
       Given a schema field with type <graphql_type>
       When the type is generated
@@ -89,6 +91,18 @@ Feature: GraphQL to Elixir type generation
         | [User!]      | [User.t()] \| nil        |
         | [User]!      | [User.t() \| nil]        |
         | [User]       | [User.t() \| nil] \| nil |
+
+    # Composition holds at any depth, so a matrix nests the same way.
+    Scenario: Nested lists compose level by level
+      Given a schema field with type [[User]]
+      When the type is generated
+      Then the Elixir type is [[User.t() | nil] | nil] | nil
+
+    # Only [T!]! is an Ecto embeds_many, and Ecto pins its default to [].
+    Scenario: A conditional non-null list decodes as an empty list, not nil
+      Given a schema field "posts: [Post!]!" selected with @include(if: $show)
+      When the server omits the field from the response
+      Then the decoded value is [] rather than nil
 
   Rule: GraphQL enums map to downcased Elixir atoms
 

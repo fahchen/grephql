@@ -104,17 +104,29 @@ defmodule TypedGql.Macros do
   @spec __resolve_fragments__(String.t(), [TypedGql.Compiler.fragment_entry()]) ::
           {String.t(), %{String.t() => TypedGql.Compiler.fragment_entry()}}
   def __resolve_fragments__(query_str, fragment_entries) do
-    fragment_map = build_fragment_map(fragment_entries)
+    fragment_map = __fragment_map__(fragment_entries)
 
-    spread_names = collect_spread_names(query_str)
-    undefined = Enum.reject(spread_names, &Map.has_key?(fragment_map, &1))
+    document = parse(query_str)
+    # A fragment the query string defines itself needs no registry entry — the
+    # compiler reads it straight off the document.
+    local_names = local_fragment_names(document)
+    spread_names = collect_spread_names(document)
+
+    undefined =
+      Enum.reject(
+        spread_names,
+        &(Map.has_key?(fragment_map, &1) or MapSet.member?(local_names, &1))
+      )
 
     if undefined != [] do
       names = Enum.map_join(undefined, ", ", &"...#{&1}")
       raise CompileError, description: "undefined fragment spread: #{names}"
     end
 
-    {_seen, used_names} = resolve_spread_names(spread_names, fragment_map, MapSet.new(), [])
+    # Seeding `seen` with the local names is what makes a local definition
+    # shadow a registered one: the registered source is not appended, so the
+    # transmitted document carries exactly one definition of that name.
+    {_seen, used_names} = resolve_spread_names(spread_names, fragment_map, local_names, [])
     used_names = Enum.reverse(used_names)
 
     appended = Enum.map_join(used_names, "\n", fn name -> fragment_map[name].source end)
@@ -125,22 +137,31 @@ defmodule TypedGql.Macros do
     {full_query, used_map}
   end
 
-  defp build_fragment_map(fragment_entries) do
+  @doc false
+  @spec __fragment_map__([TypedGql.Compiler.fragment_entry()]) ::
+          %{String.t() => TypedGql.Compiler.fragment_entry()}
+  def __fragment_map__(fragment_entries) do
     fragment_entries
     |> Enum.reverse()
     |> Map.new(fn entry -> {entry.fragment.name, entry} end)
   end
 
-  defp collect_spread_names(query_str) do
+  # A parse error is left to TypedGql.Compiler to report with its own message.
+  defp parse(query_str) do
     case TypedGql.Parser.parse(query_str) do
-      {:ok, document} ->
-        document.definitions
-        |> Enum.flat_map(&selection_spread_names/1)
-        |> Enum.uniq()
-
-      {:error, _reason} ->
-        []
+      {:ok, document} -> document
+      {:error, _reason} -> %TypedGql.Language.Document{definitions: []}
     end
+  end
+
+  defp local_fragment_names(document) do
+    document |> TypedGql.Language.Document.fragments_by_name() |> Map.keys() |> MapSet.new()
+  end
+
+  defp collect_spread_names(document) do
+    document.definitions
+    |> Enum.flat_map(&selection_spread_names/1)
+    |> Enum.uniq()
   end
 
   # Dialyzer incorrectly flags MapSet as opaque in recursive calls
@@ -165,7 +186,7 @@ defmodule TypedGql.Macros do
 
     case Map.fetch(fragment_map, name) do
       {:ok, entry} ->
-        nested_names = ast_spread_names(entry.fragment.selection_set)
+        nested_names = TypedGql.Language.spread_names(entry.fragment.selection_set)
         resolve_spread_names(nested_names, fragment_map, seen, [name | acc])
 
       :error ->
@@ -174,19 +195,9 @@ defmodule TypedGql.Macros do
   end
 
   defp selection_spread_names(%{selection_set: selection_set}),
-    do: ast_spread_names(selection_set)
+    do: TypedGql.Language.spread_names(selection_set)
 
   defp selection_spread_names(_definition), do: []
-
-  defp ast_spread_names(nil), do: []
-  defp ast_spread_names(%{selections: selections}), do: Enum.flat_map(selections, &spread_name/1)
-
-  defp spread_name(%TypedGql.Language.FragmentSpread{name: name}), do: [name]
-
-  defp spread_name(%{selection_set: selection_set}),
-    do: ast_spread_names(selection_set)
-
-  defp spread_name(_other), do: []
 
   @doc """
   Defines a reusable named GraphQL fragment.
@@ -203,6 +214,26 @@ defmodule TypedGql.Macros do
   Fragments are resolved lexically: a `defgql` sees only the fragments
   defined before it in the module body. If the same fragment name is
   defined multiple times before a `defgql`, the latest definition wins.
+  The same rule applies inside a fragment body: it may only spread
+  fragments defined above it, and spreading one defined later is a
+  compile error.
+
+  The ordering restriction comes from the macro model, not from GraphQL —
+  the spec allows a spread to reference a fragment defined later in the
+  same document. Each `deffragment` compiles as it is expanded, when later
+  definitions do not exist yet, and lexical order is also what gives the
+  redefinition rule above its meaning: with forward references, a spread
+  written before a redefinition would have no defined answer for which
+  version it names. Within a single query string the restriction does not
+  apply — a fragment defined next to the operation may be spread before or
+  after its definition.
+
+  The generated module is an embedded schema for an object type condition,
+  and for an interface whose selections are shared by every member. A
+  condition that resolves to per-member selections instead yields the
+  `TypedGql.Types.Union` parameterized type at `Fragments.Name.Union` —
+  not a struct — with the per-member embedded schemas at
+  `Fragments.Name.MemberType`.
 
   ## Examples
 
@@ -238,7 +269,8 @@ defmodule TypedGql.Macros do
                              @typed_gql_schema,
                              client_module: __MODULE__,
                              scalar_types: @typed_gql_scalars,
-                             caller_env: __ENV__
+                             caller_env: __ENV__,
+                             fragments: TypedGql.Macros.__fragment_map__(@typed_gql_fragments)
                            )
     end
   end
@@ -248,6 +280,12 @@ defmodule TypedGql.Macros do
 
   At compile time, parses and validates the query, generates typed
   response schemas, and defines a function that calls `TypedGql.execute/3`.
+
+  The query string may define its own fragments next to the operation. Such
+  a definition shadows a `deffragment` of the same name: it is the one the
+  server sees, and the registered source is not appended. Every fragment the
+  string defines must also be spread by the operation — an unused definition
+  is transmitted as written and the server rejects the document.
 
   ## Examples
 

@@ -8,6 +8,9 @@ defmodule TypedGql.Validator.Context do
 
   typed_structor do
     field :schema, Schema.t(), enforce: true
+    # Fragments registered outside the document (deffragment); rules that
+    # resolve spreads consult these behind the document's own definitions.
+    field :fragments, %{String.t() => TypedGql.Language.Fragment.t()}, default: %{}
     field :errors, [Error.t()], default: []
   end
 

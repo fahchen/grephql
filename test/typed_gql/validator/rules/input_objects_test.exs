@@ -128,6 +128,14 @@ defmodule TypedGql.Validator.Rules.InputObjectsTest do
       ctx = validate(~s|query { user(id: "1") { name } }|)
       assert errors(ctx) == []
     end
+
+    test "object value against a non-input-object argument type is skipped" do
+      assert errors(validate(~s|query { user(id: {a: "1"}) { name } }|)) == []
+    end
+
+    test "list value against a non-list argument type is skipped" do
+      assert errors(validate(~s|query { user(id: ["1"]) { name } }|)) == []
+    end
   end
 
   defp parse!(query) do

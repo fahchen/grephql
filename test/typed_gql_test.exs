@@ -186,6 +186,55 @@ defmodule TypedGqlTest do
       assert result.data.user.name == "Url"
     end
 
+    defmodule StubbedClient do
+      use TypedGql,
+        otp_app: :typed_gql,
+        source: "support/schemas/minimal.json",
+        endpoint: "https://api.example.com/graphql",
+        req_options: [plug: {Req.Test, TypedGqlTest.StubbedClient}]
+
+      defgql(:get_user, "query { user(id: \"1\") { name } }")
+    end
+
+    test "execute/1 uses the default variables and options" do
+      Req.Test.stub(StubbedClient, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Jason.decode!(body)
+
+        # execute/1 defaults variables to %{}, and the query is anonymous so no
+        # operationName is sent.
+        assert request["variables"] == %{}
+        refute Map.has_key?(request, "operationName")
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(200, Jason.encode!(%{"errors" => [%{"message" => "boom"}]}))
+      end)
+
+      query = %TypedGql.Query{
+        document: "query { user(id: \"1\") { name } }",
+        operation_type: "query",
+        client_module: StubbedClient,
+        result_module: nil
+      }
+
+      assert {:ok, %Result{data: nil}} = TypedGql.execute(query)
+    end
+
+    test "a non-JSON body is reported as an error" do
+      Req.Test.stub(StubbedClient, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/plain")
+        |> Plug.Conn.send_resp(200, "not json at all")
+      end)
+
+      # The error's module depends on the JSON library: Elixir's JSON reports a
+      # tuple that normalize_error wraps in a RuntimeError, while the Jason
+      # fallback on Elixir < 1.18 raises its own DecodeError exception.
+      assert {:error, error} = StubbedClient.get_user()
+      assert is_exception(error)
+    end
+
     test "no URL at all fails in Req" do
       assert_raise ArgumentError, ~r/scheme is required/, fn ->
         NoEndpointClient.get_user()
@@ -392,6 +441,21 @@ defmodule TypedGqlTest do
 
       assert {:ok, %Result{}} =
                client.get_default_user(req_options: [plug: {Req.Test, client}])
+    end
+
+    test "attached step is a no-op on requests that carry no query" do
+      req =
+        [url: "https://api.example.com/graphql", plug: {Req.Test, OpInfoClient}]
+        |> Req.new()
+        |> OperationInfo.attach()
+
+      Req.Test.expect(OpInfoClient, fn conn ->
+        assert OperationInfo.get(conn) == %{function: nil, client: nil, operation: nil}
+
+        json_ok(conn, %{})
+      end)
+
+      assert {:ok, %Req.Response{status: 200}} = Req.post(req)
     end
 
     test "distinguishes multiple functions on the same client" do

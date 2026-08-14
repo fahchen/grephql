@@ -148,4 +148,38 @@ defmodule TypedGql.TypeMapper do
         %{default_result(TypedGql.Types.Enum) | enum_values: values}
     end
   end
+
+  @doc """
+  Builds the typespec AST for a (possibly nested) list type, with `leaf_ast`
+  standing in for the innermost element.
+
+  Every list level and every element carries its own nullability in GraphQL and
+  the Ecto type keeps none of it, so the AST is built from the type reference:
+  `[Post]` with leaf `Post.t()` gives `[Post.t() | nil]`.
+
+  The outermost `| nil` is deliberately omitted — `typed_structor` appends it
+  from the field's `null:` option, so a generation plugin flipping nullability
+  still flows through.
+  """
+  @spec list_type_ast(TypeRef.t(), Macro.t()) :: Macro.t()
+  def list_type_ast(type_ref, leaf_ast) do
+    type_ref |> unwrap_non_null() |> bare_type_ast(leaf_ast)
+  end
+
+  defp unwrap_non_null(%TypeRef{kind: :non_null, of_type: inner}), do: inner
+  defp unwrap_non_null(%TypeRef{} = type_ref), do: type_ref
+
+  defp nullable_type_ast(%TypeRef{kind: :non_null, of_type: inner}, leaf_ast) do
+    bare_type_ast(inner, leaf_ast)
+  end
+
+  defp nullable_type_ast(%TypeRef{} = type_ref, leaf_ast) do
+    quote(do: unquote(bare_type_ast(type_ref, leaf_ast)) | nil)
+  end
+
+  defp bare_type_ast(%TypeRef{kind: :list, of_type: inner}, leaf_ast) do
+    quote(do: [unquote(nullable_type_ast(inner, leaf_ast))])
+  end
+
+  defp bare_type_ast(%TypeRef{}, leaf_ast), do: leaf_ast
 end

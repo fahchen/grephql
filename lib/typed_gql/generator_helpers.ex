@@ -49,6 +49,19 @@ defmodule TypedGql.GeneratorHelpers do
   def typename_opts(_resolved), do: []
 
   @doc """
+  Splits an Ecto type into its innermost element and how many lists wrap it:
+  `{:array, {:array, Foo}}` gives `{Foo, 2}`.
+  """
+  @spec unwrap_list(TypedGql.TypeMapper.ecto_type()) ::
+          {TypedGql.TypeMapper.ecto_type(), integer()}
+  def unwrap_list({:array, inner}) do
+    {leaf, depth} = unwrap_list(inner)
+    {leaf, depth + 1}
+  end
+
+  def unwrap_list(leaf), do: {leaf, 0}
+
+  @doc """
   Builds `typed:` options for a scalar field, including enum type override.
   """
   @spec scalar_typed_opts(TypedGql.TypeMapper.resolve_result()) :: keyword()
@@ -109,7 +122,7 @@ defmodule TypedGql.GeneratorHelpers do
 
   defp field_def_to_type_ast({:field, field_name, ecto_type, opts}) do
     base_type =
-      case get_in(opts, [:typed, :type]) do
+      case Keyword.get(typed_opts(opts), :type) do
         nil -> ecto_type_to_type_ast(ecto_type)
         custom_type -> custom_type
       end
@@ -137,9 +150,16 @@ defmodule TypedGql.GeneratorHelpers do
   end
 
   defp nullable_from_opts(opts) do
+    Keyword.get(typed_opts(opts), :null, true)
+  end
+
+  # A plugin's after_lower may rewrite a field def; whatever non-keyword shape
+  # its typed: option takes, the safe reading is no options — a nullable field
+  # with a derived typespec, wider than the truth but never lying.
+  defp typed_opts(opts) do
     case Keyword.get(opts, :typed, []) do
-      typed when is_list(typed) -> Keyword.get(typed, :null, true)
-      _other -> true
+      typed when is_list(typed) -> typed
+      _other -> []
     end
   end
 
@@ -171,18 +191,15 @@ defmodule TypedGql.GeneratorHelpers do
     location = Macro.Env.location(__ENV__)
     create_fn = fn {mod, ast} -> Module.create(mod, ast, location) end
 
-    # Remove function_exported? guard when dropping Elixir 1.15 support
-    if function_exported?(Kernel.ParallelCompiler, :pmap, 2) do
-      try do
-        Kernel.ParallelCompiler.pmap(module_asts, create_fn)
-      rescue
-        # pmap/2 raises when no compiler session is active or when the
-        # session is interrupted (e.g. inside capture_io in tests).
-        _error in [ArgumentError, MatchError] ->
-          Enum.each(module_asts, create_fn)
-      end
-    else
-      Enum.each(module_asts, create_fn)
+    try do
+      # apply/3 so Elixir 1.15 (no pmap/2) still compiles; the rescue covers both
+      # UndefinedFunctionError there and pmap/2 raising when no compiler session
+      # is active or the session is interrupted (e.g. inside capture_io in tests).
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
+      apply(Kernel.ParallelCompiler, :pmap, [module_asts, create_fn])
+    rescue
+      _error in [ArgumentError, MatchError, UndefinedFunctionError] ->
+        Enum.each(module_asts, create_fn)
     end
 
     :ok

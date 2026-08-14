@@ -171,6 +171,33 @@ defmodule Mix.Tasks.TypedGql.DownloadSchemaTest do
     end
   end
 
+  describe "run/1" do
+    test "parses the same switches" do
+      assert_raise Mix.Error, ~r/--endpoint is required/, fn ->
+        DownloadSchema.run(["--output", "schema.json"])
+      end
+    end
+  end
+
+  describe "non-map response body" do
+    test "raises", %{tmp_dir: tmp_dir} do
+      output = Path.join(tmp_dir, "schema.json")
+
+      Req.Test.expect(__MODULE__, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/plain")
+        |> Plug.Conn.send_resp(200, "not json")
+      end)
+
+      assert_raise Mix.Error, ~r/Unexpected response body/, fn ->
+        DownloadSchema.run(
+          ["--endpoint", "https://api.example.com/graphql", "--output", output],
+          req_options()
+        )
+      end
+    end
+  end
+
   defp req_options, do: [plug: {Req.Test, __MODULE__}]
 
   defp expect_success do

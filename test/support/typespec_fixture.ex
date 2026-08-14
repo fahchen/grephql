@@ -10,6 +10,28 @@ defmodule TypedGql.Test.TypespecFixture do
     user(id: $id) {
       id @include(if: $show)
       name
+      posts {
+        title
+      }
+    }
+  }
+  """)
+
+  defgql(:list_drafts, """
+  query ListDrafts {
+    drafts {
+      title
+    }
+  }
+  """)
+
+  defgql(:list_nodes, """
+  query ListNodes($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      __typename
+      ... on User {
+        name
+      }
     }
   }
   """)

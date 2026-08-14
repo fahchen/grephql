@@ -29,7 +29,8 @@ defmodule TypedGql.Validator.Rules.FragmentsTest do
       """
 
       ctx = validate(query)
-      assert [error] = errors(ctx)
+      kind_errors = Enum.filter(errors(ctx), &(&1.message =~ "cannot be defined on"))
+      assert [error] = kind_errors
       assert error.message =~ "fragment \"BadFrag\" cannot be defined on scalar type \"String\""
     end
   end
@@ -72,6 +73,219 @@ defmodule TypedGql.Validator.Rules.FragmentsTest do
       ctx = validate(~s|query { user(id: "1") { ... { name } } }|)
       assert errors(ctx) == []
     end
+  end
+
+  # Spec 5.5.2.2. Without this the document is infinite, and TypeGenerator's
+  # spread expansion loops forever rather than failing.
+  # Spec 5.5.1.4 — a server rejects a document that defines a fragment it never
+  # spreads, so transmitting one fails every call.
+  describe "unused fragments" do
+    test "a fragment the document never spreads is rejected" do
+      query = """
+      query { user(id: "1") { name } }
+      fragment Unused on User { email }
+      """
+
+      assert [error] = errors(validate(query))
+      assert error.message =~ ~s(fragment "Unused" is defined but never used)
+    end
+
+    test "a fragment reached only through another fragment counts as used" do
+      query = """
+      query { user(id: "1") { ...Outer } }
+      fragment Outer on User { ...Inner }
+      fragment Inner on User { name }
+      """
+
+      assert errors(validate(query)) == []
+    end
+
+    test "a document with no operation is not checked" do
+      # deffragment compiles a fragment on its own; it has no operation to be
+      # spread from.
+      assert errors(validate("fragment Alone on User { name }")) == []
+    end
+  end
+
+  # A spread's condition has to apply where it is spread, exactly as an inline
+  # fragment's does — otherwise generation resolves it against the wrong type.
+  describe "fragment spread applicability" do
+    test "a spread whose condition does not apply is rejected" do
+      query = """
+      query { user(id: "1") { ...P } }
+      fragment P on Post { title }
+      """
+
+      ctx = validate(query, types: types_with_union())
+      applicability = Enum.filter(errors(ctx), &(&1.message =~ "not applicable"))
+
+      assert [error] = applicability
+      assert error.message =~ ~s(type "Post" is not applicable to "User")
+    end
+
+    test "a spread whose condition applies passes" do
+      query = """
+      query { user(id: "1") { ...U } }
+      fragment U on User { name }
+      """
+
+      assert errors(validate(query)) == []
+    end
+
+    test "a spread of an unregistered fragment is left to the macro to report" do
+      assert errors(validate(~s|query { user(id: "1") { ...Missing } }|)) == []
+    end
+  end
+
+  describe "fragment spread cycles" do
+    test "a fragment that spreads itself is rejected" do
+      query = """
+      query { user(id: "1") { ...F } }
+      fragment F on User { name ...F }
+      """
+
+      assert [error] = errors(validate(query))
+      assert error.message =~ ~s(fragment "F" spreads itself)
+    end
+
+    test "a cycle through another fragment is rejected" do
+      query = """
+      query { user(id: "1") { ...A } }
+      fragment A on User { ...B }
+      fragment B on User { ...A }
+      """
+
+      assert [_a, _b] = errors(validate(query))
+    end
+
+    test "a cycle that runs through a field is rejected" do
+      query = """
+      query { user(id: "1") { ...F } }
+      fragment F on User { name posts { author { ...F } } }
+      """
+
+      assert [error] = errors(validate(query, types: types_with_author_cycle()))
+      assert error.message =~ ~s(fragment "F" spreads itself)
+    end
+
+    test "a cycle that runs through an inline fragment is rejected" do
+      query = """
+      query { user(id: "1") { ...F } }
+      fragment F on User { ... on User { ...F } }
+      """
+
+      assert [error] = errors(validate(query))
+      assert error.message =~ ~s(fragment "F" spreads itself)
+    end
+
+    test "spreading the same fragment twice is not a cycle" do
+      query = """
+      query { user(id: "1") { ...F } }
+      fragment F on User { ...G }
+      fragment G on User { name }
+      """
+
+      assert errors(validate(query)) == []
+    end
+
+    test "a fragment name defined twice in one document is rejected" do
+      query = """
+      query { user(id: "1") { ...F } }
+      fragment F on User { name }
+      fragment F on User { email }
+      """
+
+      assert [error] = errors(validate(query))
+      assert error.message =~ ~s(fragment "F" is defined more than once)
+    end
+
+    test "a chain of unused fragments is reported all at once" do
+      query = """
+      query { user(id: "1") { name } }
+      fragment A on User { ...B }
+      fragment B on User { name }
+      """
+
+      assert [a, b] = errors(validate(query))
+      assert a.message =~ ~s(fragment "A" is defined but never used)
+      assert b.message =~ ~s(fragment "B" is defined but never used)
+    end
+
+    # Walking every route rather than every fragment took 6.6s at 24 layers, so
+    # the timeout is the assertion: a document a server would accept must not
+    # cost more than the document it describes.
+    @tag timeout: 5_000
+    test "a document whose fragments fan out and rejoin is checked in linear time" do
+      layers = 24
+
+      definitions =
+        for layer <- 0..(layers - 1), side <- 0..1 do
+          spreads =
+            if layer == layers - 1,
+              do: "name",
+              else: "...F#{layer + 1}_0 ...F#{layer + 1}_1"
+
+          "fragment F#{layer}_#{side} on User { #{spreads} }"
+        end
+
+      query =
+        Enum.join(["query { user(id: \"1\") { ...F0_0 ...F0_1 } }" | definitions], "\n")
+
+      assert errors(validate(query)) == []
+    end
+  end
+
+  defp types_with_author_cycle do
+    Map.merge(SchemaHelper.default_types(), %{
+      "User" => %Type{
+        kind: :object,
+        name: "User",
+        fields: %{
+          "name" => %SchemaField{name: "name", type: %TypeRef{kind: :scalar, name: "String"}},
+          "posts" => %SchemaField{name: "posts", type: %TypeRef{kind: :object, name: "Post"}}
+        }
+      },
+      "Post" => %Type{
+        kind: :object,
+        name: "Post",
+        fields: %{
+          "author" => %SchemaField{name: "author", type: %TypeRef{kind: :object, name: "User"}}
+        }
+      }
+    })
+  end
+
+  describe "unresolvable parent type" do
+    test "inline fragment under a missing root type is skipped" do
+      ctx = validate(~s|query { ... on User { name } }|, query_type: nil)
+      assert errors(ctx) == []
+    end
+
+    test "inline fragment under a parent type absent from the schema is not applicable" do
+      ctx =
+        validate(~s|query { user(id: "1") { ... on User { name } } }|,
+          types: types_with_dangling_field_type()
+        )
+
+      assert [error] = errors(ctx)
+      assert error.message =~ "type \"User\" is not applicable to \"Ghost\""
+    end
+  end
+
+  defp types_with_dangling_field_type do
+    Map.merge(SchemaHelper.default_types(), %{
+      "Query" => %Type{
+        kind: :object,
+        name: "Query",
+        fields: %{
+          "user" => %SchemaField{
+            name: "user",
+            type: %TypeRef{kind: :object, name: "Ghost"},
+            args: %{}
+          }
+        }
+      }
+    })
   end
 
   defp parse!(query) do

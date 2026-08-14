@@ -160,4 +160,31 @@ defmodule TypedGql.Validator.HelpersTest do
       assert Helpers.value_type_mismatch?(arg, type_ref)
     end
   end
+
+  describe "loc_line/1 and loc_column/1" do
+    test "return the location when present" do
+      node = %{loc: %{line: 3, column: 7}}
+
+      assert Helpers.loc_line(node) == 3
+      assert Helpers.loc_column(node) == 7
+    end
+
+    test "return nil when the node carries no location" do
+      assert Helpers.loc_line(%{}) == nil
+      assert Helpers.loc_column(%{}) == nil
+    end
+  end
+
+  describe "reduce_field_arg_types/5" do
+    test "skips arguments the schema field does not declare" do
+      schema = SchemaHelper.build_schema()
+      field = %TypedGql.Language.Field{name: "user", arguments: [%Argument{name: "bogus"}]}
+
+      assert Helpers.reduce_field_arg_types(field, "Query", schema, :untouched, fn _acc,
+                                                                                   _value,
+                                                                                   _type ->
+               flunk("callback must not run for unknown arguments")
+             end) == :untouched
+    end
+  end
 end

@@ -1,31 +1,3 @@
-defmodule TypedGql.ClientModuleGenerationPlugin do
-  @moduledoc false
-  use TypedGql.Generation.Plugin
-
-  alias TypedGql.Generation.Field
-  alias TypedGql.Generation.Schema
-
-  # Renames every `name` field to `display_name`. A rename is observable at
-  # runtime — the decoded struct exposes the new key, sourced from the original
-  # "name" — unlike forced nullability, whose effect lives only in the @type
-  # (not introspectable on generated modules). Proves a user plugin reaches the
-  # pipeline via use TypedGql's :generation_plugins.
-  @impl TypedGql.Generation.Plugin
-  def after_resolve(tree, _context), do: rename(tree)
-
-  defp rename(%Schema{} = node) do
-    %{
-      node
-      | fields:
-          Enum.map(node.fields, fn
-            %Field{name: :name} = field -> %{field | name: :display_name}
-            field -> field
-          end),
-        children: Enum.map(node.children, &rename/1)
-    }
-  end
-end
-
 defmodule TypedGql.ClientModuleTest do
   use ExUnit.Case, async: true
 
@@ -73,6 +45,21 @@ defmodule TypedGql.ClientModuleTest do
       schema = TypedGql.__load_schema__(@minimal_json, __ENV__.file)
       assert schema.query_type == "Query"
     end
+
+    defmodule InlineJsonClient do
+      use TypedGql,
+        otp_app: :typed_gql,
+        source:
+          ~s|{"data":{"__schema":{"queryType":{"name":"Query"},"types":[{"kind":"OBJECT","name":"Query","fields":[],"interfaces":[]}],"directives":[]}}}|
+    end
+
+    test "an inline JSON source registers no external resource" do
+      assert external_resources(InlineJsonClient) == []
+      # Contrast: a file source does register one, so the assertion above is not
+      # merely observing that nothing ever registers.
+      assert [path] = external_resources(TypedGql.ClientModuleTest.FileClient)
+      assert Path.basename(path) == "minimal.json"
+    end
   end
 
   describe "use TypedGql with config options" do
@@ -112,13 +99,32 @@ defmodule TypedGql.ClientModuleTest do
     end
   end
 
+  describe "abstract selections in the transmitted document" do
+    defmodule TypenameClient do
+      use TypedGql,
+        otp_app: :typed_gql,
+        source: "../support/schemas/integration.json"
+
+      defgql(:nodes, "query { nodes(ids: [\"1\"]) { ... on User { name } } }")
+
+      def query, do: @typed_gql_query
+    end
+
+    test "__typename is added to the query that gets sent" do
+      # Union decoding dispatches on __typename, and the server only returns what
+      # the request asked for — so it has to be in the document, not just in the
+      # generated struct.
+      assert TypenameClient.query().document =~ "__typename"
+    end
+  end
+
   describe "use TypedGql with generation_plugins" do
     defmodule PluginClient do
       use TypedGql,
         otp_app: :typed_gql,
         source: "../support/schemas/integration.json",
         endpoint: "https://api.example.com/graphql",
-        generation_plugins: [TypedGql.ClientModuleGenerationPlugin]
+        generation_plugins: [TypedGql.Test.ClientModuleGenerationPlugin]
 
       defgql(:get_user, """
       query GetUser($id: ID!) {
@@ -144,5 +150,13 @@ defmodule TypedGql.ClientModuleTest do
       assert result.user.display_name == "Alice"
       refute Map.has_key?(result.user, :name)
     end
+  end
+
+  defp external_resources(module) do
+    attributes = module.__info__(:attributes)
+
+    attributes
+    |> Keyword.get_values(:external_resource)
+    |> List.flatten()
   end
 end

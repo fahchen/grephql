@@ -23,6 +23,16 @@ defmodule TypedGql.JSON do
   def encode!(term), do: library().encode!(term)
 
   @doc """
+  Normalizes a decode error to an exception.
+
+  The configured library decides the error shape: Jason returns an exception
+  struct, Elixir's JSON a plain tuple, and a custom one anything at all.
+  """
+  @spec normalize_error(term()) :: Exception.t()
+  def normalize_error(reason) when is_exception(reason), do: reason
+  def normalize_error(reason), do: RuntimeError.exception(inspect(reason))
+
+  @doc """
   Decodes a JSON string. Returns `{:ok, term}` or `{:error, reason}`.
   """
   @spec decode(String.t()) :: {:ok, term()} | {:error, term()}

@@ -211,6 +211,41 @@ defmodule TypedGql.Validator.Rules.DeprecationTest do
     end
   end
 
+  describe "values that carry no deprecation info" do
+    test "unknown argument is skipped" do
+      ctx = validate(~s|query { user(id: "1", bogus: "x") { name } }|)
+      assert warnings(ctx) == []
+    end
+
+    test "enum value against a non-enum argument type is skipped" do
+      ctx = validate("query { user(id: ADMIN) { name } }")
+      assert warnings(ctx) == []
+    end
+
+    test "object value against a non-input-object argument type is skipped" do
+      ctx = validate(~s|query { user(id: {a: "1"}) { name } }|)
+      assert warnings(ctx) == []
+    end
+
+    test "list value against a non-list argument type is skipped" do
+      ctx = validate(~s|query { user(id: ["1"]) { name } }|)
+      assert warnings(ctx) == []
+    end
+
+    test "unknown input object field is skipped" do
+      types = types_with_deprecated_input_field()
+
+      ctx =
+        validate(
+          ~s|mutation { createUser(input: {name: "Alice", bogus: "x"}) { id } }|,
+          types: types,
+          mutation_type: "Mutation"
+        )
+
+      assert warnings(ctx) == []
+    end
+  end
+
   defp parse!(query) do
     {:ok, doc} = TypedGql.Parser.parse(query)
     doc

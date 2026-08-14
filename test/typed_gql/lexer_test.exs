@@ -68,6 +68,12 @@ defmodule TypedGql.LexerTest do
     test "null keyword" do
       assert {:ok, [{:null, {1, 1}}]} = Lexer.tokenize("null")
     end
+
+    # GraphQL is case-sensitive: only lowercase `on` is the fragment keyword,
+    # so `ON` is an ordinary name the grammar has no terminal for.
+    test "uppercase ON is a plain name" do
+      assert {:ok, [{:name, {1, 1}, ~c"ON"}]} = Lexer.tokenize("ON")
+    end
   end
 
   describe "tokenize/1 boolean values" do
@@ -224,6 +230,18 @@ defmodule TypedGql.LexerTest do
     test "succeeds within token limit" do
       assert {:ok, tokens} = Lexer.tokenize("a b c", token_limit: 5)
       assert length(tokens) == 3
+    end
+
+    test "applies to punctuation, numbers, strings and block strings" do
+      for input <- ["{ { {", "1 2 3", ~s|"a" "b" "c"|, ~s|"""a""" """b""" """c"""|] do
+        assert Lexer.tokenize(input, token_limit: 2) == {:error, :exceeded_token_limit}
+      end
+    end
+  end
+
+  describe "comments" do
+    test "a carriage return terminates a comment" do
+      assert {:ok, [{:name, _loc, ~c"a"}]} = Lexer.tokenize("# comment\ra")
     end
   end
 end

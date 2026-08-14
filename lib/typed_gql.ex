@@ -234,11 +234,8 @@ defmodule TypedGql do
       {:ok, decoded} ->
         decode_response(%{response | body: decoded}, result_module)
 
-      {:error, reason} when is_exception(reason) ->
-        {:error, reason}
-
       {:error, reason} ->
-        {:error, RuntimeError.exception(inspect(reason))}
+        {:error, TypedGql.JSON.normalize_error(reason)}
     end
   end
 

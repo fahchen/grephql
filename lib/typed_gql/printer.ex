@@ -162,12 +162,28 @@ defmodule TypedGql.Printer do
     items |> Enum.map(mapper) |> Enum.intersperse(", ")
   end
 
+  # The lexer decodes every escape the spec allows, so printing has to put them
+  # back — the printed document is what gets sent, and a raw control byte inside
+  # a string literal is not valid GraphQL.
+  @escapes %{
+    ?\\ => "\\\\",
+    ?" => "\\\"",
+    ?\n => "\\n",
+    ?\r => "\\r",
+    ?\t => "\\t",
+    ?\b => "\\b",
+    ?\f => "\\f"
+  }
+
   defp escape_string(str) do
-    str
-    |> String.replace("\\", "\\\\")
-    |> String.replace("\"", "\\\"")
-    |> String.replace("\n", "\\n")
-    |> String.replace("\r", "\\r")
-    |> String.replace("\t", "\\t")
+    for <<codepoint::utf8 <- str>>, into: "", do: escape_codepoint(codepoint)
   end
+
+  defp escape_codepoint(codepoint) when is_map_key(@escapes, codepoint),
+    do: Map.fetch!(@escapes, codepoint)
+
+  defp escape_codepoint(codepoint) when codepoint < 0x20,
+    do: "\\u" <> (codepoint |> Integer.to_string(16) |> String.pad_leading(4, "0"))
+
+  defp escape_codepoint(codepoint), do: <<codepoint::utf8>>
 end

@@ -150,6 +150,10 @@ defmodule TypedGql.DeffragmentTest do
       assert Code.ensure_loaded?(NestedClient.Fragments.UserDetails)
     end
 
+    test "the outer fragment module carries the spread fragment's fields" do
+      assert NestedClient.Fragments.UserDetails.__schema__(:fields) == [:name, :email]
+    end
+
     test "query document includes both fragment definitions" do
       assert NestedClient.query().document =~ "fragment UserDetails on User"
       assert NestedClient.query().document =~ "fragment UserName on User"
@@ -222,6 +226,120 @@ defmodule TypedGql.DeffragmentTest do
     end
   end
 
+  describe "fragments defined in the query string" do
+    defmodule LocalClient do
+      use TypedGql,
+        otp_app: :typed_gql,
+        source: "../support/schemas/minimal.json"
+
+      deffragment "fragment UserEmail on User { email }"
+
+      # UserName is registered selecting `email`, but the query defines its own
+      # UserName selecting `name` — the local definition is the one that counts.
+      deffragment "fragment UserName on User { email }"
+
+      defgql(:get_user, ~GQL"""
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          ...UserEmail
+          ...UserName
+        }
+      }
+
+      fragment UserName on User {
+        name
+      }
+      """)
+
+      def query, do: @typed_gql_query
+    end
+
+    defmodule OnlyLocalClient do
+      use TypedGql,
+        otp_app: :typed_gql,
+        source: "../support/schemas/minimal.json"
+
+      # Nothing is registered: the spread resolves solely because the query
+      # string defines the fragment itself.
+      defgql(:get_user, ~GQL"""
+      query GetUser($id: ID!) {
+        user(id: $id) {
+          ...UserName
+        }
+      }
+
+      fragment UserName on User {
+        name
+      }
+      """)
+    end
+
+    test "a fragment defined next to the operation resolves with an empty registry" do
+      assert OnlyLocalClient.GetUser.Result.User.__schema__(:fields) == [:name]
+    end
+
+    test "the local definition shadows the registered one of the same name" do
+      assert LocalClient.GetUser.Result.User.__schema__(:fields) == [:email, :name]
+    end
+
+    test "the local definition is sent once, alongside the registered fragment" do
+      document = LocalClient.query().document
+
+      assert [_single] = :binary.matches(document, "fragment UserName on User")
+      assert document =~ "fragment UserEmail on User"
+    end
+  end
+
+  describe "deffragment on a union" do
+    defmodule UnionClient do
+      use TypedGql,
+        otp_app: :typed_gql,
+        source: "../support/schemas/integration.json"
+
+      deffragment ~GQL"""
+      fragment SearchFields on SearchResult {
+        ... on User {
+          name
+        }
+        ... on Post {
+          title
+        }
+      }
+      """
+
+      def fragments, do: @typed_gql_fragments
+    end
+
+    test "the entry points at a module that exists" do
+      [entry] = UnionClient.fragments()
+
+      assert entry.result_module == UnionClient.Fragments.SearchFields.Union
+      assert Code.ensure_loaded?(entry.result_module)
+    end
+
+    test "the per-member schemas carry their own selections" do
+      assert UnionClient.Fragments.SearchFields.User.__schema__(:fields) == [:name]
+      assert UnionClient.Fragments.SearchFields.Post.__schema__(:fields) == [:title]
+    end
+  end
+
+  describe "type system definitions" do
+    test "a fragment mixed with SDL is rejected at its declaration" do
+      assert_raise CompileError, ~r/type system definitions cannot be sent/, fn ->
+        defmodule SdlInFragment do
+          use TypedGql,
+            otp_app: :typed_gql,
+            source: "../support/schemas/minimal.json"
+
+          deffragment("""
+          fragment UserFields on User { name }
+          scalar DateTime
+          """)
+        end
+      end
+    end
+  end
+
   describe "duplicate fragment names" do
     test "later definitions override earlier ones for subsequent queries only" do
       module_name = DuplicateRuntime
@@ -248,11 +366,12 @@ defmodule TypedGql.DeffragmentTest do
         """)
       end)
 
-      assert module_name.query_name().document =~ "fragment UserFields on User { name }"
-      refute module_name.query_name().document =~ "fragment UserFields on User { email }"
+      # The document is reprinted from the AST, so the fragment body is indented.
+      assert module_name.query_name().document =~ "fragment UserFields on User {\n  name\n}"
+      refute module_name.query_name().document =~ "email"
 
-      assert module_name.query_email().document =~ "fragment UserFields on User { email }"
-      refute module_name.query_email().document =~ "fragment UserFields on User { name }"
+      assert module_name.query_email().document =~ "fragment UserFields on User {\n  email\n}"
+      refute module_name.query_email().document =~ "name"
 
       user_name =
         struct(Module.safe_concat([module_name, GetUserName, Result, User]), name: "Alice")
@@ -329,6 +448,23 @@ defmodule TypedGql.DeffragmentTest do
       end
     end
 
+    # Fragments resolve lexically, so a body may only spread what is already
+    # registered — the alternative was a silently field-less fragment module.
+    test "a fragment body spreading a fragment defined later raises" do
+      assert_raise CompileError, ~r/undefined fragment spread: \.\.\.UserName/, fn ->
+        Code.compile_string("""
+        defmodule TypedGql.Test.ForwardSpread do
+          use TypedGql,
+            otp_app: :typed_gql,
+            source: "test/support/schemas/minimal.json"
+
+          deffragment "fragment UserDetails on User { ...UserName email }"
+          deffragment "fragment UserName on User { name }"
+        end
+        """)
+      end
+    end
+
     test "fragment with invalid field raises" do
       assert_raise CompileError, ~r/does not exist on type/, fn ->
         Code.compile_string("""
@@ -338,6 +474,37 @@ defmodule TypedGql.DeffragmentTest do
             source: "test/support/schemas/minimal.json"
 
           deffragment "fragment Bad on User { nonExistentField }"
+        end
+        """)
+      end
+    end
+
+    test "a registered spread whose condition does not apply is a validation error" do
+      assert_raise CompileError, ~r/type "Post" is not applicable to "User"/, fn ->
+        Code.compile_string("""
+        defmodule TypedGql.Test.RegisteredSpreadMismatch do
+          use TypedGql,
+            otp_app: :typed_gql,
+            source: "test/support/schemas/integration.json"
+
+          deffragment "fragment PostFields on Post { title }"
+          deffragment "fragment UserStuff on User { name ...PostFields }"
+        end
+        """)
+      end
+    end
+
+    test "a registered spread whose condition does not apply in a query is a validation error" do
+      assert_raise CompileError, ~r/type "Post" is not applicable to "User"/, fn ->
+        Code.compile_string("""
+        defmodule TypedGql.Test.RegisteredSpreadMismatchQuery do
+          use TypedGql,
+            otp_app: :typed_gql,
+            source: "test/support/schemas/integration.json"
+
+          deffragment "fragment PostFields on Post { title }"
+
+          defgql(:q, "query { user(id: \\"1\\") { name ...PostFields } }")
         end
         """)
       end

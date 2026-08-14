@@ -127,14 +127,22 @@ defmodule TypedGql.MixProject do
         "format",
         "credo --strict",
         "dialyzer",
-        "test"
+        "test --cover"
       ]
     ]
   end
 
   defp test_coverage do
     [
-      ignore_modules: [TypedGql.Parser, :typed_gql_parser]
+      summary: [threshold: 100],
+      # TypedGql.JSON picks between JSON, Jason and a runtime-configured library;
+      # a single test run can only ever exercise one of those branches.
+      ignore_modules: [
+        TypedGql.Parser,
+        TypedGql.JSON,
+        :typed_gql_parser,
+        ~r/^TypedGql\.Test(\.|$)/
+      ]
     ]
   end
 

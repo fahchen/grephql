@@ -125,13 +125,7 @@ defmodule TypedGql.Generation.SkipIncludeTest do
     end
 
     test "fragment-spread @include propagates to all expanded fields" do
-      fragments = %{
-        "UserFields" => %{
-          source: "fragment UserFields on User { id name }",
-          fragment: parse_fragment("fragment UserFields on User { id name }"),
-          result_module: TypedGql.Test.SkipInclude.FragmentSpread.Fragments.UserFields
-        }
-      }
+      fragments = %{"UserFields" => parse_fragment("fragment UserFields on User { id name }")}
 
       tree =
         resolve_tree(
@@ -248,6 +242,14 @@ defmodule TypedGql.Generation.SkipIncludeTest do
         out = SkipInclude.after_resolve(tree, context)
         assert hd(out.fields).resolved.nullable == true
       end
+    end
+
+    test "a directive without an if: argument is not conditional", %{context: context} do
+      directive = %TypedGql.Language.Directive{name: "skip", arguments: []}
+      tree = object_with_field(scalar_field(:id, false, [directive]))
+
+      out = SkipInclude.after_resolve(tree, context)
+      assert hd(out.fields).resolved.nullable == false
     end
 
     test "embeds_many fields are left unchanged even when conditional", %{context: context} do

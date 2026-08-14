@@ -46,9 +46,14 @@ defmodule TypedGql.ValidatorTest do
 
     test "collects errors from multiple rules" do
       schema = SchemaHelper.build_schema()
-      doc = parse!("mutation { bogusField }")
+      doc = parse!("query { nonExistent @bogus }")
+
       assert {:error, errors} = Validator.validate(doc, schema)
-      assert errors != []
+      messages = Enum.map(errors, & &1.message)
+
+      # One from Rules.Fields, one from Rules.Directives.
+      assert ~s(field "nonExistent" does not exist on type "Query") in messages
+      assert ~s(unknown directive "@bogus") in messages
     end
   end
 
@@ -57,6 +62,7 @@ defmodule TypedGql.ValidatorTest do
       schema = SchemaHelper.build_schema()
       doc = parse!("fragment UserFields on User { name email }")
       assert :ok = Validator.validate_fragment(doc, schema)
+      assert :ok = Validator.validate_fragment(doc, schema, nil)
     end
 
     test "returns {:error, errors} for an invalid fragment" do

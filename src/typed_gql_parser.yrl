@@ -5,7 +5,7 @@ Nonterminals
   ScalarTypeDefinition EnumTypeDefinition InputObjectTypeDefinition TypeExtensionDefinition
   FieldDefinitionList FieldDefinition ImplementsInterfaces ArgumentsDefinition
   InputValueDefinitionList InputValueDefinition UnionMembers
-  EnumValueDefinitionList EnumValueDefinition
+  EnumValueDefinitionList EnumValueDefinition UnionMemberList DirectiveLocationList
   DirectiveDefinition DirectiveDefinitionLocations
   SelectionSet Selections Selection
   OperationType Name NameWithoutOn VariableDefinitions VariableDefinition DescriptionDefinition Directives Directive
@@ -59,7 +59,8 @@ VariableDefinitions -> '(' VariableDefinitionList ')' : '$2'.
 VariableDefinitionList -> VariableDefinition : ['$1'].
 VariableDefinitionList -> VariableDefinition VariableDefinitionList : ['$1'|'$2'].
 VariableDefinition -> Variable ':' Type : build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3'}, extract_child_location('$1')).
-VariableDefinition -> Variable ':' Type DirectivesConst: build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3'}, extract_child_location('$1')).
+% Keeps the directives, like the DefaultValue production below already does.
+VariableDefinition -> Variable ':' Type DirectivesConst: build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3', 'directives' => '$4'}, extract_child_location('$1')).
 VariableDefinition -> Variable ':' Type DefaultValue : build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3', 'default_value' => '$4'}, extract_child_location('$1')).
 VariableDefinition -> Variable ':' Type DefaultValue DirectivesConst : build_ast_node('VariableDefinition', #{'variable' => '$1', 'type' => '$3', 'default_value' => '$4', 'directives' => '$5'}, extract_child_location('$1')).
 Variable -> '$' NameWithoutOn : build_ast_node('Variable', #{'name' => extract_binary('$2')}, extract_location('$1')).
@@ -154,9 +155,14 @@ NameWithoutOn -> 'enum' : '$1'.
 NameWithoutOn -> 'input' : '$1'.
 NameWithoutOn -> 'extend' : '$1'.
 NameWithoutOn -> 'directive' : '$1'.
+% GraphQL keywords are contextual: `repeatable` is only a keyword inside a
+% directive definition, and is a legal name everywhere else.
+NameWithoutOn -> 'repeatable' : '$1'.
 
 Name -> NameWithoutOn : '$1'.
-Name -> 'on' : extract_binary('$1').
+% Kept as the raw token (not extract_binary/1) so that a name spelled `on`
+% carries a location like every other name.
+Name -> 'on' : '$1'.
 
 Value -> Variable : '$1'.
 Value -> int_value :     build_ast_node('IntValue',     #{'value' => extract_integer('$1')},             extract_location('$1')).
@@ -179,6 +185,8 @@ ValueConst -> EnumValue :     build_ast_node('EnumValue',    #{'value' => extrac
 ValueConst -> ListValueConst :     build_ast_node('ListValue',    #{'values' => '$1'}, extract_child_location('$1')).
 ValueConst -> ObjectValueConst :   build_ast_node('ObjectValue',  #{'fields' => '$1'}, extract_child_location('$1')).
 
+% Passes the token through so both consumers (Value/ValueConst and
+% EnumValueDefinition) can read its location; each extracts the binary itself.
 EnumValue -> Name : '$1'.
 
 ListValueConst -> '[' ']' : [].
@@ -318,9 +326,12 @@ UnionTypeDefinition -> 'union' Name '=' UnionMembers :
 UnionTypeDefinition -> 'union' Name DirectivesConst '=' UnionMembers :
   build_ast_node('UnionTypeDefinition', #{'name' => extract_binary('$2'), 'directives' => '$3', 'types' => '$5'}, extract_location('$1')).
 
-UnionMembers -> NamedType : ['$1'].
-UnionMembers -> NamedType '|' UnionMembers : ['$1'|'$3'].
-UnionMembers -> '|' NamedType '|' UnionMembers : ['$2'|'$4'].
+% The optional leading pipe is separated from the list so that it can only
+% appear once, at the front: `= | A | B` parses, `= A | | B` does not.
+UnionMembers -> UnionMemberList : '$1'.
+UnionMembers -> '|' UnionMemberList : '$2'.
+UnionMemberList -> NamedType : ['$1'].
+UnionMemberList -> NamedType '|' UnionMemberList : ['$1'|'$3'].
 
 ScalarTypeDefinition -> 'scalar' Name : build_ast_node('ScalarTypeDefinition', #{'name' => extract_binary('$2')}, extract_location('$2')).
 ScalarTypeDefinition -> 'scalar' Name DirectivesConst : build_ast_node('ScalarTypeDefinition', #{'name' => extract_binary('$2'), 'directives' => '$3'}, extract_location('$2')).
@@ -340,9 +351,11 @@ EnumValueDefinitionList -> EnumValueDefinition EnumValueDefinitionList : ['$1'|'
 EnumValueDefinitionList -> DescriptionDefinition EnumValueDefinition : [put_description('$2', '$1')].
 EnumValueDefinitionList -> DescriptionDefinition EnumValueDefinition EnumValueDefinitionList : [put_description('$2', '$1')|'$3'].
 
-DirectiveDefinitionLocations -> Name : [extract_binary('$1')].
-DirectiveDefinitionLocations -> Name '|' DirectiveDefinitionLocations : [extract_binary('$1')|'$3'].
-DirectiveDefinitionLocations -> '|' Name '|' DirectiveDefinitionLocations : [extract_binary('$2')|'$4'].
+% Same shape as UnionMembers: one optional leading pipe, no doubled separators.
+DirectiveDefinitionLocations -> DirectiveLocationList : '$1'.
+DirectiveDefinitionLocations -> '|' DirectiveLocationList : '$2'.
+DirectiveLocationList -> Name : [extract_binary('$1')].
+DirectiveLocationList -> Name '|' DirectiveLocationList : [extract_binary('$1')|'$3'].
 
 EnumValueDefinition -> EnumValue : build_ast_node('EnumValueDefinition', #{'value' => extract_binary('$1')}, extract_location('$1')).
 EnumValueDefinition -> EnumValue DirectivesConst : build_ast_node('EnumValueDefinition', #{'value' => extract_binary('$1'), 'directives' => '$2'}, extract_location('$1')).

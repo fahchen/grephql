@@ -427,6 +427,52 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       assert modules == []
     end
+
+    test "a variable type missing from the schema is treated as a scalar" do
+      schema = SchemaHelper.build_schema()
+      operation = parse!(~s|query Q($when: Unknown) { user(id: "1") { name } }|)
+
+      variables_module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: TypedGql.Test.Input.UnknownScalar,
+          function_name: :q,
+          scalar_types: %{"Unknown" => TypedGql.Types.DateTime}
+        )
+
+      assert :when in variables_module.__schema__(:fields)
+      assert variables_module.__schema__(:type, :when) == TypedGql.Types.DateTime
+    end
+  end
+
+  # Ecto.Embedded, which carries nested lists on the output side, implements only
+  # load/3 and dump/3 — a variables struct is built through a changeset.
+  describe "nested input object lists" do
+    test "a list of lists of input objects is refused with a reason" do
+      schema = SchemaHelper.build_schema(types: types_with_nested_input())
+      operation = parse!("query Q($f: [[Filter]]) { find(filters: $f) }")
+
+      assert_raise CompileError, ~r/not a list of lists/, fn ->
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: TypedGql.Test.Input.NestedList,
+          function_name: :q,
+          scalar_types: %{}
+        )
+      end
+    end
+
+    test "a single list of input objects still generates an embed" do
+      schema = SchemaHelper.build_schema(types: types_with_nested_input())
+      operation = parse!("query Q($f: [Filter]) { find(filters: $f) }")
+
+      module =
+        InputTypeGenerator.generate_variables(operation, schema,
+          client_module: TypedGql.Test.Input.FlatList,
+          function_name: :q,
+          scalar_types: %{}
+        )
+
+      assert :f in module.__schema__(:embeds)
+    end
   end
 
   describe "generate_variables/3" do
@@ -1011,5 +1057,36 @@ defmodule TypedGql.InputTypeGeneratorTest do
       })
 
     SchemaHelper.build_schema(types: types, mutation_type: "Mutation")
+  end
+
+  defp types_with_nested_input do
+    Map.merge(SchemaHelper.default_types(), %{
+      "Query" => %Type{
+        kind: :object,
+        name: "Query",
+        fields: %{
+          "find" => %SchemaField{
+            name: "find",
+            type: %TypeRef{kind: :scalar, name: "String"},
+            args: %{
+              "filters" => %InputValue{
+                name: "filters",
+                type: %TypeRef{
+                  kind: :list,
+                  of_type: %TypeRef{kind: :input_object, name: "Filter"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "Filter" => %Type{
+        kind: :input_object,
+        name: "Filter",
+        input_fields: %{
+          "term" => %InputValue{name: "term", type: %TypeRef{kind: :scalar, name: "String"}}
+        }
+      }
+    })
   end
 end

@@ -25,6 +25,9 @@ defmodule TypedGql.Parser do
 
       {:error, :exceeded_token_limit} ->
         {:error, "token limit exceeded"}
+
+      {:error, :unsupported_escape} ->
+        {:error, "surrogate pair escapes are not supported (see BDR-0008)"}
     end
   end
 

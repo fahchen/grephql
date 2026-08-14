@@ -145,10 +145,10 @@ defmodule TypedGql.InputTypeGenerator do
          {defs, embeds, reqs},
          collect_acc
        ) do
-    case resolved.ecto_type do
-      {:object, nested_type_name} ->
+    case GeneratorHelpers.unwrap_list(resolved.ecto_type) do
+      {{:object, nested_type_name}, depth} ->
         collect_embed(
-          :embeds_one,
+          embed_kind!(depth, atom_name),
           atom_name,
           nested_type_name,
           resolved,
@@ -158,27 +158,30 @@ defmodule TypedGql.InputTypeGenerator do
           collect_acc
         )
 
-      {:array, {:object, nested_type_name}} ->
-        collect_embed(
-          :embeds_many,
-          atom_name,
-          nested_type_name,
-          resolved,
-          source_opt,
-          context,
-          {defs, embeds, reqs},
-          collect_acc
-        )
-
-      ecto_type ->
+      _scalar ->
         typed_opts = GeneratorHelpers.scalar_typed_opts(resolved)
         enum_opts = GeneratorHelpers.enum_opts(resolved)
 
         field_def =
-          {:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt] ++ enum_opts}
+          {:field, atom_name, resolved.ecto_type,
+           [{:typed, typed_opts} | source_opt] ++ enum_opts}
 
         {[field_def | defs], embeds, reqs, collect_acc}
     end
+  end
+
+  # Unlike the output side (BDR-0009), a deeper nesting has nowhere to go here:
+  # `Ecto.Embedded` implements only load/3 and dump/3, and a variables struct is
+  # built through a changeset, which needs cast/2. Say so rather than fail later
+  # with an opaque error about an unknown Ecto type.
+  defp embed_kind!(0, _atom_name), do: :embeds_one
+  defp embed_kind!(1, _atom_name), do: :embeds_many
+
+  defp embed_kind!(depth, atom_name) do
+    raise CompileError,
+      description:
+        "variable \"#{atom_name}\" nests an input object #{depth} lists deep; " <>
+          "typedGql can generate input types for a list of input objects, but not a list of lists"
   end
 
   defp collect_embed(

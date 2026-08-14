@@ -54,5 +54,31 @@ defmodule TypedGql.Language do
       field :definitions, [TypedGql.Language.definition_t()], default: []
       field :loc, map(), default: %{line: nil}
     end
+
+    @doc """
+    The document's fragment definitions, keyed by name.
+
+    A repeated name keeps the last definition, matching the shadowing rule
+    everywhere else: the latest definition wins.
+    """
+    @spec fragments_by_name(t()) :: %{String.t() => TypedGql.Language.Fragment.t()}
+    def fragments_by_name(%__MODULE__{definitions: definitions}) do
+      for %TypedGql.Language.Fragment{} = fragment <- definitions,
+          into: %{},
+          do: {fragment.name, fragment}
+    end
+  end
+
+  @doc """
+  Every fragment spread name in a selection set, depth first, duplicates kept.
+  """
+  @spec spread_names(TypedGql.Language.SelectionSet.t() | nil) :: [String.t()]
+  def spread_names(nil), do: []
+
+  def spread_names(%TypedGql.Language.SelectionSet{selections: selections}) do
+    Enum.flat_map(selections, fn
+      %TypedGql.Language.FragmentSpread{name: name} -> [name]
+      %{selection_set: selection_set} -> spread_names(selection_set)
+    end)
   end
 end

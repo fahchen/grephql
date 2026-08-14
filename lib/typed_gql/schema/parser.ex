@@ -170,6 +170,7 @@ defmodule TypedGql.Schema.Parser do
 
   defp parse_location(loc) when is_map_key(@location_map, loc), do: @location_map[loc]
 
-  defp format_json_error(error) when is_exception(error), do: Exception.message(error)
-  defp format_json_error(error), do: inspect(error)
+  defp format_json_error(error) do
+    error |> TypedGql.JSON.normalize_error() |> Exception.message()
+  end
 end

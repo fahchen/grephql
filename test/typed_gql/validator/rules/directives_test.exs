@@ -52,6 +52,14 @@ defmodule TypedGql.Validator.Rules.DirectivesTest do
     }
   }
 
+  @variable_definition_directive %SchemaDirective{
+    name: "lower",
+    locations: [:variable_definition],
+    args: %{"by" => %InputValue{name: "by", type: %TypeRef{kind: :scalar, name: "Int"}}}
+  }
+
+  @query_only_directive %SchemaDirective{name: "trace", locations: [:query], args: %{}}
+
   describe "directive existence" do
     test "known directive passes" do
       ctx = validate(~s|query { user(id: "1") { name @skip(if: true) } }|)
@@ -134,6 +142,72 @@ defmodule TypedGql.Validator.Rules.DirectivesTest do
       location_errors = Enum.filter(errors(ctx), &(&1.message =~ "not allowed"))
       assert [error] = location_errors
       assert error.message =~ "not allowed on fragment definitions"
+    end
+
+    # Both spellings must reach the rule — upstream drops the directives on the
+    # one without a default value; see BDR-0008 G3.
+    test "directive on a variable definition shows the variable definition label" do
+      for query <- [
+            ~s|query Q($id: ID @skip(if: true)) { user(id: "1") { name } }|,
+            ~s|query Q($id: ID = "1" @skip(if: true)) { user(id: "1") { name } }|
+          ] do
+        ctx = validate(query)
+        location_errors = Enum.filter(errors(ctx), &(&1.message =~ "not allowed"))
+        assert [error] = location_errors
+        assert error.message =~ "not allowed on variable definitions"
+      end
+    end
+
+    test "directive on a variable definition passes when allowed on VARIABLE_DEFINITION" do
+      directives = [@variable_definition_directive | default_directives()]
+
+      for query <- [
+            ~s|query Q($id: ID @lower(by: 1)) { user(id: "1") { name } }|,
+            ~s|query Q($id: ID = "1" @lower(by: 1)) { user(id: "1") { name } }|
+          ] do
+        assert errors(validate(query, directives: directives)) == []
+      end
+    end
+
+    # "no errors" alone would also hold if the parser dropped the directive, so
+    # prove the rule really inspected it by giving it a badly typed argument.
+    test "arguments of a variable definition directive are checked" do
+      directives = [@variable_definition_directive | default_directives()]
+
+      for query <- [
+            ~s|query Q($id: ID @lower(by: "one")) { user(id: "1") { name } }|,
+            ~s|query Q($id: ID = "1" @lower(by: "one")) { user(id: "1") { name } }|
+          ] do
+        assert [error] = errors(validate(query, directives: directives))
+        assert error.message =~ ~s(type mismatch for argument "by" on directive "@lower")
+      end
+    end
+  end
+
+  describe "directive location labels" do
+    setup do
+      %{directives: [@query_only_directive | default_directives()]}
+    end
+
+    test "field label", %{directives: directives} do
+      ctx = validate(~s|query { user(id: "1") { name @trace } }|, directives: directives)
+      assert location_error(ctx) =~ "not allowed on fields"
+    end
+
+    test "inline fragment label", %{directives: directives} do
+      ctx =
+        validate(~s|query { user(id: "1") { ... on User @trace { name } } }|,
+          directives: directives
+        )
+
+      assert location_error(ctx) =~ "not allowed on inline fragments"
+    end
+
+    test "subscription label", %{directives: directives} do
+      ctx =
+        validate(~s|subscription @trace { user(id: "1") { name } }|, directives: directives)
+
+      assert location_error(ctx) =~ "not allowed on subscription operations"
     end
   end
 
@@ -227,6 +301,11 @@ defmodule TypedGql.Validator.Rules.DirectivesTest do
   end
 
   defp errors(ctx), do: Context.errors_by_severity(ctx, :error)
+
+  defp location_error(ctx) do
+    [error] = Enum.filter(errors(ctx), &(&1.message =~ "not allowed"))
+    error.message
+  end
 
   defp default_directives do
     [@skip_directive, @include_directive, @deprecated_directive]

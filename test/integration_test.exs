@@ -473,12 +473,8 @@ defmodule TypedGql.IntegrationTest do
                Client.search(%{query: "hello"}, req_options: req_options())
 
       assert [
-               %Client.Search.Result.Search.User{__typename: :user, name: "Alice", role: :admin},
-               %Client.Search.Result.Search.Post{
-                 __typename: :post,
-                 title: "Hello",
-                 status: :published
-               }
+               %Client.Search.Result.Search.User{name: "Alice", role: :admin},
+               %Client.Search.Result.Search.Post{title: "Hello", status: :published}
              ] = result.data.search
     end
   end
@@ -498,8 +494,8 @@ defmodule TypedGql.IntegrationTest do
                Client.get_nodes(%{ids: ["1", "10"]}, req_options: req_options())
 
       assert [
-               %Client.GetNodes.Result.Nodes.User{__typename: :user, id: "1", name: "Alice"},
-               %Client.GetNodes.Result.Nodes.Post{__typename: :post, id: "10", title: "Hello"}
+               %Client.GetNodes.Result.Nodes.User{id: "1", name: "Alice"},
+               %Client.GetNodes.Result.Nodes.Post{id: "10", title: "Hello"}
              ] = result.data.nodes
     end
   end
@@ -785,7 +781,6 @@ defmodule TypedGql.IntegrationTest do
 
       # User variant with nested profile + posts
       assert %Client.SearchWithFragments.Result.Search.User{
-               __typename: :user,
                id: "1",
                name: "Alice",
                email: "alice@example.com",
@@ -805,7 +800,6 @@ defmodule TypedGql.IntegrationTest do
 
       # Post variant with nested author (User via fragment)
       assert %Client.SearchWithFragments.Result.Search.Post{
-               __typename: :post,
                id: "20",
                title: "GraphQL Best Practices",
                body: "Use fragments for reuse.",
@@ -823,7 +817,6 @@ defmodule TypedGql.IntegrationTest do
 
       # User variant with nil profile and empty posts
       assert %Client.SearchWithFragments.Result.Search.User{
-               __typename: :user,
                role: :guest,
                profile: nil,
                posts: []
@@ -1051,7 +1044,6 @@ defmodule TypedGql.IntegrationTest do
 
       # User with all nullable fields nil/empty
       assert %Client.SearchWithFragments.Result.Search.User{
-               __typename: :user,
                email: nil,
                role: :guest,
                profile: nil,
@@ -1060,7 +1052,6 @@ defmodule TypedGql.IntegrationTest do
 
       # Post with nil body, nil publishedAt, empty tags, author with nil profile
       assert %Client.SearchWithFragments.Result.Search.Post{
-               __typename: :post,
                body: nil,
                status: :archived,
                published_at: nil,

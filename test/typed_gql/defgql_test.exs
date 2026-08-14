@@ -105,6 +105,33 @@ defmodule TypedGql.DefgqlTest do
         end
       end
     end
+
+    test "raises CompileError when the query carries a type system definition" do
+      assert_raise CompileError, ~r/type system definitions cannot be sent/, fn ->
+        defmodule SdlInQuery do
+          use TypedGql,
+            otp_app: :typed_gql,
+            source: "../support/schemas/minimal.json"
+
+          defgql(:bad, """
+          query { user(id: "1") { name } }
+          scalar DateTime
+          """)
+        end
+      end
+    end
+
+    test "raises CompileError when the query has no operation" do
+      assert_raise CompileError, ~r/no operation definition found/, fn ->
+        defmodule NoOperation do
+          use TypedGql,
+            otp_app: :typed_gql,
+            source: "../support/schemas/minimal.json"
+
+          defgql(:bad, "fragment UserFields on User { name }")
+        end
+      end
+    end
   end
 
   describe "query struct" do

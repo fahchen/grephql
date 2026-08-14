@@ -31,3 +31,4 @@ Licensed under the MIT License:
 Adapted files:
   - lib/typed_gql/lexer.ex (from Absinthe.Lexer)
   - src/typed_gql_parser.yrl (from src/absinthe_parser.yrl)
+  - lib/typed_gql/parser.ex (from Absinthe.Phase.Parse)
