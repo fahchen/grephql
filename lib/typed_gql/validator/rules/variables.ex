@@ -112,8 +112,11 @@ defmodule TypedGql.Validator.Rules.Variables do
     |> check_variable_types_in_selections(field.selection_set, nil, defined, schema)
   end
 
-  defp check_selection_var_types(ctx, %InlineFragment{} = frag, _type_name, defined, schema) do
-    frag_type = if frag.type_condition, do: frag.type_condition.name, else: nil
+  # A condition-less inline fragment selects on the enclosing type, so the
+  # parent type carries through — dropping it to nil would skip argument
+  # checking for everything inside the fragment.
+  defp check_selection_var_types(ctx, %InlineFragment{} = frag, type_name, defined, schema) do
+    frag_type = if frag.type_condition, do: frag.type_condition.name, else: type_name
 
     ctx
     |> check_directive_arg_var_types(frag.directives, defined, schema)

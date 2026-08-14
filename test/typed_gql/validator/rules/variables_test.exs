@@ -111,6 +111,14 @@ defmodule TypedGql.Validator.Rules.VariablesTest do
       ctx = validate("query { user(id: $id) { name } }")
       assert type_errors(ctx) == []
     end
+
+    test "a mismatch inside a condition-less inline fragment is still reported" do
+      ctx = validate("query($id: String) { ... { user(id: $id) { name } } }")
+      assert [error] = type_errors(ctx)
+
+      assert error.message =~
+               "variable \"$id\" of type \"String\" is not compatible with argument \"id\" of type \"ID!\""
+    end
   end
 
   describe "operation without variables" do
