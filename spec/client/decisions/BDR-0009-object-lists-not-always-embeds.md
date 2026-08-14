@@ -17,6 +17,12 @@ generated as `embeds_many` only when it is `[T!]!`. Every other shape —
 plain Ecto field whose type is `{:array, Ecto.Embedded}` (nested once per list
 level), with `cardinality: :one` and `related:` naming the generated module.
 
+This applies when the selection resolves to a single embedded schema: an
+object type, or an abstract one whose selections every member shares. An
+abstract selection with per-member inline fragments needs variant dispatch,
+so it lowers to the parameterized `TypedGql.Types.Union` type behind
+`{:array, ...}` wrappers instead — whatever the list shape, `[T!]!` included.
+
 Its typespec is built from the GraphQL type reference
 (`TypedGql.TypeMapper.list_type_ast/2`) rather than from the Ecto type, since
 the Ecto type keeps none of the per-level nullability.
