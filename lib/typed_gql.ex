@@ -212,20 +212,16 @@ defmodule TypedGql do
 
   defp decode_response(%Req.Response{body: body} = response, result_module)
        when is_map(body) do
-    data =
-      case Map.get(body, "data") do
-        data when is_map(data) -> ResponseDecoder.decode!(result_module, data)
-        _nil_or_absent -> nil
-      end
+    with {:ok, data} <- decode_data(Map.get(body, "data"), result_module) do
+      errors =
+        body
+        |> Map.get("errors", [])
+        |> Enum.map(&TypedGql.Error.from_json/1)
 
-    errors =
-      body
-      |> Map.get("errors", [])
-      |> Enum.map(&TypedGql.Error.from_json/1)
+      assigns = Result.assigns_from_response(response)
 
-    assigns = Result.assigns_from_response(response)
-
-    {:ok, %Result{data: data, errors: errors, assigns: assigns}}
+      {:ok, %Result{data: data, errors: errors, assigns: assigns}}
+    end
   end
 
   defp decode_response(%Req.Response{body: body} = response, result_module)
@@ -238,6 +234,21 @@ defmodule TypedGql do
         {:error, TypedGql.JSON.normalize_error(reason)}
     end
   end
+
+  # A server that violates its own schema (unknown __typename, out-of-range
+  # enum, wrong scalar type) makes Ecto's loader raise; that is the server's
+  # fault, not the caller's, so it surfaces as an error tuple.
+  defp decode_data(data, result_module) when is_map(data) do
+    {:ok, ResponseDecoder.decode!(result_module, data)}
+  rescue
+    error in ArgumentError ->
+      {:error,
+       TypedGql.DecodeError.exception(
+         message: "cannot decode response data: " <> Exception.message(error)
+       )}
+  end
+
+  defp decode_data(_nil_or_absent, _result_module), do: {:ok, nil}
 
   @spec build_request(module(), keyword(), keyword()) :: Req.Request.t()
   defp build_request(client_module, execute_opts, base_opts) do

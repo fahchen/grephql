@@ -127,6 +127,11 @@ Feature: GraphQL query definition and execution
       When the GraphQL server returns a non-2xx HTTP status
       Then the response is {:error, %Req.Response{}}
 
+    Scenario: 2xx response with data the schema cannot load
+      Given a valid query is executed
+      When the server returns data violating its own schema (unknown union __typename, out-of-range enum, wrong scalar type)
+      Then the response is {:error, %TypedGql.DecodeError{}}
+
   Rule: GraphQL errors are represented as TypedGql.Error structs
 
     Scenario: Error struct contains standard GraphQL error fields
