@@ -946,13 +946,15 @@ defmodule TypedGql.TypeGeneratorTest do
       tree =
         resolved_tree(
           schema,
-          "query Q($a: Boolean!, $b: Boolean!) { search @include(if: $a) { __typename ... on User { id } } search @include(if: $b) { __typename ... on User { email } } }",
+          "query Q($a: Boolean!, $b: Boolean!, $c: Boolean!) { search @include(if: $a) { __typename ... on User @include(if: $c) { id } } search @include(if: $b) { __typename ... on User { email } } }",
           TypedGql.Test.RepeatedUnionDirectives
         )
 
       # Each copy's condition has to reach the fields inside its own fragment:
-      # with $a false and $b true the response carries email but not id.
-      assert directive_variables(variant_field(tree, "User", :id)) == ["a"]
+      # with $a false and $b true the response carries email but not id. The
+      # fragment's own $c must arrive exactly once — normalize copies it onto the
+      # members and then clears the wrapper, so unwrapping cannot apply it again.
+      assert directive_variables(variant_field(tree, "User", :id)) == ["a", "c"]
       assert directive_variables(variant_field(tree, "User", :email)) == ["b"]
       assert variant_field(tree, "User", :id).resolved.nullable
     end
