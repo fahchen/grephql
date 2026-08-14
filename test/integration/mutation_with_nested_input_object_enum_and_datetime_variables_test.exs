@@ -49,7 +49,7 @@ defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVaria
     test "nested input fields dump to camelCase JSON keys" do
       request = capture_request()
 
-      assert %{"seoTitle" => "How Grephql Works", "publishAt" => _publish_at} =
+      assert %{"seoTitle" => "How Typed GQL Works", "publishAt" => _publish_at} =
                request["variables"]["input"]["metadata"]
     end
 
@@ -133,7 +133,7 @@ defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVaria
         "data" => %{
           "createPost" => %{
             "id" => "p1",
-            "title" => "How Grephql Works",
+            "title" => "How Typed GQL Works",
             "status" => "PUBLISHED",
             "publishedAt" => "2025-03-01T09:00:00Z",
             "tags" => ["elixir", "graphql"],
@@ -150,10 +150,10 @@ defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVaria
   defp call do
     call(%{
       input: %{
-        title: "How Grephql Works",
+        title: "How Typed GQL Works",
         status: "PUBLISHED",
         tags: ["elixir", "graphql"],
-        metadata: %{seo_title: "How Grephql Works", publish_at: ~U[2025-03-01 09:00:00Z]}
+        metadata: %{seo_title: "How Typed GQL Works", publish_at: ~U[2025-03-01 09:00:00Z]}
       }
     })
   end
