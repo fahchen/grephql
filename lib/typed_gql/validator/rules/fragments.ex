@@ -36,8 +36,27 @@ defmodule TypedGql.Validator.Rules.Fragments do
       end)
 
     ctx
+    |> check_duplicate_names(fragments)
     |> check_cycles(fragments)
     |> check_unused(definitions, fragments)
+  end
+
+  # Spec 5.5.1.1: fragment names are unique in a document. Generation reads a
+  # name-keyed map (last definition wins), but the printed document carries
+  # every definition, so a duplicate would be rejected by the server.
+  defp check_duplicate_names(ctx, fragments) do
+    fragments
+    |> Enum.group_by(& &1.name)
+    |> Enum.filter(fn {_name, definitions} -> length(definitions) > 1 end)
+    |> Enum.reduce(ctx, fn {name, [_first | rest]}, acc ->
+      Enum.reduce(rest, acc, fn fragment, inner ->
+        Context.add_error(
+          inner,
+          "fragment \"#{name}\" is defined more than once in the document",
+          fragment
+        )
+      end)
+    end)
   end
 
   # Spec 5.5.1.4: every fragment an executable document defines must be spread

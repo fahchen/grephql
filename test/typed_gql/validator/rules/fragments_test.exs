@@ -188,6 +188,17 @@ defmodule TypedGql.Validator.Rules.FragmentsTest do
       assert errors(validate(query)) == []
     end
 
+    test "a fragment name defined twice in one document is rejected" do
+      query = """
+      query { user(id: "1") { ...F } }
+      fragment F on User { name }
+      fragment F on User { email }
+      """
+
+      assert [error] = errors(validate(query))
+      assert error.message =~ ~s(fragment "F" is defined more than once)
+    end
+
     test "a chain of unused fragments is reported all at once" do
       query = """
       query { user(id: "1") { name } }
