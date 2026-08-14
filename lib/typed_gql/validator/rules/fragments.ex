@@ -13,9 +13,12 @@ defmodule TypedGql.Validator.Rules.Fragments do
   alias TypedGql.Validator.Helpers
 
   @spec validate(Document.t(), Context.t()) :: Context.t()
-  def validate(%Document{definitions: definitions}, %Context{} = ctx) do
+  def validate(%Document{definitions: definitions} = document, %Context{} = ctx) do
     fragments = Enum.filter(definitions, &match?(%Fragment{}, &1))
-    by_name = Map.new(fragments, &{&1.name, &1})
+    # Registered fragments sit behind the document's own definitions, mirroring
+    # the compiler's shadowing rule — a spread of either kind is checked where
+    # it is spread.
+    by_name = Map.merge(ctx.fragments, Document.fragments_by_name(document))
 
     ctx =
       definitions
@@ -47,18 +50,39 @@ defmodule TypedGql.Validator.Rules.Fragments do
       else: ctx
   end
 
+  # A use only counts when it is reachable from an operation — a spread inside
+  # a fragment nothing spreads is not a use, or deleting one unused fragment
+  # would surface the next on the following compile instead of both at once.
   defp reject_unused(ctx, definitions, fragments) do
-    spread =
+    by_name = Map.new(fragments, &{&1.name, &1})
+
+    reachable =
       definitions
-      |> Enum.filter(&(match?(%OperationDefinition{}, &1) or match?(%Fragment{}, &1)))
+      |> Enum.filter(&match?(%OperationDefinition{}, &1))
       |> Enum.flat_map(&spread_names(&1.selection_set))
-      |> MapSet.new()
+      |> reach(by_name, MapSet.new())
 
     fragments
-    |> Enum.reject(&MapSet.member?(spread, &1.name))
+    |> Enum.reject(&MapSet.member?(reachable, &1.name))
     |> Enum.reduce(ctx, fn fragment, acc ->
       Context.add_error(acc, "fragment \"#{fragment.name}\" is defined but never used", fragment)
     end)
+  end
+
+  defp reach([], _by_name, seen), do: seen
+
+  defp reach([name | rest], by_name, seen) do
+    case {MapSet.member?(seen, name), by_name} do
+      {true, _by_name} ->
+        reach(rest, by_name, seen)
+
+      {false, %{^name => fragment}} ->
+        reach(spread_names(fragment.selection_set) ++ rest, by_name, MapSet.put(seen, name))
+
+      # A spread of a registered fragment: not defined here, nothing to mark.
+      {false, _by_name} ->
+        reach(rest, by_name, MapSet.put(seen, name))
+    end
   end
 
   # Spec 5.5.2.2: a cycle would make the document infinite. It also makes

@@ -3,6 +3,7 @@ defmodule TypedGql.Compiler do
 
   alias TypedGql.EnsureTypename
   alias TypedGql.InputTypeGenerator
+  alias TypedGql.Language.Document
   alias TypedGql.Language.Fragment
   alias TypedGql.Language.ListType
   alias TypedGql.Language.NamedType
@@ -70,7 +71,7 @@ defmodule TypedGql.Compiler do
     caller_env = Keyword.get(opts, :caller_env)
 
     raise_on_errors!(
-      Validator.validate(document, schema, caller_env),
+      Validator.validate(document, schema, caller_env, registered_fragments(opts)),
       "GraphQL validation errors",
       caller_env
     )
@@ -81,7 +82,9 @@ defmodule TypedGql.Compiler do
       client_module: client_module,
       function_name: Keyword.fetch!(opts, :function_name),
       scalar_types: Keyword.get(opts, :scalar_types, %{}),
-      fragments: opts |> registered_fragments() |> Map.merge(document_fragments(document)),
+      # A fragment defined in the document shadows a registered one of the same
+      # name: it is the definition the server will see.
+      fragments: opts |> registered_fragments() |> Map.merge(Document.fragments_by_name(document)),
       generation_plugins: Keyword.get(opts, :generation_plugins, [])
     ]
 
@@ -117,13 +120,6 @@ defmodule TypedGql.Compiler do
     |> Map.new(fn {name, entry} -> {name, entry.fragment} end)
   end
 
-  # A fragment defined in the document shadows a registered one of the same
-  # name: it is the definition the server will see.
-  defp document_fragments(%{definitions: definitions}) do
-    definitions
-    |> Enum.filter(&match?(%Fragment{}, &1))
-    |> Map.new(&{&1.name, &1})
-  end
 
   @doc """
   Compiles a GraphQL fragment string into a fragment entry map.
@@ -152,7 +148,7 @@ defmodule TypedGql.Compiler do
     caller_env = Keyword.get(opts, :caller_env)
 
     raise_on_errors!(
-      Validator.validate_fragment(document, schema, caller_env),
+      Validator.validate_fragment(document, schema, caller_env, registered_fragments(opts)),
       "GraphQL fragment validation errors",
       caller_env
     )

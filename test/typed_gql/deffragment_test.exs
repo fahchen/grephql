@@ -478,5 +478,36 @@ defmodule TypedGql.DeffragmentTest do
         """)
       end
     end
+
+    test "a registered spread whose condition does not apply is a validation error" do
+      assert_raise CompileError, ~r/type "Post" is not applicable to "User"/, fn ->
+        Code.compile_string("""
+        defmodule TypedGql.Test.RegisteredSpreadMismatch do
+          use TypedGql,
+            otp_app: :typed_gql,
+            source: "test/support/schemas/integration.json"
+
+          deffragment "fragment PostFields on Post { title }"
+          deffragment "fragment UserStuff on User { name ...PostFields }"
+        end
+        """)
+      end
+    end
+
+    test "a registered spread whose condition does not apply in a query is a validation error" do
+      assert_raise CompileError, ~r/type "Post" is not applicable to "User"/, fn ->
+        Code.compile_string("""
+        defmodule TypedGql.Test.RegisteredSpreadMismatchQuery do
+          use TypedGql,
+            otp_app: :typed_gql,
+            source: "test/support/schemas/integration.json"
+
+          deffragment "fragment PostFields on Post { title }"
+
+          defgql(:q, "query { user(id: \\"1\\") { name ...PostFields } }")
+        end
+        """)
+      end
+    end
   end
 end

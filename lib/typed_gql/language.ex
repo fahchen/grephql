@@ -54,5 +54,18 @@ defmodule TypedGql.Language do
       field :definitions, [TypedGql.Language.definition_t()], default: []
       field :loc, map(), default: %{line: nil}
     end
+
+    @doc """
+    The document's fragment definitions, keyed by name.
+
+    A repeated name keeps the last definition, matching the shadowing rule
+    everywhere else: the latest definition wins.
+    """
+    @spec fragments_by_name(t()) :: %{String.t() => TypedGql.Language.Fragment.t()}
+    def fragments_by_name(%__MODULE__{definitions: definitions}) do
+      for %TypedGql.Language.Fragment{} = fragment <- definitions,
+          into: %{},
+          do: {fragment.name, fragment}
+    end
   end
 end

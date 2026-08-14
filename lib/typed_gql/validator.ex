@@ -20,9 +20,14 @@ defmodule TypedGql.Validator do
     Rules.Deprecation
   ]
 
-  @spec validate(Document.t(), Schema.t(), Macro.Env.t() | nil) :: :ok | {:error, [Error.t()]}
-  def validate(%Document{} = document, %Schema{} = schema, caller_env \\ nil) do
-    ctx = %Context{schema: schema}
+  @spec validate(
+          Document.t(),
+          Schema.t(),
+          Macro.Env.t() | nil,
+          %{String.t() => TypedGql.Language.Fragment.t()}
+        ) :: :ok | {:error, [Error.t()]}
+  def validate(%Document{} = document, %Schema{} = schema, caller_env \\ nil, fragments \\ %{}) do
+    ctx = %Context{schema: schema, fragments: fragments}
 
     ctx =
       Enum.reduce(@rules, ctx, fn rule, acc ->
@@ -40,10 +45,19 @@ defmodule TypedGql.Validator do
     Rules.Deprecation
   ]
 
-  @spec validate_fragment(Document.t(), Schema.t(), Macro.Env.t() | nil) ::
-          :ok | {:error, [Error.t()]}
-  def validate_fragment(%Document{} = document, %Schema{} = schema, caller_env \\ nil) do
-    ctx = %Context{schema: schema}
+  @spec validate_fragment(
+          Document.t(),
+          Schema.t(),
+          Macro.Env.t() | nil,
+          %{String.t() => TypedGql.Language.Fragment.t()}
+        ) :: :ok | {:error, [Error.t()]}
+  def validate_fragment(
+        %Document{} = document,
+        %Schema{} = schema,
+        caller_env \\ nil,
+        fragments \\ %{}
+      ) do
+    ctx = %Context{schema: schema, fragments: fragments}
 
     ctx =
       Enum.reduce(@fragment_rules, ctx, fn rule, acc ->

@@ -188,6 +188,18 @@ defmodule TypedGql.Validator.Rules.FragmentsTest do
       assert errors(validate(query)) == []
     end
 
+    test "a chain of unused fragments is reported all at once" do
+      query = """
+      query { user(id: "1") { name } }
+      fragment A on User { ...B }
+      fragment B on User { name }
+      """
+
+      assert [a, b] = errors(validate(query))
+      assert a.message =~ ~s(fragment "A" is defined but never used)
+      assert b.message =~ ~s(fragment "B" is defined but never used)
+    end
+
     # Walking every route rather than every fragment took 6.6s at 24 layers, so
     # the timeout is the assertion: a document a server would accept must not
     # cost more than the document it describes.

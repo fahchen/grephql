@@ -155,9 +155,7 @@ defmodule TypedGql.Macros do
   end
 
   defp local_fragment_names(document) do
-    for %TypedGql.Language.Fragment{name: name} <- document.definitions,
-        into: MapSet.new(),
-        do: name
+    document |> TypedGql.Language.Document.fragments_by_name() |> Map.keys() |> MapSet.new()
   end
 
   defp collect_spread_names(document) do
