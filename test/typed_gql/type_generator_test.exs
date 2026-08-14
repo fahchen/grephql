@@ -40,6 +40,8 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.GhostCondition.Search.Result.Search.User,
               TypedGql.Test.UnusableTypename.Search.Result,
               TypedGql.Test.UnusableTypename.Search.Result.Search.User,
+              TypedGql.Test.RepeatedUnion.Search.Result.Search.Post,
+              TypedGql.Test.RepeatedUnion.Search.Result.Search.User,
               TypedGql.Test.Covariant.Search.Result.Search.User.Friend,
               TypedGql.Test.Introspection.Introspect.Result.Schema.QueryType,
               TypedGql.Test.NestedAbstract.Search.Result.Search.Post,
@@ -913,12 +915,16 @@ defmodule TypedGql.TypeGeneratorTest do
       tree =
         resolved_tree(
           schema,
-          "query Q($a: Boolean!, $b: Boolean!) { search { __typename ... on Named { profile @include(if: $a) { bio } profile @include(if: $b) { avatar } } } }",
+          "query Q($a: Boolean!, $b: Boolean!, $c: Boolean!) { search { __typename ... on Named { profile @include(if: $a) { bio } profile @include(if: $b) { avatar } profile @include(if: $c) { bio } } } }",
           TypedGql.Test.MergedConditionalChildren
         )
 
       profile = variant_field(tree, "User", :profile)
       assert profile.resolved.nullable
+
+      # Three copies: folding pairwise would feed the running aggregate back in
+      # and re-prepend it to children that already carry their own condition.
+      assert length(profile.query_field.directives) == 3
 
       # bio came from the $a copy and avatar from the $b copy; either can be
       # absent while the other is present, so neither may be non-null.
@@ -929,6 +935,31 @@ defmodule TypedGql.TypeGeneratorTest do
       child_names = profile_node.fields |> Enum.map(& &1.name) |> Enum.sort()
       assert child_names == [:avatar, :bio]
       assert Enum.all?(profile_node.fields, & &1.resolved.nullable)
+
+      bio = Enum.find(profile_node.fields, &(&1.name == :bio))
+      assert length(bio.query_field.directives) == 2
+    end
+
+    test "a repeated field returning a union keeps resolving" do
+      schema = schema_with_union()
+
+      operation =
+        parse!(
+          "query { search { __typename ... on User { email } } search { __typename ... on Post { title } } }"
+        )
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.RepeatedUnion,
+        function_name: :search
+      )
+
+      # The two copies' inline fragments have no response key to merge on; they
+      # become variants of the one union.
+      user_fields = TypedGql.Test.RepeatedUnion.Search.Result.Search.User.__schema__(:fields)
+      post_fields = TypedGql.Test.RepeatedUnion.Search.Result.Search.Post.__schema__(:fields)
+
+      assert :email in user_fields
+      assert :title in post_fields
     end
 
     test "a merged field conditional on both sides stays conditional" do

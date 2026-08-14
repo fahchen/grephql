@@ -222,6 +222,23 @@ defmodule TypedGql.DeffragmentTest do
     end
   end
 
+  describe "type system definitions" do
+    test "a fragment mixed with SDL is rejected at its declaration" do
+      assert_raise CompileError, ~r/type system definitions cannot be sent/, fn ->
+        defmodule SdlInFragment do
+          use TypedGql,
+            otp_app: :typed_gql,
+            source: "../support/schemas/minimal.json"
+
+          deffragment("""
+          fragment UserFields on User { name }
+          scalar DateTime
+          """)
+        end
+      end
+    end
+  end
+
   describe "duplicate fragment names" do
     test "later definitions override earlier ones for subsequent queries only" do
       module_name = DuplicateRuntime

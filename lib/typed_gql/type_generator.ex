@@ -410,13 +410,21 @@ defmodule TypedGql.TypeGenerator do
   # fold would feed the already-aggregated directives of the running result back
   # in, and a third copy would then re-prepend them to children that already
   # carry their own.
-  defp merge_fields(fields) do
-    fields
-    |> group_by_response_key()
-    |> Enum.map(fn
-      {_key, [single]} -> single
-      {_key, copies} -> merge_copies(copies)
-    end)
+  defp merge_fields(selections) do
+    # A child selection set under an abstract type still holds inline fragments.
+    # They have no response key to merge on — resolve_union/5 turns them into
+    # variants, where their fields merge per member — so they pass through.
+    {fields, fragments} = Enum.split_with(selections, &match?(%QueryField{}, &1))
+
+    merged =
+      fields
+      |> group_by_response_key()
+      |> Enum.map(fn
+        {_key, [single]} -> single
+        {_key, copies} -> merge_copies(copies)
+      end)
+
+    merged ++ fragments
   end
 
   defp group_by_response_key(fields) do

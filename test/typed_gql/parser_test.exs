@@ -424,8 +424,13 @@ defmodule TypedGql.ParserTest do
       assert {:error, message} = Parser.parse(~S|{ f(s: "\uD83D\uDE00") }|)
       assert message =~ "surrogate pair escapes are not supported"
 
-      # A character above the BMP written directly still works.
-      assert {:ok, _document} = Parser.parse(~S|{ f(s: "😀") }|)
+      # A BMP escape still decodes, so this is not simply rejecting every \uXXXX.
+      assert {:ok, document} = Parser.parse(~S|{ f(s: "\u0041") }|)
+      assert string_argument(document) == "A"
+
+      # A character above the BMP written directly keeps its value.
+      assert {:ok, direct} = Parser.parse(~S|{ f(s: "😀") }|)
+      assert string_argument(direct) == "😀"
     end
 
     # The pipe is optional once, at the front — not a separator that may repeat.
