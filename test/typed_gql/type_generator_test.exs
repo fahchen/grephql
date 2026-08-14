@@ -1087,6 +1087,38 @@ defmodule TypedGql.TypeGeneratorTest do
       end
     end
 
+    test "an alias hiding inside a nested inline fragment is rejected too" do
+      schema = schema_with_union()
+
+      # The alias shares the abstract set's response-key space even though it
+      # sits one wrapper down, so the injected __typename would collide on User.
+      document = parse_document!("query { search { ... on User { __typename: id } } }")
+
+      assert_raise CompileError, ~r/leaving no response key to dispatch on/, fn ->
+        TypedGql.EnsureTypename.transform(document, schema)
+      end
+    end
+
+    test "a spread of an unknown fragment is left for the resolution stage to report" do
+      schema = schema_with_union()
+
+      document = parse_document!("query { search { ...Missing } }")
+      printed = document |> TypedGql.EnsureTypename.transform(schema) |> TypedGql.Printer.print()
+
+      assert printed =~ "__typename"
+    end
+
+    test "an alias hiding inside a spread body is rejected too" do
+      schema = schema_with_union()
+
+      document =
+        parse_document!("query { search { ...F } }\nfragment F on User { __typename: id }")
+
+      assert_raise CompileError, ~r/leaving no response key to dispatch on/, fn ->
+        TypedGql.EnsureTypename.transform(document, schema)
+      end
+    end
+
     test "an abstract selection inside a named fragment definition gets one too" do
       schema = schema_with_union()
 
