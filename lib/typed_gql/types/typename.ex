@@ -65,8 +65,6 @@ defmodule TypedGql.Types.Typename do
   def dump(value, _dumper, params) when is_atom(value),
     do: Map.fetch(params.atom_to_string, value)
 
-  def dump(value, _dumper, _params) when is_binary(value), do: {:ok, value}
-
   def dump(_other, _dumper, _params), do: :error
 
   @impl Ecto.ParameterizedType

@@ -83,10 +83,6 @@ defmodule TypedGql.Types.TypenameTest do
       assert {:ok, :search_result} = Typename.load(name, nil, @params)
     end
 
-    test "passes through string" do
-      assert {:ok, "User"} = Typename.dump("User", nil, @params)
-    end
-
     test "dumps nil" do
       assert {:ok, nil} = Typename.dump(nil, nil, @params)
     end

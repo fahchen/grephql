@@ -104,7 +104,7 @@ defmodule TypedGql.Macros do
   @spec __resolve_fragments__(String.t(), [TypedGql.Compiler.fragment_entry()]) ::
           {String.t(), %{String.t() => TypedGql.Compiler.fragment_entry()}}
   def __resolve_fragments__(query_str, fragment_entries) do
-    fragment_map = build_fragment_map(fragment_entries)
+    fragment_map = __fragment_map__(fragment_entries)
 
     document = parse(query_str)
     # A fragment the query string defines itself needs no registry entry — the
@@ -140,9 +140,7 @@ defmodule TypedGql.Macros do
   @doc false
   @spec __fragment_map__([TypedGql.Compiler.fragment_entry()]) ::
           %{String.t() => TypedGql.Compiler.fragment_entry()}
-  def __fragment_map__(fragment_entries), do: build_fragment_map(fragment_entries)
-
-  defp build_fragment_map(fragment_entries) do
+  def __fragment_map__(fragment_entries) do
     fragment_entries
     |> Enum.reverse()
     |> Map.new(fn entry -> {entry.fragment.name, entry} end)

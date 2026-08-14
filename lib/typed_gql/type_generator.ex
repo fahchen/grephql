@@ -603,7 +603,7 @@ defmodule TypedGql.TypeGenerator do
       schema_field: schema_field
     }
 
-    case unwrap_list(resolved.ecto_type) do
+    case GeneratorHelpers.unwrap_list(resolved.ecto_type) do
       {{:object, type_name}, depth} ->
         resolve_embed(depth, base, type_name, parent_module, context)
 
@@ -611,13 +611,6 @@ defmodule TypedGql.TypeGenerator do
         {base, nil}
     end
   end
-
-  defp unwrap_list({:array, inner}) do
-    {leaf, depth} = unwrap_list(inner)
-    {leaf, depth + 1}
-  end
-
-  defp unwrap_list(leaf), do: {leaf, 0}
 
   defp wrap_list(0, type), do: type
   defp wrap_list(depth, type), do: {:array, wrap_list(depth - 1, type)}
@@ -815,13 +808,14 @@ defmodule TypedGql.TypeGenerator do
 
   defp lower_field(%GenField{kind: :field} = field) do
     resolved = field.resolved
-    typed_opts = GeneratorHelpers.scalar_typed_opts(resolved) ++ composite_type_opts(field)
+    {type_opt, embedded_opts} = composite_opts(field)
+    typed_opts = GeneratorHelpers.scalar_typed_opts(resolved) ++ type_opt
     source_opt = GeneratorHelpers.source_opt(field.name, field.original_name)
     enum_opts = GeneratorHelpers.enum_opts(resolved)
     typename_opts = GeneratorHelpers.typename_opts(resolved)
 
     opts =
-      [{:typed, typed_opts} | source_opt] ++ enum_opts ++ typename_opts ++ embedded_opts(field)
+      [{:typed, typed_opts} | source_opt] ++ enum_opts ++ typename_opts ++ embedded_opts
 
     {:field, field.name, resolved.ecto_type, opts}
   end
@@ -833,21 +827,19 @@ defmodule TypedGql.TypeGenerator do
   end
 
   # A composite leaf — a union dispatcher, or an object behind `Ecto.Embedded` —
-  # gets its typespec from the GraphQL type, because the Ecto type says nothing
-  # about which list levels and elements are nullable.
-  defp composite_type_opts(%GenField{embed_module: nil}), do: []
+  # takes its typespec from the GraphQL type, because the Ecto type says nothing
+  # about which list levels and elements are nullable. `Ecto.Embedded` is itself
+  # a parameterized type, so it also takes its target through field options
+  # rather than through `embeds_one`/`embeds_many`.
+  defp composite_opts(%GenField{embed_module: nil}), do: {[], []}
 
-  defp composite_type_opts(%GenField{embed_module: module} = field) do
+  defp composite_opts(%GenField{embed_module: module} = field) do
     leaf_ast = quote(do: unquote(module).t())
-    [type: TypeMapper.list_type_ast(field.schema_field.type, leaf_ast)]
-  end
+    type_opt = [type: TypeMapper.list_type_ast(field.schema_field.type, leaf_ast)]
 
-  # `Ecto.Embedded` is itself a parameterized type, so it takes its target
-  # through field options rather than through `embeds_one`/`embeds_many`.
-  defp embedded_opts(%GenField{} = field) do
-    case unwrap_list(field.resolved.ecto_type) do
-      {Ecto.Embedded, _depth} -> [cardinality: :one, related: field.embed_module]
-      _other -> []
+    case GeneratorHelpers.unwrap_list(field.resolved.ecto_type) do
+      {Ecto.Embedded, _depth} -> {type_opt, [cardinality: :one, related: module]}
+      _other -> {type_opt, []}
     end
   end
 

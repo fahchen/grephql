@@ -77,11 +77,9 @@ defmodule TypedGql.EnsureTypename do
   defp transform_selection(%FragmentSpread{} = spread, _type_name, _schema), do: spread
 
   defp with_typename(selections, type_name, schema) do
-    cond do
-      not abstract?(schema, type_name) -> selections
-      Enum.any?(selections, &dispatchable_typename?/1) -> selections
-      true -> [%Field{name: "__typename"} | reject_typename_key!(selections)]
-    end
+    if abstract?(schema, type_name) and not Enum.any?(selections, &dispatchable_typename?/1),
+      do: [%Field{name: "__typename"} | reject_typename_key!(selections)],
+      else: selections
   end
 
   # `__typename: id` is legal GraphQL, but it takes the response key dispatch

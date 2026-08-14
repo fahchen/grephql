@@ -49,6 +49,19 @@ defmodule TypedGql.GeneratorHelpers do
   def typename_opts(_resolved), do: []
 
   @doc """
+  Splits an Ecto type into its innermost element and how many lists wrap it:
+  `{:array, {:array, Foo}}` gives `{Foo, 2}`.
+  """
+  @spec unwrap_list(TypedGql.TypeMapper.ecto_type()) ::
+          {TypedGql.TypeMapper.ecto_type(), integer()}
+  def unwrap_list({:array, inner}) do
+    {leaf, depth} = unwrap_list(inner)
+    {leaf, depth + 1}
+  end
+
+  def unwrap_list(leaf), do: {leaf, 0}
+
+  @doc """
   Builds `typed:` options for a scalar field, including enum type override.
   """
   @spec scalar_typed_opts(TypedGql.TypeMapper.resolve_result()) :: keyword()

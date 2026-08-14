@@ -145,8 +145,8 @@ defmodule TypedGql.InputTypeGenerator do
          {defs, embeds, reqs},
          collect_acc
        ) do
-    case unwrap_object_list(resolved.ecto_type) do
-      {nested_type_name, depth} ->
+    case GeneratorHelpers.unwrap_list(resolved.ecto_type) do
+      {{:object, nested_type_name}, depth} ->
         collect_embed(
           embed_kind!(depth, atom_name),
           atom_name,
@@ -158,7 +158,7 @@ defmodule TypedGql.InputTypeGenerator do
           collect_acc
         )
 
-      :error ->
+      _scalar ->
         typed_opts = GeneratorHelpers.scalar_typed_opts(resolved)
         enum_opts = GeneratorHelpers.enum_opts(resolved)
 
@@ -202,13 +202,6 @@ defmodule TypedGql.InputTypeGenerator do
     field_def = {kind, atom_name, nested_module, [{:typed, typed_opts} | source_opt]}
     {[field_def | defs], [atom_name | embeds], reqs, collect_acc}
   end
-
-  # An input object behind however many list levels: returns the type name and
-  # how deep it sits, or :error for anything that is not one.
-  defp unwrap_object_list(ecto_type, depth \\ 0)
-  defp unwrap_object_list({:object, name}, depth), do: {name, depth}
-  defp unwrap_object_list({:array, inner}, depth), do: unwrap_object_list(inner, depth + 1)
-  defp unwrap_object_list(_other, _depth), do: :error
 
   defp language_type_to_type_ref(%NonNullType{type: inner}, schema) do
     %TypeRef{kind: :non_null, of_type: language_type_to_type_ref(inner, schema)}
