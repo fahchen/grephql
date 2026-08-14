@@ -43,16 +43,6 @@ defmodule TypedGql.Generation.Plugins.SkipInclude do
     Schema.map_fields(tree, &maybe_mark_nullable/1)
   end
 
-  defp maybe_mark_nullable(%Field{kind: :embeds_many} = field), do: field
-
-  defp maybe_mark_nullable(%Field{} = field) do
-    if conditional?(field.query_field.directives) do
-      Field.put_nullable(field, true)
-    else
-      field
-    end
-  end
-
   @doc """
   Whether `directives` can remove the field from the response.
 
@@ -64,6 +54,26 @@ defmodule TypedGql.Generation.Plugins.SkipInclude do
     Enum.any?(directives, fn directive ->
       directive.name in @conditional_directives and directive_omits?(directive)
     end)
+  end
+
+  @doc """
+  Whether a single directive is `@skip` or `@include`.
+
+  The merge in `TypedGql.TypeGenerator` uses this to strip only the
+  conditionality of a repeated selection, keeping every other directive
+  visible to generation plugins.
+  """
+  @spec skip_include?(TypedGql.Language.Directive.t()) :: boolean()
+  def skip_include?(directive), do: directive.name in @conditional_directives
+
+  defp maybe_mark_nullable(%Field{kind: :embeds_many} = field), do: field
+
+  defp maybe_mark_nullable(%Field{} = field) do
+    if conditional?(field.query_field.directives) do
+      Field.put_nullable(field, true)
+    else
+      field
+    end
   end
 
   defp directive_omits?(directive) do

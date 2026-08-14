@@ -1160,6 +1160,22 @@ defmodule TypedGql.TypeGeneratorTest do
       assert merged.query_field.directives == []
     end
 
+    test "an unconditional copy strips only @skip/@include, keeping other directives" do
+      schema = schema_with_two_interfaces()
+
+      tree =
+        resolved_tree(
+          schema,
+          "query Q($show: Boolean!) { search { __typename " <>
+            "... on Node { id @include(if: $show) @myDir } ... on Named { id } } }",
+          TypedGql.Test.MergedCustomDirective
+        )
+
+      merged = variant_field(tree, "User", :id)
+      refute merged.resolved.nullable
+      assert [%{name: "myDir"}] = merged.query_field.directives
+    end
+
     test "a merged object field pushes each side's condition onto its children" do
       schema = schema_with_two_interfaces()
 

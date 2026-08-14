@@ -531,9 +531,14 @@ defmodule TypedGql.TypeGenerator do
   # direction — the value still decodes, only the typespec is wider than it has
   # to be, whereas guessing non-null would make the typespec lie.
   defp merged_directives(copies) do
+    directives = Enum.flat_map(copies, & &1.directives)
+
+    # An unconditional copy guarantees the field, which cancels the other
+    # copies' @skip/@include — and only those: any other directive stays, or a
+    # plugin reading the merged field's directives would silently lose it.
     if Enum.all?(copies, &SkipInclude.conditional?(&1.directives)),
-      do: Enum.flat_map(copies, & &1.directives),
-      else: []
+      do: directives,
+      else: Enum.reject(directives, &SkipInclude.skip_include?/1)
   end
 
   # Both copies are the same schema field, so either all are leaves or none is.
