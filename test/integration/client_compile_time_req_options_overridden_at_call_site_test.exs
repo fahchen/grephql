@@ -1,9 +1,8 @@
-defmodule TypedGql.Integration.ClientRuntimeConfigOverridingCompileTimeOptionsTest do
+defmodule TypedGql.Integration.ClientCompileTimeReqOptionsOverriddenAtCallSiteTest do
   # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: the three-layer config chain — call-site opts override
-  # runtime Application config, which overrides compile-time use options.
-  # setup_all installs the runtime layer for the whole file, so every test
-  # observes the same runtime config.
+  # test. Theme here: compile-time config layering without touching the
+  # runtime Application env — the use options (endpoint + req_options) act
+  # as defaults, and call-site opts override them per request.
   use ExUnit.Case, async: true
 
   alias TypedGql.Result
@@ -12,7 +11,8 @@ defmodule TypedGql.Integration.ClientRuntimeConfigOverridingCompileTimeOptionsTe
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://compile.example.com/graphql"
+      endpoint: "https://compile.example.com/graphql",
+      req_options: [headers: [{"x-config-layer", "compile-time"}]]
 
     defgql(:get_user, """
     query GetUser($id: ID!) {
@@ -24,34 +24,35 @@ defmodule TypedGql.Integration.ClientRuntimeConfigOverridingCompileTimeOptionsTe
     """)
   end
 
-  setup_all do
-    # Scoped put_env: the env key is this file's own Client module, which no
-    # other test can reference, so no sibling test reads it.
-    Application.put_env(:typed_gql, Client, endpoint: "https://runtime.example.com/graphql")
-    on_exit(fn -> Application.delete_env(:typed_gql, Client) end)
-    :ok
-  end
-
   setup {Req.Test, :verify_on_exit!}
 
   describe "config precedence" do
-    test "runtime Application config endpoint overrides the compile-time endpoint" do
+    test "compile-time endpoint and req_options are the request defaults" do
       conn = capture_conn()
 
-      assert conn.host == "runtime.example.com"
+      assert conn.host == "compile.example.com"
+      assert Plug.Conn.get_req_header(conn, "x-config-layer") == ["compile-time"]
     end
 
-    test "call-site opts override the runtime config endpoint" do
+    test "a call-site endpoint overrides the compile-time endpoint, keeping other defaults" do
       conn = capture_conn(endpoint: "https://callsite.example.com/graphql")
 
       assert conn.host == "callsite.example.com"
+      assert Plug.Conn.get_req_header(conn, "x-config-layer") == ["compile-time"]
     end
 
-    test "call-site req_options merge in while the runtime endpoint still holds" do
+    test "call-site req_options override the same key set at compile time" do
       conn = capture_conn(req_options: [headers: [{"x-config-layer", "call-site"}]])
 
-      assert conn.host == "runtime.example.com"
+      assert conn.host == "compile.example.com"
       assert Plug.Conn.get_req_header(conn, "x-config-layer") == ["call-site"]
+    end
+
+    test "call-site req_options merge alongside compile-time ones for distinct keys" do
+      conn = capture_conn(req_options: [headers: [{"x-request-id", "req-42"}]])
+
+      assert Plug.Conn.get_req_header(conn, "x-config-layer") == ["compile-time"]
+      assert Plug.Conn.get_req_header(conn, "x-request-id") == ["req-42"]
     end
   end
 
