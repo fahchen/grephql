@@ -31,10 +31,24 @@ defmodule TypedGql.Types.Typename do
         {val, val |> Macro.underscore() |> String.to_atom()}
       end)
 
-    %{
-      string_to_atom: string_to_atom,
-      atom_to_string: Map.new(string_to_atom, fn {name, atom} -> {atom, name} end)
-    }
+    atom_to_string = Map.new(string_to_atom, fn {name, atom} -> {atom, name} end)
+
+    # Two distinct type names underscoring to one atom would make dump/3 pick a
+    # winner silently, so load |> dump could answer with a name the server
+    # never sent. Refuse the ambiguity where it is created.
+    if map_size(atom_to_string) != map_size(string_to_atom) do
+      colliding =
+        string_to_atom
+        |> Enum.group_by(fn {_name, atom} -> atom end, fn {name, _atom} -> name end)
+        |> Enum.filter(fn {_atom, names} -> length(names) > 1 end)
+        |> Enum.map_join("; ", fn {atom, names} ->
+          "#{names |> Enum.sort() |> Enum.join(" and ")} both underscore to :#{atom}"
+        end)
+
+      raise ArgumentError, "ambiguous __typename values: #{colliding}"
+    end
+
+    %{string_to_atom: string_to_atom, atom_to_string: atom_to_string}
   end
 
   @impl Ecto.ParameterizedType

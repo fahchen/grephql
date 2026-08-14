@@ -90,6 +90,12 @@ defmodule TypedGql.Types.TypenameTest do
     test "rejects other types" do
       assert :error = Typename.dump(123, nil, @params)
     end
+
+    test "two names underscoring to one atom are rejected at init" do
+      assert_raise ArgumentError, ~r/FOOBar and FooBar both underscore to :foo_bar/, fn ->
+        Typename.init(values: ["FooBar", "FOOBar"])
+      end
+    end
   end
 
   describe "type/1" do
