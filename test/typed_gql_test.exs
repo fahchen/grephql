@@ -228,7 +228,11 @@ defmodule TypedGqlTest do
         |> Plug.Conn.send_resp(200, "not json at all")
       end)
 
-      assert {:error, %RuntimeError{}} = StubbedClient.get_user()
+      # The error's module depends on the JSON library: Elixir's JSON reports a
+      # tuple that normalize_error wraps in a RuntimeError, while the Jason
+      # fallback on Elixir < 1.18 raises its own DecodeError exception.
+      assert {:error, error} = StubbedClient.get_user()
+      assert is_exception(error)
     end
 
     test "no URL at all fails in Req" do
