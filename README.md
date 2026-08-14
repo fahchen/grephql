@@ -1,4 +1,4 @@
-# typedGql
+# TypedGql
 [![Build Status](https://github.com/fahchen/typed_gql/actions/workflows/ci.yml/badge.svg)](https://github.com/fahchen/typed_gql/actions/workflows/ci.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/typed_gql)](https://hex.pm/packages/typed_gql)
 [![HexDocs](https://img.shields.io/badge/HexDocs-gray)](https://hexdocs.pm/typed_gql)
