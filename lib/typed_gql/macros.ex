@@ -218,6 +218,16 @@ defmodule TypedGql.Macros do
   fragments defined above it, and spreading one defined later is a
   compile error.
 
+  The ordering restriction comes from the macro model, not from GraphQL —
+  the spec allows a spread to reference a fragment defined later in the
+  same document. Each `deffragment` compiles as it is expanded, when later
+  definitions do not exist yet, and lexical order is also what gives the
+  redefinition rule above its meaning: with forward references, a spread
+  written before a redefinition would have no defined answer for which
+  version it names. Within a single query string the restriction does not
+  apply — a fragment defined next to the operation may be spread before or
+  after its definition.
+
   The generated module is an embedded schema for an object type condition,
   and for an interface whose selections are shared by every member. A
   condition that resolves to per-member selections instead yields the

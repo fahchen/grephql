@@ -86,6 +86,12 @@ Feature: GraphQL query definition and execution
       Then the local definition is used to generate the result struct
       And it shadows a deffragment of the same name, whose source is not appended
 
+    # GraphQL itself does not care about order — a document may spread a
+    # fragment defined later in it. This restriction is the macro model's:
+    # each deffragment compiles as it is expanded, before later definitions
+    # exist, and lexical order is what makes "the latest definition wins"
+    # well-defined. Fragments defined inside a single query string stay
+    # order-free.
     Scenario: A fragment body spreading a fragment defined later is rejected
       Given fragment A spreads fragment B
       And fragment B is defined after fragment A
