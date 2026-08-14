@@ -145,10 +145,10 @@ defmodule TypedGql.InputTypeGenerator do
          {defs, embeds, reqs},
          collect_acc
        ) do
-    case resolved.ecto_type do
-      {:object, nested_type_name} ->
+    case unwrap_object_list(resolved.ecto_type) do
+      {nested_type_name, depth} ->
         collect_embed(
-          :embeds_one,
+          depth,
           atom_name,
           nested_type_name,
           resolved,
@@ -158,31 +158,24 @@ defmodule TypedGql.InputTypeGenerator do
           collect_acc
         )
 
-      {:array, {:object, nested_type_name}} ->
-        collect_embed(
-          :embeds_many,
-          atom_name,
-          nested_type_name,
-          resolved,
-          source_opt,
-          context,
-          {defs, embeds, reqs},
-          collect_acc
-        )
-
-      ecto_type ->
+      :error ->
         typed_opts = GeneratorHelpers.scalar_typed_opts(resolved)
         enum_opts = GeneratorHelpers.enum_opts(resolved)
 
         field_def =
-          {:field, atom_name, ecto_type, [{:typed, typed_opts} | source_opt] ++ enum_opts}
+          {:field, atom_name, resolved.ecto_type,
+           [{:typed, typed_opts} | source_opt] ++ enum_opts}
 
         {[field_def | defs], embeds, reqs, collect_acc}
     end
   end
 
+  # Unlike the output side (BDR-0009), a deeper nesting has nowhere to go here:
+  # `Ecto.Embedded` implements only load/3 and dump/3, and a variables struct is
+  # built through a changeset, which needs cast/2. Say so rather than fail later
+  # with an opaque error about an unknown Ecto type.
   defp collect_embed(
-         kind,
+         depth,
          atom_name,
          nested_type_name,
          resolved,
@@ -195,10 +188,41 @@ defmodule TypedGql.InputTypeGenerator do
     {_schema, _scalar_types, inputs_module} = context
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     nested_module = Module.concat(inputs_module, Macro.camelize(nested_type_name))
+
+    {defs, embeds, reqs} =
+      embed_field_def(depth, atom_name, nested_module, resolved, source_opt, {defs, embeds, reqs})
+
+    {defs, embeds, reqs, collect_acc}
+  end
+
+  defp embed_field_def(
+         depth,
+         atom_name,
+         nested_module,
+         resolved,
+         source_opt,
+         {defs, embeds, reqs}
+       )
+       when depth in [0, 1] do
+    kind = if depth == 0, do: :embeds_one, else: :embeds_many
     typed_opts = GeneratorHelpers.embed_typed_opts(kind, resolved)
     field_def = {kind, atom_name, nested_module, [{:typed, typed_opts} | source_opt]}
-    {[field_def | defs], [atom_name | embeds], reqs, collect_acc}
+    {[field_def | defs], [atom_name | embeds], reqs}
   end
+
+  defp embed_field_def(depth, atom_name, _nested_module, _resolved, _source_opt, _acc) do
+    raise CompileError,
+      description:
+        "variable \"#{atom_name}\" nests an input object #{depth} lists deep; " <>
+          "typedGql can generate input types for a list of input objects, but not a list of lists"
+  end
+
+  # An input object behind however many list levels: returns the type name and
+  # how deep it sits, or :error for anything that is not one.
+  defp unwrap_object_list(ecto_type, depth \\ 0)
+  defp unwrap_object_list({:object, name}, depth), do: {name, depth}
+  defp unwrap_object_list({:array, inner}, depth), do: unwrap_object_list(inner, depth + 1)
+  defp unwrap_object_list(_other, _depth), do: :error
 
   defp language_type_to_type_ref(%NonNullType{type: inner}, schema) do
     %TypeRef{kind: :non_null, of_type: language_type_to_type_ref(inner, schema)}
