@@ -601,7 +601,6 @@ defmodule TypedGql.TypeGenerator do
   # abstract (`... on Node`). Members without a matching fragment still decode,
   # carrying the shared fields alone.
   defp resolve_union(shared_fields, inline_fragments, parent_type_name, parent_module, context) do
-    shared_fields = ensure_typename(shared_fields)
     {:ok, parent} = Schema.get_type(context.schema, parent_type_name)
     typename_values = parent.possible_types
 
@@ -688,21 +687,6 @@ defmodule TypedGql.TypeGenerator do
     {:ok, field} = Schema.get_field(schema, type_name, field_name)
     field
   end
-
-  # An aliased or conditional copy cannot serve as the discriminator: the alias
-  # changes the response key and a directive can remove it, while dispatch runs
-  # before either is known. TypedGql.EnsureTypename puts the same field into the
-  # document that is sent; this covers callers of generate/3, which do not.
-  defp ensure_typename(shared_fields) do
-    if Enum.any?(shared_fields, &dispatchable_typename?/1),
-      do: shared_fields,
-      else: [%QueryField{name: "__typename"} | shared_fields]
-  end
-
-  defp dispatchable_typename?(%QueryField{name: "__typename", alias: nil, directives: []}),
-    do: true
-
-  defp dispatchable_typename?(_selection), do: false
 
   defp override_typename_type(resolved, "__typename", opts) do
     values = Keyword.fetch!(opts, :typename_values)

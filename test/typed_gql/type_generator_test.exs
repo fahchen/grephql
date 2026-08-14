@@ -553,7 +553,7 @@ defmodule TypedGql.TypeGeneratorTest do
       assert post.title == "Hello"
     end
 
-    test "auto-injects __typename when not queried" do
+    test "an unselected __typename stays out of the generated struct" do
       schema = schema_with_single_union()
 
       operation =
@@ -564,9 +564,11 @@ defmodule TypedGql.TypeGeneratorTest do
         function_name: :get_node
       )
 
-      # __typename is auto-injected into each fragment struct
+      # The variant is told apart by its module, and dispatch reads __typename
+      # off the raw response — TypedGql.EnsureTypename puts it in the request —
+      # so the struct has no reason to carry a field nobody selected.
       user_fields = TypedGql.Test.AutoTypename.GetNode.Result.Node.User.__schema__(:fields)
-      assert :__typename in user_fields
+      assert user_fields == [:name]
 
       json = %{"node" => %{"__typename" => "User", "name" => "Alice"}}
       result = TypedGql.ResponseDecoder.decode!(TypedGql.Test.AutoTypename.GetNode.Result, json)
@@ -575,7 +577,7 @@ defmodule TypedGql.TypeGeneratorTest do
       assert result.node.name == "Alice"
     end
 
-    test "does not duplicate __typename when already queried" do
+    test "a selected __typename is kept, once, as an enum of the possible types" do
       schema = schema_with_single_union()
 
       operation =
@@ -587,8 +589,12 @@ defmodule TypedGql.TypeGeneratorTest do
       )
 
       user_fields = TypedGql.Test.NoDupTypename.GetNode.Result.Node.User.__schema__(:fields)
-      typename_count = Enum.count(user_fields, &(&1 == :__typename))
-      assert typename_count == 1
+      assert Enum.count(user_fields, &(&1 == :__typename)) == 1
+
+      assert {:parameterized, {TypedGql.Types.Typename, values}} =
+               TypedGql.Test.NoDupTypename.GetNode.Result.Node.User.__schema__(:type, :__typename)
+
+      assert values == %{"User" => :user, "Post" => :post}
     end
 
     test "handles __typename when not in introspection fields" do
@@ -608,18 +614,15 @@ defmodule TypedGql.TypeGeneratorTest do
       assert TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.AppSubscription in modules
       assert TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.Shop in modules
 
-      # __typename is auto-injected and resolved even without it in the schema fields
       sub_fields =
         TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.AppSubscription.__schema__(:fields)
 
-      assert :__typename in sub_fields
-      assert :status in sub_fields
+      assert sub_fields == [:status]
 
       shop_fields =
         TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.Shop.__schema__(:fields)
 
-      assert :__typename in shop_fields
-      assert :name in shop_fields
+      assert shop_fields == [:name]
 
       # End-to-end decode works
       json = %{"node" => %{"__typename" => "AppSubscription", "status" => "ACTIVE"}}

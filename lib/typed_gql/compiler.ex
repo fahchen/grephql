@@ -57,10 +57,6 @@ defmodule TypedGql.Compiler do
   @spec compile_document!(TypedGql.Language.Document.t(), String.t(), Schema.t(), [option()]) ::
           Query.t()
   def compile_document!(document, _query_string, schema, opts) do
-    # Dispatching a union or interface needs __typename in the *response*, so it
-    # has to be in the document that gets sent — see TypedGql.EnsureTypename.
-    # Running before validation keeps a single view of the document throughout.
-    document = EnsureTypename.transform(document, schema)
     reject_type_system_definitions!(document)
 
     operation =
@@ -96,7 +92,11 @@ defmodule TypedGql.Compiler do
     variables_module = InputTypeGenerator.generate_variables(operation, schema, generator_opts)
 
     %Query{
-      document: Printer.print(document),
+      # Only the transmitted document gains __typename. Dispatch reads it off the
+      # raw response and the decoded variant is told apart by its module, so
+      # injecting it into the generated struct would expose a field the query
+      # never asked for — see TypedGql.EnsureTypename.
+      document: document |> EnsureTypename.transform(schema) |> Printer.print(),
       operation_name: operation.name,
       operation_type: Atom.to_string(operation.operation),
       function_name: Keyword.fetch!(opts, :function_name),
