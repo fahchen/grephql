@@ -655,6 +655,18 @@ defmodule TypedGql.PrinterTest do
     end
   end
 
+  describe "string escaping" do
+    test "control characters are escaped so the printed document reparses" do
+      source = ~S|{ f(a: "tab\there", b: "bell\u0007") }|
+      assert {:ok, document} = TypedGql.Parser.parse(source)
+
+      printed = Printer.print(document)
+      assert printed =~ ~S|\t|
+      assert printed =~ ~S|\u0007|
+      assert {:ok, _reparsed} = TypedGql.Parser.parse(printed)
+    end
+  end
+
   describe "hand-built documents" do
     test "prints nothing for a missing or empty selection set" do
       for selection_set <- [nil, %TypedGql.Language.SelectionSet{selections: []}] do

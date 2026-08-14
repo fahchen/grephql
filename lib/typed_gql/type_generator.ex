@@ -430,7 +430,7 @@ defmodule TypedGql.TypeGenerator do
     %{
       existing
       | directives: merge_directives(existing.directives, field.directives),
-        selection_set: merge_selection_sets(existing.selection_set, field.selection_set)
+        selection_set: merge_selection_sets(existing, field)
     }
   end
 
@@ -489,10 +489,19 @@ defmodule TypedGql.TypeGenerator do
   end
 
   # Both copies are the same schema field, so either both are leaves or neither is.
-  defp merge_selection_sets(nil, _other), do: nil
+  # Both copies are the same schema field, so either both are leaves or neither is.
+  defp merge_selection_sets(%QueryField{selection_set: nil}, _other), do: nil
 
-  defp merge_selection_sets(selection_set, other) do
-    %{selection_set | selections: merge_fields(selection_set.selections ++ other.selections)}
+  defp merge_selection_sets(existing, other) do
+    # Each side's children were only selected under that side's condition, so the
+    # condition moves onto them before the two lists become one. Without this a
+    # child of a `@include(if: $a)` copy would look unconditional next to a child
+    # of the `@include(if: $b)` copy, and be generated non-null.
+    selections =
+      prepend_directives(existing.selection_set.selections, existing.directives) ++
+        prepend_directives(other.selection_set.selections, other.directives)
+
+    %{existing.selection_set | selections: merge_fields(selections)}
   end
 
   defp resolve_field(%QueryField{} = field, parent_type_name, parent_module, context, opts) do

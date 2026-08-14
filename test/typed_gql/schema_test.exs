@@ -3,6 +3,7 @@ defmodule TypedGql.SchemaTest do
 
   alias TypedGql.Schema
   alias TypedGql.Schema.Field
+  alias TypedGql.Schema.InputValue
   alias TypedGql.Schema.Type
   alias TypedGql.Schema.TypeRef
 
@@ -17,6 +18,13 @@ defmodule TypedGql.SchemaTest do
             name: "user",
             type: %TypeRef{kind: :object, name: "User"}
           }
+        }
+      },
+      "User" => %Type{
+        kind: :object,
+        name: "User",
+        fields: %{
+          "name" => %Field{name: "name", type: %TypeRef{kind: :scalar, name: "String"}}
         }
       }
     }
@@ -48,14 +56,34 @@ defmodule TypedGql.SchemaTest do
     # An introspection result never lists these among Query's own fields, but the
     # spec puts them on the query root.
     test "synthesizes __schema and __type on the query root" do
-      assert {:ok, %Field{name: "__schema", type: %TypeRef{of_type: %TypeRef{name: "__Schema"}}}} =
-               Schema.get_field(@schema, "Query", "__schema")
+      assert {:ok, schema_field} = Schema.get_field(@schema, "Query", "__schema")
 
-      assert {:ok, %Field{name: "__type", args: %{"name" => _name_arg}}} =
-               Schema.get_field(@schema, "Query", "__type")
+      assert %Field{
+               name: "__schema",
+               type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :object, name: "__Schema"}}
+             } = schema_field
+
+      assert {:ok, type_field} = Schema.get_field(@schema, "Query", "__type")
+
+      assert %Field{
+               name: "__type",
+               type: %TypeRef{kind: :object, name: "__Type"},
+               args: %{
+                 "name" => %InputValue{
+                   name: "name",
+                   type: %TypeRef{
+                     kind: :non_null,
+                     of_type: %TypeRef{kind: :scalar, name: "String"}
+                   }
+                 }
+               }
+             } = type_field
     end
 
     test "does not synthesize them on any other type" do
+      # A type the fixture really declares, so this fails if the synthesis is
+      # not restricted to the query root.
+      assert {:ok, %Field{}} = Schema.get_field(@schema, "User", "name")
       assert :error = Schema.get_field(@schema, "User", "__schema")
       assert :error = Schema.get_field(@schema, "User", "__type")
     end

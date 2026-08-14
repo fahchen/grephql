@@ -99,6 +99,25 @@ defmodule TypedGql.ClientModuleTest do
     end
   end
 
+  describe "abstract selections in the transmitted document" do
+    defmodule TypenameClient do
+      use TypedGql,
+        otp_app: :typed_gql,
+        source: "../support/schemas/integration.json"
+
+      defgql(:nodes, "query { nodes(ids: [\"1\"]) { ... on User { name } } }")
+
+      def query, do: @typed_gql_query
+    end
+
+    test "__typename is added to the query that gets sent" do
+      # Union decoding dispatches on __typename, and the server only returns what
+      # the request asked for — so it has to be in the document, not just in the
+      # generated struct.
+      assert TypenameClient.query().document =~ "__typename"
+    end
+  end
+
   describe "use TypedGql with generation_plugins" do
     defmodule PluginClient do
       use TypedGql,

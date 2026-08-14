@@ -5,7 +5,7 @@ Nonterminals
   ScalarTypeDefinition EnumTypeDefinition InputObjectTypeDefinition TypeExtensionDefinition
   FieldDefinitionList FieldDefinition ImplementsInterfaces ArgumentsDefinition
   InputValueDefinitionList InputValueDefinition UnionMembers
-  EnumValueDefinitionList EnumValueDefinition
+  EnumValueDefinitionList EnumValueDefinition UnionMemberList DirectiveLocationList
   DirectiveDefinition DirectiveDefinitionLocations
   SelectionSet Selections Selection
   OperationType Name NameWithoutOn VariableDefinitions VariableDefinition DescriptionDefinition Directives Directive
@@ -326,11 +326,12 @@ UnionTypeDefinition -> 'union' Name '=' UnionMembers :
 UnionTypeDefinition -> 'union' Name DirectivesConst '=' UnionMembers :
   build_ast_node('UnionTypeDefinition', #{'name' => extract_binary('$2'), 'directives' => '$3', 'types' => '$5'}, extract_location('$1')).
 
-UnionMembers -> NamedType : ['$1'].
-UnionMembers -> NamedType '|' UnionMembers : ['$1'|'$3'].
-UnionMembers -> '|' NamedType '|' UnionMembers : ['$2'|'$4'].
-% A leading pipe is permitted on a one-entry list too.
-UnionMembers -> '|' NamedType : ['$2'].
+% The optional leading pipe is separated from the list so that it can only
+% appear once, at the front: `= | A | B` parses, `= A | | B` does not.
+UnionMembers -> UnionMemberList : '$1'.
+UnionMembers -> '|' UnionMemberList : '$2'.
+UnionMemberList -> NamedType : ['$1'].
+UnionMemberList -> NamedType '|' UnionMemberList : ['$1'|'$3'].
 
 ScalarTypeDefinition -> 'scalar' Name : build_ast_node('ScalarTypeDefinition', #{'name' => extract_binary('$2')}, extract_location('$2')).
 ScalarTypeDefinition -> 'scalar' Name DirectivesConst : build_ast_node('ScalarTypeDefinition', #{'name' => extract_binary('$2'), 'directives' => '$3'}, extract_location('$2')).
@@ -350,11 +351,11 @@ EnumValueDefinitionList -> EnumValueDefinition EnumValueDefinitionList : ['$1'|'
 EnumValueDefinitionList -> DescriptionDefinition EnumValueDefinition : [put_description('$2', '$1')].
 EnumValueDefinitionList -> DescriptionDefinition EnumValueDefinition EnumValueDefinitionList : [put_description('$2', '$1')|'$3'].
 
-DirectiveDefinitionLocations -> Name : [extract_binary('$1')].
-DirectiveDefinitionLocations -> Name '|' DirectiveDefinitionLocations : [extract_binary('$1')|'$3'].
-DirectiveDefinitionLocations -> '|' Name '|' DirectiveDefinitionLocations : [extract_binary('$2')|'$4'].
-% A leading pipe is permitted on a one-entry list too.
-DirectiveDefinitionLocations -> '|' Name : [extract_binary('$2')].
+% Same shape as UnionMembers: one optional leading pipe, no doubled separators.
+DirectiveDefinitionLocations -> DirectiveLocationList : '$1'.
+DirectiveDefinitionLocations -> '|' DirectiveLocationList : '$2'.
+DirectiveLocationList -> Name : [extract_binary('$1')].
+DirectiveLocationList -> Name '|' DirectiveLocationList : [extract_binary('$1')|'$3'].
 
 EnumValueDefinition -> EnumValue : build_ast_node('EnumValueDefinition', #{'value' => extract_binary('$1')}, extract_location('$1')).
 EnumValueDefinition -> EnumValue DirectivesConst : build_ast_node('EnumValueDefinition', #{'value' => extract_binary('$1'), 'directives' => '$2'}, extract_location('$1')).

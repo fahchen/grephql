@@ -907,6 +907,30 @@ defmodule TypedGql.TypeGeneratorTest do
       assert merged.query_field.directives == []
     end
 
+    test "a merged object field pushes each side's condition onto its children" do
+      schema = schema_with_two_interfaces()
+
+      tree =
+        resolved_tree(
+          schema,
+          "query Q($a: Boolean!, $b: Boolean!) { search { __typename ... on Named { profile @include(if: $a) { bio } profile @include(if: $b) { avatar } } } }",
+          TypedGql.Test.MergedConditionalChildren
+        )
+
+      profile = variant_field(tree, "User", :profile)
+      assert profile.resolved.nullable
+
+      # bio came from the $a copy and avatar from the $b copy; either can be
+      # absent while the other is present, so neither may be non-null.
+      [union_node] = tree.children
+      user = Enum.find(union_node.children, &(&1.parent_type == "User"))
+      [profile_node] = user.children
+
+      child_names = profile_node.fields |> Enum.map(& &1.name) |> Enum.sort()
+      assert child_names == [:avatar, :bio]
+      assert Enum.all?(profile_node.fields, & &1.resolved.nullable)
+    end
+
     test "a merged field conditional on both sides stays conditional" do
       schema = schema_with_two_interfaces()
 

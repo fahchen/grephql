@@ -411,6 +411,28 @@ defmodule TypedGql.ParserTest do
                Parser.parse("directive @d on | FIELD")
 
       assert directive.locations == [:field]
+
+      assert {:ok, %Language.Document{definitions: [multi]}} =
+               Parser.parse("union S = | User | Post")
+
+      assert length(multi.types) == 2
+    end
+
+    # The pipe is optional once, at the front — not a separator that may repeat.
+    test "a doubled pipe is still a syntax error" do
+      assert {:error, _message} = Parser.parse("union S = User | | Post")
+      assert {:error, _message} = Parser.parse("directive @d on FIELD | | QUERY")
+    end
+
+    test "control characters in a string literal survive printing" do
+      source = ~S|{ f(s: "a\b\f\n\"z") }|
+      assert {:ok, document} = Parser.parse(source)
+
+      # The document is reprinted before it is sent, so every escape the lexer
+      # decoded has to go back in.
+      printed = TypedGql.Printer.print(document)
+      assert {:ok, reparsed} = Parser.parse(printed)
+      assert string_argument(reparsed) == string_argument(document)
     end
 
     test "a selection is only ever a Field, FragmentSpread or InlineFragment" do
@@ -502,6 +524,12 @@ defmodule TypedGql.ParserTest do
   # https://spec.graphql.org/draft/#sec-Appendix-Grammar-Summary.Source-Text —
   # some positions take Value[Const], where a variable is not a valid value.
   # The grammar rejects them outright, so no validator rule is needed.
+  defp string_argument(%Language.Document{definitions: [op]}) do
+    [field] = op.selection_set.selections
+    [argument] = field.arguments
+    argument.value.value
+  end
+
   describe "parse/1 constant-only positions" do
     test "a variable definition's default value cannot be a variable" do
       assert {:error, _message} = Parser.parse(~s|query Q($size: Int = $var) { user { name } }|)

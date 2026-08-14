@@ -61,6 +61,7 @@ defmodule TypedGql.Compiler do
     # has to be in the document that gets sent — see TypedGql.EnsureTypename.
     # Running before validation keeps a single view of the document throughout.
     document = EnsureTypename.transform(document, schema)
+    reject_type_system_definitions!(document)
 
     operation =
       extract_single!(
@@ -156,6 +157,23 @@ defmodule TypedGql.Compiler do
       fragment: fragment,
       result_module: result_module
     }
+  end
+
+  # The document is printed and sent, and a request carries executable
+  # definitions only — Printer has no clause for the rest either.
+  defp reject_type_system_definitions!(%{definitions: definitions}) do
+    executable? = &(match?(%OperationDefinition{}, &1) or match?(%Fragment{}, &1))
+
+    case Enum.reject(definitions, executable?) do
+      [] ->
+        :ok
+
+      [definition | _rest] ->
+        raise CompileError,
+          description:
+            "type system definitions cannot be sent in a request, found: " <>
+              inspect(definition.__struct__)
+    end
   end
 
   defp parse!(query_string) do
