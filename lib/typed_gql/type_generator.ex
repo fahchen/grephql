@@ -115,6 +115,11 @@ defmodule TypedGql.TypeGenerator do
   Takes the same options as `generate/3` except `:client_module` and
   `:function_name`, which the fragment's own name replaces.
 
+  This was `generate_fragment/5` up to 0.12.2, taking `scalar_types` as a bare
+  fourth argument and the plugin list as a fifth. Both are options now, so a
+  caller passing `scalar_types` positionally has to wrap it:
+  `generate_fragment(fragment, schema, client_module, scalar_types: types)`.
+
   Returns the module that stands for the fragment's result. For an object
   type condition — and for an abstract one whose selections every member
   shares — that is the embedded schema at `Fragments.FragmentName`. For a

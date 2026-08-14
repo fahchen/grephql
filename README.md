@@ -346,6 +346,12 @@ end
 # MyApp.GitHub.GetUser.Variables            — %{id: String.t()}
 ```
 
+The `posts: [Posts.t()]` above assumes the schema declares it `[Post!]!`. A list
+typespec mirrors the schema's nullability at every level — `[Post]` generates
+`[Posts.t() | nil] | nil` — and only `[Post!]!` is an `embeds_many`; every other
+shape is a plain field, so its default is `nil` rather than `[]`. See
+`spec/client/decisions/BDR-0009-object-lists-not-always-embeds.md`.
+
 ## Access Behaviour
 
 All generated schemas implement the `Access` behaviour, so you can use bracket syntax and `get_in/2` alongside dot notation:
