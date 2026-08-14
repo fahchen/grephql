@@ -98,11 +98,13 @@ Feature: GraphQL to Elixir type generation
       When the type is generated
       Then the Elixir type is [[User.t() | nil] | nil] | nil
 
-    # Only [T!]! is an Ecto embeds_many, and Ecto pins its default to [].
-    Scenario: A conditional non-null list decodes as an empty list, not nil
+    # Only an unconditional [T!]! is an Ecto embeds_many. A conditional one is
+    # a plain field, because embeds_many pins its default to [] — which would
+    # report a list the response never carried as an empty one.
+    Scenario: A conditional non-null list omitted from the response decodes as nil
       Given a schema field "posts: [Post!]!" selected with @include(if: $show)
       When the server omits the field from the response
-      Then the decoded value is [] rather than nil
+      Then the decoded value is nil rather than []
 
   Rule: GraphQL enums map to downcased Elixir atoms
 
