@@ -5,15 +5,18 @@ defmodule TypedGql.Integration.MalformedServerDataEnumTypenameAndTypeMismatchHan
   # (unknown __typename, out-of-range enum, wrong scalar type) surfaces as
   # {:error, %TypedGql.DecodeError{}}; shape violations Ecto tolerates
   # (null where non-null was promised, extra keys) load leniently.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.MalformedServerDataEnumTypenameAndTypeMismatchHandlingTest.Client}
+      ]
 
     defgql(:search, """
     query Search($term: String!) {
@@ -32,8 +35,6 @@ defmodule TypedGql.Integration.MalformedServerDataEnumTypenameAndTypeMismatchHan
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "malformed server data" do
     test "a non-null root list sent as null loads as nil instead of erroring" do
@@ -124,9 +125,6 @@ defmodule TypedGql.Integration.MalformedServerDataEnumTypenameAndTypeMismatchHan
   end
 
   defp call do
-    Client.search(
-      %{term: "elixir"},
-      req_options: [plug: {Req.Test, Client}]
-    )
+    Client.search(%{term: "elixir"})
   end
 end

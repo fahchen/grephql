@@ -3,15 +3,18 @@ defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVaria
   # test. Theme here: the dump direction of a mutation whose single variable
   # is a nested input object carrying an enum, a DateTime, and optional
   # fields that the caller omits.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVariablesTest.Client}
+      ]
 
     defgql(:create_post, """
     mutation CreatePost($input: CreatePostInput!) {
@@ -30,8 +33,6 @@ defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVaria
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "Variables embeds the shared Client.Inputs input module" do
@@ -159,6 +160,6 @@ defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVaria
   end
 
   defp call(variables) do
-    Client.create_post(variables, req_options: [plug: {Req.Test, Client}])
+    Client.create_post(variables)
   end
 end

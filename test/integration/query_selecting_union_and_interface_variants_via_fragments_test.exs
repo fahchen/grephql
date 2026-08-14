@@ -3,15 +3,18 @@ defmodule TypedGql.Integration.QuerySelectingUnionAndInterfaceVariantsViaFragmen
   # test. Theme here: union and interface selections with per-variant inline
   # fragments, whose bodies come from named fragments shared across the two
   # root fields.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.QuerySelectingUnionAndInterfaceVariantsViaFragmentsTest.Client}
+      ]
 
     defgql(:site_search, """
     query SiteSearch($term: String!, $ids: [ID!]!) {
@@ -50,8 +53,6 @@ defmodule TypedGql.Integration.QuerySelectingUnionAndInterfaceVariantsViaFragmen
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "union and interface selections lower to generated dispatcher types" do
@@ -167,9 +168,6 @@ defmodule TypedGql.Integration.QuerySelectingUnionAndInterfaceVariantsViaFragmen
   end
 
   defp call do
-    Client.site_search(
-      %{term: "elixir", ids: ["u1", "p20"]},
-      req_options: [plug: {Req.Test, Client}]
-    )
+    Client.site_search(%{term: "elixir", ids: ["u1", "p20"]})
   end
 end

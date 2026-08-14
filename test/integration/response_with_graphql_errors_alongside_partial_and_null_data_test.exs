@@ -2,16 +2,20 @@ defmodule TypedGql.Integration.ResponseWithGraphqlErrorsAlongsidePartialAndNullD
   # Integration suite: one document per file, one observable behavior per
   # test. Theme here: GraphQL-level errors coexist with data — the Result
   # struct carries both, whether data is partial, null, or clean.
-  use ExUnit.Case, async: true
+  use TypedGql.IntegrationCase, async: true
 
   alias TypedGql.Error
-  alias TypedGql.Result
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.ResponseWithGraphqlErrorsAlongsidePartialAndNullDataTest.Client}
+      ]
 
     defgql(:get_user, """
     query GetUser($id: ID!) {
@@ -24,8 +28,6 @@ defmodule TypedGql.Integration.ResponseWithGraphqlErrorsAlongsidePartialAndNullD
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "the result struct exposes both data and errors fields" do
@@ -128,6 +130,6 @@ defmodule TypedGql.Integration.ResponseWithGraphqlErrorsAlongsidePartialAndNullD
   end
 
   defp call do
-    Client.get_user(%{id: "u1"}, req_options: [plug: {Req.Test, Client}])
+    Client.get_user(%{id: "u1"})
   end
 end

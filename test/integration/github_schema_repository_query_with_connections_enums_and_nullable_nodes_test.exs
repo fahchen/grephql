@@ -5,15 +5,18 @@ defmodule TypedGql.Integration.GithubSchemaRepositoryQueryWithConnectionsEnumsAn
   # per compile). Theme here: Relay connection pagination with enum literal
   # arguments, and the null shapes GitHub really returns — null connection
   # nodes and a null author for a deleted account.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/github.json",
       endpoint: "https://api.github.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.GithubSchemaRepositoryQueryWithConnectionsEnumsAndNullableNodesTest.Client}
+      ],
       scalars: %{
         # GitHub-specific scalars not covered by builtins
         "GitObjectID" => :string,
@@ -61,8 +64,6 @@ defmodule TypedGql.Integration.GithubSchemaRepositoryQueryWithConnectionsEnumsAn
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "connection nodes is a plain array field because [Issue] is nullable throughout" do
@@ -202,9 +203,6 @@ defmodule TypedGql.Integration.GithubSchemaRepositoryQueryWithConnectionsEnumsAn
   end
 
   defp call do
-    Client.repository_overview(
-      %{owner: "elixir-lang", name: "elixir"},
-      req_options: [plug: {Req.Test, Client}]
-    )
+    Client.repository_overview(%{owner: "elixir-lang", name: "elixir"})
   end
 end

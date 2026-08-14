@@ -4,15 +4,17 @@ defmodule TypedGql.Integration.QueryWithNullableAndNonNullObjectListShapesTest d
   # while a [Post] selection is a plain array field whose list and elements
   # may be null. The dump direction adds nothing for this theme, so the file
   # only checks shape and loading.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test, TypedGql.Integration.QueryWithNullableAndNonNullObjectListShapesTest.Client}
+      ]
 
     defgql(:post_board, """
     query PostBoard($id: ID!) {
@@ -33,8 +35,6 @@ defmodule TypedGql.Integration.QueryWithNullableAndNonNullObjectListShapesTest d
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "[Post!]! generates embeds_many" do
@@ -102,7 +102,7 @@ defmodule TypedGql.Integration.QueryWithNullableAndNonNullObjectListShapesTest d
     Req.Test.expect(Client, fn conn -> Req.Test.json(conn, %{"data" => data}) end)
 
     assert {:ok, %Result{} = result} =
-             Client.post_board(%{id: "u1"}, req_options: [plug: {Req.Test, Client}])
+             Client.post_board(%{id: "u1"})
 
     result
   end

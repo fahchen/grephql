@@ -4,15 +4,18 @@ defmodule TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTes
   # parsed schema per source path, so per-file clients parse it only once
   # per compile). Theme here: a real mutation whose CreateIssueInput input
   # object exercises snake_case field generation and camelCase dumping.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/github.json",
       endpoint: "https://api.github.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTest.Client}
+      ],
       scalars: %{
         # GitHub-specific scalars not covered by builtins
         "GitObjectID" => :string,
@@ -42,8 +45,6 @@ defmodule TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTes
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "Variables embeds the generated CreateIssueInput module" do
@@ -162,6 +163,6 @@ defmodule TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTes
   end
 
   defp call(variables) do
-    Client.create_issue(variables, req_options: [plug: {Req.Test, Client}])
+    Client.create_issue(variables)
   end
 end

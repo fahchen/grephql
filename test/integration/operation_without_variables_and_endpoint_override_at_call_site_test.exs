@@ -3,15 +3,18 @@ defmodule TypedGql.Integration.OperationWithoutVariablesAndEndpointOverrideAtCal
   # test. Theme here: common call-site behaviors — a no-variable operation
   # generates an opts-only function, and the endpoint can be overridden per
   # call. The document goes through the ~GQL sigil to exercise that path.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.OperationWithoutVariablesAndEndpointOverrideAtCallSiteTest.Client}
+      ]
 
     defgql(:list_users, ~GQL"""
     query ListUsers {
@@ -23,8 +26,6 @@ defmodule TypedGql.Integration.OperationWithoutVariablesAndEndpointOverrideAtCal
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "a no-variable operation exports an opts-only function, not a variables arity" do
@@ -98,6 +99,6 @@ defmodule TypedGql.Integration.OperationWithoutVariablesAndEndpointOverrideAtCal
   end
 
   defp call(extra_opts \\ []) do
-    Client.list_users([req_options: [plug: {Req.Test, Client}]] ++ extra_opts)
+    Client.list_users(extra_opts)
   end
 end

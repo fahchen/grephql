@@ -2,7 +2,7 @@ defmodule TypedGql.Integration.MutationVariablesFailingChangesetValidationBefore
   # Integration suite: one document per file, one observable behavior per
   # test. Theme here: invalid mutation variables never reach the wire — they
   # fail as an Ecto.Changeset error before any HTTP request is made.
-  use ExUnit.Case, async: true
+  use TypedGql.IntegrationCase, async: true
 
   import TypedGql.Test.Helpers, only: [errors_on: 2]
 
@@ -10,7 +10,12 @@ defmodule TypedGql.Integration.MutationVariablesFailingChangesetValidationBefore
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.MutationVariablesFailingChangesetValidationBeforeAnyRequestTest.Client}
+      ]
 
     defgql(:create_user, """
     mutation CreateUser($input: CreateUserInput!) {
@@ -25,7 +30,6 @@ defmodule TypedGql.Integration.MutationVariablesFailingChangesetValidationBefore
   # No Req.Test.expect is registered anywhere in this file: verify_on_exit!
   # with zero expectations proves that none of the calls below ever issued an
   # HTTP request.
-  setup {Req.Test, :verify_on_exit!}
 
   describe "changeset validation" do
     test "missing required nested fields fail with can't be blank before any request" do
@@ -45,6 +49,6 @@ defmodule TypedGql.Integration.MutationVariablesFailingChangesetValidationBefore
   end
 
   defp call(variables) do
-    Client.create_user(variables, req_options: [plug: {Req.Test, Client}])
+    Client.create_user(variables)
   end
 end

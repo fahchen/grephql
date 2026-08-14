@@ -3,15 +3,18 @@ defmodule TypedGql.Integration.RegisteredFragmentsViaDeffragmentReusedAcrossOper
   # test. Theme here: the deffragment workflow — fragments registered once on
   # the client (one spreading the other) and reused from two operations, so
   # each printed document carries exactly the fragments it needs.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.RegisteredFragmentsViaDeffragmentReusedAcrossOperationsTest.Client}
+      ]
 
     deffragment("fragment UserCore on User { id name role }")
 
@@ -34,8 +37,6 @@ defmodule TypedGql.Integration.RegisteredFragmentsViaDeffragmentReusedAcrossOper
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "each operation generates its own Result module" do
@@ -154,10 +155,10 @@ defmodule TypedGql.Integration.RegisteredFragmentsViaDeffragmentReusedAcrossOper
   end
 
   defp call_get_user do
-    Client.get_user(%{id: "u1"}, req_options: [plug: {Req.Test, Client}])
+    Client.get_user(%{id: "u1"})
   end
 
   defp call_list_drafts do
-    Client.list_drafts(req_options: [plug: {Req.Test, Client}])
+    Client.list_drafts()
   end
 end

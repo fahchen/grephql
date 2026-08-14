@@ -4,15 +4,18 @@ defmodule TypedGql.Integration.QueryMergingDuplicateSelectionsAcrossFragmentsAnd
   # key selected from several places (direct fields, named fragments, a
   # repeated root field with inline fragments) collapses into one merged
   # selection in the generated shape and decodes as the merged whole.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.QueryMergingDuplicateSelectionsAcrossFragmentsAndFieldsTest.Client}
+      ]
 
     defgql(:merged_profile, """
     query MergedProfile($id: ID!) {
@@ -35,8 +38,6 @@ defmodule TypedGql.Integration.QueryMergingDuplicateSelectionsAcrossFragmentsAnd
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "the posts module unions the fields of the direct selection and the fragment" do
@@ -171,11 +172,11 @@ defmodule TypedGql.Integration.QueryMergingDuplicateSelectionsAcrossFragmentsAnd
   end
 
   defp call(:merged_profile) do
-    Client.merged_profile(%{id: "u1"}, req_options: [plug: {Req.Test, Client}])
+    Client.merged_profile(%{id: "u1"})
   end
 
   defp call(:merged_search) do
-    Client.merged_search(%{term: "elixir"}, req_options: [plug: {Req.Test, Client}])
+    Client.merged_search(%{term: "elixir"})
   end
 
   defp count(string, substring) do

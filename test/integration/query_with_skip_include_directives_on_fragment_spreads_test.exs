@@ -6,15 +6,18 @@ defmodule TypedGql.Integration.QueryWithSkipIncludeDirectivesOnFragmentSpreadsTe
   # compiled inside a test file (mix test disables debug_info at runtime),
   # so shape tests pin the flattened struct and decode tests pin the
   # nil-when-skipped behavior.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.QueryWithSkipIncludeDirectivesOnFragmentSpreadsTest.Client}
+      ]
 
     defgql(:conditional_spreads, """
     query ConditionalSpreads($id: ID!, $withDetails: Boolean!, $skipProfile: Boolean!) {
@@ -29,8 +32,6 @@ defmodule TypedGql.Integration.QueryWithSkipIncludeDirectivesOnFragmentSpreadsTe
     fragment Details on User { email role }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "fields reached only through the conditional spread and inline fragment flatten into the User struct" do
@@ -122,9 +123,6 @@ defmodule TypedGql.Integration.QueryWithSkipIncludeDirectivesOnFragmentSpreadsTe
   end
 
   defp call do
-    Client.conditional_spreads(
-      %{id: "u1", with_details: true, skip_profile: false},
-      req_options: [plug: {Req.Test, Client}]
-    )
+    Client.conditional_spreads(%{id: "u1", with_details: true, skip_profile: false})
   end
 end

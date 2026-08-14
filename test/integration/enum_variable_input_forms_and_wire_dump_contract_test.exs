@@ -3,17 +3,19 @@ defmodule TypedGql.Integration.EnumVariableInputFormsAndWireDumpContractTest do
   # test. Theme here: which input forms an enum variable accepts (wire
   # string, atom, lowercase string) and the exact string that reaches the
   # wire, plus the rejection of values outside the enum.
-  use ExUnit.Case, async: true
+  use TypedGql.IntegrationCase, async: true
 
   import TypedGql.Test.Helpers, only: [errors_on: 2]
-
-  alias TypedGql.Result
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test, TypedGql.Integration.EnumVariableInputFormsAndWireDumpContractTest.Client}
+      ]
 
     defgql(:update_user, """
     mutation UpdateRole($id: ID!, $input: UpdateUserInput!) {
@@ -21,8 +23,6 @@ defmodule TypedGql.Integration.EnumVariableInputFormsAndWireDumpContractTest do
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "dumped request" do
     test ~s(the wire string "ADMIN" dumps unchanged as "ADMIN") do
@@ -94,9 +94,6 @@ defmodule TypedGql.Integration.EnumVariableInputFormsAndWireDumpContractTest do
   end
 
   defp call(role) do
-    Client.update_user(
-      %{id: "u1", input: %{role: role}},
-      req_options: [plug: {Req.Test, Client}]
-    )
+    Client.update_user(%{id: "u1", input: %{role: role}})
   end
 end

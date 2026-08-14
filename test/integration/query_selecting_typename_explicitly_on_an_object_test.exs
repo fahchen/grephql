@@ -4,15 +4,17 @@ defmodule TypedGql.Integration.QuerySelectingTypenameExplicitlyOnAnObjectTest do
   # object, and on a union whose selection already gets __typename injected
   # automatically. Pins that __typename decodes to a downcased atom, not
   # the raw string the server sent.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test, TypedGql.Integration.QuerySelectingTypenameExplicitlyOnAnObjectTest.Client}
+      ]
 
     defgql(:tagged_user, """
     query TaggedUser($id: ID!, $term: String!) {
@@ -32,8 +34,6 @@ defmodule TypedGql.Integration.QuerySelectingTypenameExplicitlyOnAnObjectTest do
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "an explicit __typename becomes a struct field of the Typename type" do
@@ -106,9 +106,6 @@ defmodule TypedGql.Integration.QuerySelectingTypenameExplicitlyOnAnObjectTest do
   end
 
   defp call do
-    Client.tagged_user(
-      %{id: "u1", term: "elixir"},
-      req_options: [plug: {Req.Test, Client}]
-    )
+    Client.tagged_user(%{id: "u1", term: "elixir"})
   end
 end

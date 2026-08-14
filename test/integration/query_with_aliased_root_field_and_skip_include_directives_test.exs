@@ -3,15 +3,18 @@ defmodule TypedGql.Integration.QueryWithAliasedRootFieldAndSkipIncludeDirectives
   # test. Theme here: an aliased root field combined with @include/@skip on
   # scalar fields, checked across generated shape, dumped request, and
   # loaded response.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.QueryWithAliasedRootFieldAndSkipIncludeDirectivesTest.Client}
+      ]
 
     defgql(:owner_profile, """
     query OwnerProfile($id: ID!, $withEmail: Boolean!, $skipBio: Boolean!) {
@@ -29,8 +32,6 @@ defmodule TypedGql.Integration.QueryWithAliasedRootFieldAndSkipIncludeDirectives
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "the aliased root field names the struct field and module after the alias" do
@@ -127,9 +128,6 @@ defmodule TypedGql.Integration.QueryWithAliasedRootFieldAndSkipIncludeDirectives
   end
 
   defp call do
-    Client.owner_profile(
-      %{id: "u1", with_email: true, skip_bio: true},
-      req_options: [plug: {Req.Test, Client}]
-    )
+    Client.owner_profile(%{id: "u1", with_email: true, skip_bio: true})
   end
 end

@@ -3,15 +3,18 @@ defmodule TypedGql.Integration.QueryInterpolatingFragmentStringsViaModuleAttribu
   # test. Theme here: the string-interpolation reuse path — documents built
   # from module attributes, one splicing a plain field list and one splicing
   # a whole fragment definition into the document source.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.QueryInterpolatingFragmentStringsViaModuleAttributesTest.Client}
+      ]
 
     @user_fields "id name role"
     @core_fragment """
@@ -36,8 +39,6 @@ defmodule TypedGql.Integration.QueryInterpolatingFragmentStringsViaModuleAttribu
     #{@core_fragment}
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "the interpolated field list becomes exactly those fields on the Result struct" do
@@ -129,10 +130,10 @@ defmodule TypedGql.Integration.QueryInterpolatingFragmentStringsViaModuleAttribu
   end
 
   defp call_field_list_user do
-    Client.field_list_user(%{id: "u1"}, req_options: [plug: {Req.Test, Client}])
+    Client.field_list_user(%{id: "u1"})
   end
 
   defp call_fragment_user do
-    Client.fragment_user(%{id: "u1"}, req_options: [plug: {Req.Test, Client}])
+    Client.fragment_user(%{id: "u1"})
   end
 end

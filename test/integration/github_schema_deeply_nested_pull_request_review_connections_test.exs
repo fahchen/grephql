@@ -5,15 +5,18 @@ defmodule TypedGql.Integration.GithubSchemaDeeplyNestedPullRequestReviewConnecti
   # statusCheckRollup — with the nullable chains GitHub really returns at
   # every level (null rollup before checks run, null review author for a
   # deleted account, empty review connections).
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/github.json",
       endpoint: "https://api.github.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.GithubSchemaDeeplyNestedPullRequestReviewConnectionsTest.Client}
+      ],
       scalars: %{
         # GitHub-specific scalars not covered by builtins
         "GitObjectID" => :string,
@@ -62,8 +65,6 @@ defmodule TypedGql.Integration.GithubSchemaDeeplyNestedPullRequestReviewConnecti
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "module nesting mirrors the document down to the commit rollup" do
@@ -257,9 +258,6 @@ defmodule TypedGql.Integration.GithubSchemaDeeplyNestedPullRequestReviewConnecti
   end
 
   defp call do
-    Client.pull_request_board(
-      %{owner: "elixir-lang", name: "elixir"},
-      req_options: [plug: {Req.Test, Client}]
-    )
+    Client.pull_request_board(%{owner: "elixir-lang", name: "elixir"})
   end
 end

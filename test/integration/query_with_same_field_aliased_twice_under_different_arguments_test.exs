@@ -3,15 +3,18 @@ defmodule TypedGql.Integration.QueryWithSameFieldAliasedTwiceUnderDifferentArgum
   # test. Theme here: the everyday pattern of selecting the same root field
   # twice under different aliases with different arguments — two response
   # keys, two independent selections, no merging between them.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.QueryWithSameFieldAliasedTwiceUnderDifferentArgumentsTest.Client}
+      ]
 
     defgql(:pair_of_users, """
     query PairOfUsers($first: ID!, $second: ID!) {
@@ -27,8 +30,6 @@ defmodule TypedGql.Integration.QueryWithSameFieldAliasedTwiceUnderDifferentArgum
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "generated shape" do
     test "each alias gets its own module with only its own selection" do
@@ -92,9 +93,6 @@ defmodule TypedGql.Integration.QueryWithSameFieldAliasedTwiceUnderDifferentArgum
   end
 
   defp call do
-    Client.pair_of_users(
-      %{first: "u1", second: "u2"},
-      req_options: [plug: {Req.Test, Client}]
-    )
+    Client.pair_of_users(%{first: "u1", second: "u2"})
   end
 end

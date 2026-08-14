@@ -1,15 +1,14 @@
 defmodule TypedGql.IntegrationTest do
-  use ExUnit.Case, async: true
+  use TypedGql.IntegrationCase, async: true
 
   import TypedGql.Test.Helpers, only: [errors_on: 2]
-
-  alias TypedGql.Result
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [plug: {Req.Test, TypedGql.IntegrationTest.Client}]
 
     deffragment """
     fragment UserCore on User {
@@ -149,8 +148,6 @@ defmodule TypedGql.IntegrationTest do
     """)
   end
 
-  setup {Req.Test, :verify_on_exit!}
-
   describe "enum fields" do
     test "decodes enum values in response" do
       expect_json(%{
@@ -167,7 +164,7 @@ defmodule TypedGql.IntegrationTest do
         }
       })
 
-      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       assert result.data.user.role == :admin
     end
@@ -183,7 +180,7 @@ defmodule TypedGql.IntegrationTest do
         }
       })
 
-      assert {:ok, %Result{} = result} = Client.list_users(req_options: req_options())
+      assert {:ok, %Result{} = result} = Client.list_users()
 
       roles = Enum.map(result.data.users, & &1.role)
       assert roles == [:admin, :user, :guest]
@@ -206,7 +203,7 @@ defmodule TypedGql.IntegrationTest do
         }
       })
 
-      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       assert result.data.user.created_at == ~U[2025-06-15 14:30:00Z]
     end
@@ -234,7 +231,7 @@ defmodule TypedGql.IntegrationTest do
         }
       })
 
-      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       post = hd(result.data.user.posts)
       assert post.published_at == nil
@@ -260,7 +257,7 @@ defmodule TypedGql.IntegrationTest do
         }
       })
 
-      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       assert %{bio: "Hello world", avatar_url: "https://example.com/avatar.png"} =
                result.data.user.profile
@@ -281,7 +278,7 @@ defmodule TypedGql.IntegrationTest do
         }
       })
 
-      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       assert result.data.user.profile == nil
     end
@@ -313,9 +310,7 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.get_user_optional_email(%{id: "1", show_email: false},
-                 req_options: req_options()
-               )
+               Client.get_user_optional_email(%{id: "1", show_email: false})
 
       assert result.data.user.name == "Alice"
       assert result.data.user.email == nil
@@ -345,9 +340,7 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.get_user_optional_email(%{id: "1", show_email: true},
-                 req_options: req_options()
-               )
+               Client.get_user_optional_email(%{id: "1", show_email: true})
 
       assert result.data.user.email == "alice@example.com"
     end
@@ -376,9 +369,7 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.get_user_optional_id(%{user_id: "1", show_id: false},
-                 req_options: req_options()
-               )
+               Client.get_user_optional_id(%{user_id: "1", show_id: false})
 
       assert result.data.user.name == "Alice"
       assert result.data.user.id == nil
@@ -416,7 +407,7 @@ defmodule TypedGql.IntegrationTest do
         }
       })
 
-      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       assert [
                %{
@@ -452,7 +443,7 @@ defmodule TypedGql.IntegrationTest do
         }
       })
 
-      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       assert hd(result.data.user.posts).tags == ["a", "b", "c"]
     end
@@ -470,7 +461,7 @@ defmodule TypedGql.IntegrationTest do
       })
 
       assert {:ok, %Result{} = result} =
-               Client.search(%{query: "hello"}, req_options: req_options())
+               Client.search(%{query: "hello"})
 
       assert [
                %Client.Search.Result.Search.User{name: "Alice", role: :admin},
@@ -491,7 +482,7 @@ defmodule TypedGql.IntegrationTest do
       })
 
       assert {:ok, %Result{} = result} =
-               Client.get_nodes(%{ids: ["1", "10"]}, req_options: req_options())
+               Client.get_nodes(%{ids: ["1", "10"]})
 
       assert [
                %Client.GetNodes.Result.Nodes.User{id: "1", name: "Alice"},
@@ -529,10 +520,7 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.create_user(
-                 %{input: %{name: "New User", email: "new@example.com"}},
-                 req_options: req_options()
-               )
+               Client.create_user(%{input: %{name: "New User", email: "new@example.com"}})
 
       assert %{id: "42", name: "New User", role: :user, created_at: ~U[2025-06-15 12:00:00Z]} =
                result.data.create_user
@@ -569,17 +557,14 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{}} =
-               Client.create_user(
-                 %{
-                   input: %{
-                     name: "Alice",
-                     email: "alice@example.com",
-                     role: "ADMIN",
-                     profile: %{bio: "Hello", avatar_url: "https://img.example.com/a.png"}
-                   }
-                 },
-                 req_options: req_options()
-               )
+               Client.create_user(%{
+                 input: %{
+                   name: "Alice",
+                   email: "alice@example.com",
+                   role: "ADMIN",
+                   profile: %{bio: "Hello", avatar_url: "https://img.example.com/a.png"}
+                 }
+               })
     end
 
     test "mutation with multiple variables" do
@@ -603,17 +588,14 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.update_user(
-                 %{id: "1", input: %{name: "Updated", role: "ADMIN"}},
-                 req_options: req_options()
-               )
+               Client.update_user(%{id: "1", input: %{name: "Updated", role: "ADMIN"}})
 
       assert %{name: "Updated", role: :admin} = result.data.update_user
     end
 
     test "mutation with invalid variables returns changeset error" do
       assert {:error, %Ecto.Changeset{}} =
-               Client.create_user(%{input: %{}}, req_options: req_options())
+               Client.create_user(%{input: %{}})
     end
 
     test "multiple mutations sharing same input type" do
@@ -622,10 +604,7 @@ defmodule TypedGql.IntegrationTest do
       })
 
       assert {:ok, %Result{} = result} =
-               Client.create_user_minimal(
-                 %{input: %{name: "Shared", email: "s@e.com"}},
-                 req_options: req_options()
-               )
+               Client.create_user_minimal(%{input: %{name: "Shared", email: "s@e.com"}})
 
       assert %{id: "50", name: "Shared"} = result.data.create_user
 
@@ -666,7 +645,7 @@ defmodule TypedGql.IntegrationTest do
         )
       end)
 
-      assert {:ok, %Result{}} = Client.get_user(%{id: "42"}, req_options: req_options())
+      assert {:ok, %Result{}} = Client.get_user(%{id: "42"})
     end
 
     test "list variable serialized correctly" do
@@ -692,7 +671,7 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{}} =
-               Client.get_nodes(%{ids: ["1", "2", "3"]}, req_options: req_options())
+               Client.get_nodes(%{ids: ["1", "2", "3"]})
     end
   end
 
@@ -775,7 +754,7 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.search_with_fragments(%{query: "alice"}, req_options: req_options())
+               Client.search_with_fragments(%{query: "alice"})
 
       [alice, post, carol] = result.data.search
 
@@ -875,22 +854,19 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.create_post(
-                 %{
-                   input: %{
-                     title: "Deep Nesting Test",
-                     body: "Testing deeply nested inputs and responses.",
-                     status: "DRAFT",
-                     tags: ["test", "integration"],
-                     metadata: %{
-                       slug: "deep-nesting-test",
-                       seo_title: "Deep Nesting | Test",
-                       publish_at: "2025-12-25T00:00:00Z"
-                     }
+               Client.create_post(%{
+                 input: %{
+                   title: "Deep Nesting Test",
+                   body: "Testing deeply nested inputs and responses.",
+                   status: "DRAFT",
+                   tags: ["test", "integration"],
+                   metadata: %{
+                     slug: "deep-nesting-test",
+                     seo_title: "Deep Nesting | Test",
+                     publish_at: "2025-12-25T00:00:00Z"
                    }
-                 },
-                 req_options: req_options()
-               )
+                 }
+               })
 
       assert %{
                id: "100",
@@ -961,7 +937,7 @@ defmodule TypedGql.IntegrationTest do
         )
       end)
 
-      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       # Partial data is decoded
       assert %{
@@ -1038,7 +1014,7 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.search_with_fragments(%{query: "edge"}, req_options: req_options())
+               Client.search_with_fragments(%{query: "edge"})
 
       [user, post] = result.data.search
 
@@ -1083,7 +1059,7 @@ defmodule TypedGql.IntegrationTest do
         )
       end)
 
-      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"}, req_options: req_options())
+      assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       assert result.data == nil
 
@@ -1106,14 +1082,16 @@ defmodule TypedGql.IntegrationTest do
         end)
 
         assert {:error, %Req.Response{status: ^status}} =
-                 Client.get_user(%{id: "1"}, req_options: req_options())
+                 Client.get_user(%{id: "1"})
       end
     end
 
     test "transport error on query returns error tuple" do
+      # plug: nil clears the compile-time Req.Test plug so the adapter runs
       assert {:error, %Req.TransportError{reason: :timeout}} =
                Client.get_user(%{id: "1"},
                  req_options: [
+                   plug: nil,
                    retry: false,
                    adapter: fn req -> {req, %Req.TransportError{reason: :timeout}} end
                  ]
@@ -1126,7 +1104,7 @@ defmodule TypedGql.IntegrationTest do
       # CreateUserInput requires name and email; profile is optional but if
       # given, ProfileInput fields are all optional scalars — so this should pass
       assert {:error, %Ecto.Changeset{} = changeset} =
-               Client.create_user(%{input: %{}}, req_options: req_options())
+               Client.create_user(%{input: %{}})
 
       input_changeset = changeset.changes.input
       assert "can't be blank" in errors_on(input_changeset, :name)
@@ -1160,10 +1138,7 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.create_user(
-                 %{input: %{name: "Minimal", email: "min@example.com"}},
-                 req_options: req_options()
-               )
+               Client.create_user(%{input: %{name: "Minimal", email: "min@example.com"}})
 
       assert %{name: "Minimal", role: :user} = result.data.create_user
     end
@@ -1219,21 +1194,18 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.create_post(
-                 %{
-                   input: %{
-                     title: "Edge Post",
-                     status: "PUBLISHED",
-                     tags: ["a", "b", "c"],
-                     metadata: %{
-                       slug: "edge-post",
-                       seo_title: "Edge",
-                       publish_at: "2025-12-31T23:59:59Z"
-                     }
+               Client.create_post(%{
+                 input: %{
+                   title: "Edge Post",
+                   status: "PUBLISHED",
+                   tags: ["a", "b", "c"],
+                   metadata: %{
+                     slug: "edge-post",
+                     seo_title: "Edge",
+                     publish_at: "2025-12-31T23:59:59Z"
                    }
-                 },
-                 req_options: req_options()
-               )
+                 }
+               })
 
       assert %{
                id: "200",
@@ -1285,10 +1257,7 @@ defmodule TypedGql.IntegrationTest do
       end)
 
       assert {:ok, %Result{} = result} =
-               Client.create_post(
-                 %{input: %{title: "Bare", tags: []}},
-                 req_options: req_options()
-               )
+               Client.create_post(%{input: %{title: "Bare", tags: []}})
 
       assert %{
                id: "201",
@@ -1302,8 +1271,6 @@ defmodule TypedGql.IntegrationTest do
       assert result.errors == []
     end
   end
-
-  defp req_options, do: [plug: {Req.Test, Client}]
 
   defp expect_json(body), do: expect_json(200, body)
 

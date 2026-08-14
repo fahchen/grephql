@@ -3,13 +3,18 @@ defmodule TypedGql.Integration.TransportHttpStatusAndMalformedBodyErrorTuplesTes
   # test. Theme here: everything below the GraphQL layer — HTTP status
   # failures, transport failures, and undecodable bodies — surfaces as
   # {:error, _} tuples rather than raising or masquerading as results.
-  use ExUnit.Case, async: true
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
-      endpoint: "https://api.example.com/graphql"
+      endpoint: "https://api.example.com/graphql",
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.TransportHttpStatusAndMalformedBodyErrorTuplesTest.Client}
+      ]
 
     defgql(:get_user, """
     query GetUser($id: ID!) {
@@ -20,8 +25,6 @@ defmodule TypedGql.Integration.TransportHttpStatusAndMalformedBodyErrorTuplesTes
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "transport and HTTP errors" do
     test "every non-2xx status returns the response struct as an error tuple" do
@@ -37,13 +40,12 @@ defmodule TypedGql.Integration.TransportHttpStatusAndMalformedBodyErrorTuplesTes
     end
 
     test "a transport error returns the exception from the adapter" do
+      # plug: nil clears the compile-time Req.Test plug so the adapter runs
       assert {:error, %Req.TransportError{reason: :timeout}} =
-               Client.get_user(
-                 %{id: "u1"},
-                 req_options: [
-                   retry: false,
-                   adapter: fn req -> {req, %Req.TransportError{reason: :timeout}} end
-                 ]
+               call(
+                 plug: nil,
+                 retry: false,
+                 adapter: fn req -> {req, %Req.TransportError{reason: :timeout}} end
                )
     end
 
@@ -71,9 +73,6 @@ defmodule TypedGql.Integration.TransportHttpStatusAndMalformedBodyErrorTuplesTes
   end
 
   defp call(extra_req_options \\ []) do
-    Client.get_user(
-      %{id: "u1"},
-      req_options: [plug: {Req.Test, Client}] ++ extra_req_options
-    )
+    Client.get_user(%{id: "u1"}, req_options: extra_req_options)
   end
 end

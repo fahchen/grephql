@@ -3,16 +3,19 @@ defmodule TypedGql.Integration.ClientCompileTimeReqOptionsOverriddenAtCallSiteTe
   # test. Theme here: compile-time config layering without touching the
   # runtime Application env — the use options (endpoint + req_options) act
   # as defaults, and call-site opts override them per request.
-  use ExUnit.Case, async: true
-
-  alias TypedGql.Result
+  use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
     use TypedGql,
       otp_app: :typed_gql,
       source: "../support/schemas/integration.json",
       endpoint: "https://compile.example.com/graphql",
-      req_options: [headers: [{"x-config-layer", "compile-time"}]]
+      req_options: [
+        plug:
+          {Req.Test,
+           TypedGql.Integration.ClientCompileTimeReqOptionsOverriddenAtCallSiteTest.Client},
+        headers: [{"x-config-layer", "compile-time"}]
+      ]
 
     defgql(:get_user, """
     query GetUser($id: ID!) {
@@ -23,8 +26,6 @@ defmodule TypedGql.Integration.ClientCompileTimeReqOptionsOverriddenAtCallSiteTe
     }
     """)
   end
-
-  setup {Req.Test, :verify_on_exit!}
 
   describe "config precedence" do
     test "compile-time endpoint and req_options are the request defaults" do
@@ -70,9 +71,6 @@ defmodule TypedGql.Integration.ClientCompileTimeReqOptionsOverriddenAtCallSiteTe
   end
 
   defp call(opts) do
-    {extra_req_options, other_opts} = Keyword.pop(opts, :req_options, [])
-    req_options = [plug: {Req.Test, Client}] ++ extra_req_options
-
-    Client.get_user(%{id: "u1"}, [req_options: req_options] ++ other_opts)
+    Client.get_user(%{id: "u1"}, opts)
   end
 end
