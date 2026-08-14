@@ -46,8 +46,9 @@ the Ecto type keeps none of the per-level nullability.
   the information the change restores.
 - Decoding stays `Ecto.embedded_load/3` only, so `Ecto.Embedded.cast/2` (which
   rejects a list under `cardinality: :one`) is never on the decode path.
-- A `[T!]!` field carrying `@skip`/`@include` still decodes to `[]` rather than
-  `nil` when omitted, because `embeds_many` pins `default: []`.
+- A `[T!]!` field carrying `@skip`/`@include` is a plain field too: `embeds_many`
+  pins `default: []`, which would report a list the response never carried as an
+  empty one. Only an unconditional `[T!]!` keeps `embeds_many`.
 
 ## Rejected Alternatives
 

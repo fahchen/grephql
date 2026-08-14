@@ -42,9 +42,9 @@ defmodule TypedGql.TypeGenerator do
   as `[[T]]` — becomes a plain field over the parameterized `Ecto.Embedded`
   type with `cardinality: :one`, which loads `nil` as `nil` at every level.
 
-  The one shape that still cannot be represented: a `[T!]!` field carrying
-  `@skip`/`@include` decodes to `[]` rather than `nil` when the server omits
-  it, because `embeds_many` pins `default: []`.
+  A `[T!]!` carrying `@skip`/`@include` is a plain field too: the response can
+  omit it entirely, and `embeds_many` pins `default: []`, which would report a
+  list the server never sent as an empty one.
 
   ## Union/Interface support
 
@@ -655,7 +655,7 @@ defmodule TypedGql.TypeGenerator do
   # `Ecto.Embedded` with `cardinality: :one`, which loads nil as nil at every
   # level and so nests to any depth.
   defp resolve_object_embed(%GenField{} = base, depth, object_module) do
-    if depth == 1 and faithful_many?(base.resolved) do
+    if depth == 1 and faithful_many?(base) do
       %{base | kind: :embeds_many, embed_module: object_module}
     else
       %{
@@ -666,8 +666,13 @@ defmodule TypedGql.TypeGenerator do
     end
   end
 
-  defp faithful_many?(%{nullable: false, inner_nullable: false}), do: true
-  defp faithful_many?(_resolved), do: false
+  # A conditionally selected list can be absent from the response, and
+  # embeds_many decodes an absent list as [] — "zero elements" where the truth is
+  # "not requested" — so it is not faithful either, whatever the schema says.
+  defp faithful_many?(%GenField{resolved: %{nullable: false, inner_nullable: false}} = field),
+    do: not SkipInclude.conditional?(field.query_field.directives)
+
+  defp faithful_many?(_field), do: false
 
   # A variant per possible type of the abstract parent, not per inline fragment:
   # the server may return any member, including one no fragment selected, and it

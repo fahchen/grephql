@@ -67,7 +67,8 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.EqualArgs.Search.Result,
               TypedGql.Test.EqualObjectArgs.Search.Result,
               TypedGql.Test.NullableListNonNull.GetUser.Result.User,
-              TypedGql.Test.NonNullMatrix.GetUser.Result.User
+              TypedGql.Test.NonNullMatrix.GetUser.Result.User,
+              TypedGql.Test.ConditionalMany.Q.Result.User
             ]}
 
   alias TypedGql.Schema.Field, as: SchemaField
@@ -317,6 +318,28 @@ defmodule TypedGql.TypeGeneratorTest do
                  %{"name" => "Alice", "postGrid" => [[%{"title" => "a"}]]},
                  :json
                )
+    end
+
+    # embeds_many decodes an absent list as [], which would read as "zero posts"
+    # when @include(if:) removed the field entirely.
+    test "a conditionally selected [T!]! list decodes an absent list as nil" do
+      types = types_with_non_null_list_posts()
+      schema = SchemaHelper.build_schema(types: types)
+
+      operation =
+        parse!(
+          ~s|query Q($show: Boolean!) { user(id: "1") { name posts @include(if: $show) { title } } }|
+        )
+
+      TypeGenerator.generate(operation, schema,
+        client_module: TypedGql.Test.ConditionalMany,
+        function_name: :q
+      )
+
+      module = TypedGql.Test.ConditionalMany.Q.Result.User
+      refute :posts in module.__schema__(:embeds)
+
+      assert %{posts: nil} = Ecto.embedded_load(module, %{"name" => "Alice"}, :json)
     end
 
     test "a nullable object list decodes null and null elements as nil" do
