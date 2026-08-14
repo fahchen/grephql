@@ -12,6 +12,7 @@ defmodule TypedGql.Lexer do
   @unicode_bom 0xFEFF
 
   @stopped_at_token_limit ":stopped_at_token_limit"
+  @unsupported_escape ":unsupported_escape"
 
   # SourceCharacter :: /[\u0009\u000A\u000D\u0020-\uFFFF]/
 
@@ -236,14 +237,18 @@ defmodule TypedGql.Lexer do
           {:ok, [any()]}
           | {:error, binary(), {integer(), non_neg_integer()}}
           | {:error, :exceeded_token_limit}
+          | {:error, :unsupported_escape}
   def tokenize(input, options \\ []) do
     lines = String.split(input, ~r/\r?\n/)
 
     tokenize_opts = [context: %{token_limit: Keyword.get(options, :token_limit, :infinity)}]
 
     case do_tokenize(input, tokenize_opts) do
-      {:error, @stopped_at_token_limit, _, _, _, _} ->
+      {:error, @stopped_at_token_limit, _rest, _context, _loc, _offset} ->
         {:error, :exceeded_token_limit}
+
+      {:error, @unsupported_escape, _rest, _context, _loc, _offset} ->
+        {:error, :unsupported_escape}
 
       {:ok, tokens, "", _, _, _} ->
         tokens = convert_token_columns_from_byte_to_char(tokens, lines)
@@ -368,11 +373,19 @@ defmodule TypedGql.Lexer do
   defp fill_mantissa(rest, raw, context, _, _), do: {rest, ~c"0." ++ raw, context}
 
   defp unescape_unicode(rest, content, context, _loc, _) do
-    code = content |> Enum.reverse()
-    value = :erlang.list_to_integer(code, 16)
-    binary = :unicode.characters_to_binary([value])
-    {rest, [binary], context}
+    value = content |> Enum.reverse() |> :erlang.list_to_integer(16)
+    decode_unicode(rest, value, context)
   end
+
+  # A codepoint above the BMP is written as a surrogate pair, and each escape is
+  # decoded on its own here — combining them would need state carried across the
+  # `choice/1` this sits in. Decoding half a pair raises, so report it as a lex
+  # error rather than let ArgumentError escape parse/1. See BDR-0008.
+  defp decode_unicode(_rest, value, _context) when value in 0xD800..0xDFFF do
+    {:error, @unsupported_escape}
+  end
+
+  defp decode_unicode(rest, value, context), do: {rest, [<<value::utf8>>], context}
 
   @boolean_words ~w(
     true

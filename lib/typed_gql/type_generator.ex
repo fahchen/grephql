@@ -405,42 +405,90 @@ defmodule TypedGql.TypeGenerator do
   # { id }` where a member implements both — and a struct cannot declare it
   # twice. GraphQL treats them as one selection, so merge by response key,
   # keeping first-seen order.
+  #
+  # Every copy of a key is merged in one pass rather than folded pairwise: a
+  # fold would feed the already-aggregated directives of the running result back
+  # in, and a third copy would then re-prepend them to children that already
+  # carry their own.
   defp merge_fields(fields) do
+    fields
+    |> group_by_response_key()
+    |> Enum.map(fn
+      {_key, [single]} -> single
+      {_key, copies} -> merge_copies(copies)
+    end)
+  end
+
+  defp group_by_response_key(fields) do
     {order, by_key} =
       Enum.reduce(fields, {[], %{}}, fn field, {order, by_key} ->
         key = field_name(field)
+        seen? = Map.has_key?(by_key, key)
 
-        case Map.fetch(by_key, key) do
-          {:ok, existing} -> {order, Map.put(by_key, key, merge_field(existing, field))}
-          :error -> {[key | order], Map.put(by_key, key, field)}
-        end
+        {if(seen?, do: order, else: [key | order]),
+         Map.update(by_key, key, [field], &[field | &1])}
       end)
 
-    order |> :lists.reverse() |> Enum.map(&Map.fetch!(by_key, &1))
+    order
+    |> :lists.reverse()
+    |> Enum.map(&{&1, by_key |> Map.fetch!(&1) |> :lists.reverse()})
   end
 
-  defp merge_field(%QueryField{name: name} = existing, %QueryField{name: name} = field) do
-    if not same_arguments?(existing.arguments, field.arguments) do
-      raise CompileError,
-        description:
-          "conflicting selections for \"#{field_name(field)}\": " <>
-            "the same response key is selected with different arguments"
-    end
+  defp merge_copies([first | rest] = copies) do
+    Enum.each(rest, &check_mergeable!(first, &1))
 
     %{
-      existing
-      | directives: merge_directives(existing.directives, field.directives),
-        selection_set: merge_selection_sets(existing, field)
+      first
+      | directives: merged_directives(copies),
+        selection_set: merged_selection_set(copies)
     }
+  end
+
+  defp check_mergeable!(%QueryField{name: name} = first, %QueryField{name: name} = copy) do
+    if not same_arguments?(first.arguments, copy.arguments) do
+      raise CompileError,
+        description:
+          "conflicting selections for \"#{field_name(copy)}\": " <>
+            "the same response key is selected with different arguments"
+    end
   end
 
   # Same response key, different underlying field: the GraphQL spec forbids it
   # (FieldsInSetCanMerge) because a single response key cannot hold both.
-  defp merge_field(existing, field) do
+  defp check_mergeable!(first, copy) do
     raise CompileError,
       description:
-        "conflicting selections for \"#{field_name(field)}\": " <>
-          "it names both \"#{existing.name}\" and \"#{field.name}\""
+        "conflicting selections for \"#{field_name(copy)}\": " <>
+          "it names both \"#{first.name}\" and \"#{copy.name}\""
+  end
+
+  # Selected unconditionally anywhere means always present, so one copy that
+  # cannot be removed clears every other's @skip/@include.
+  #
+  # Deliberately not proven further: complementary conditions such as
+  # `id @include(if: $x)` and `id @skip(if: $x)` also guarantee the field, but
+  # deciding that in general means proving a boolean formula over the variables.
+  # Keeping both directives marks the field nullable, which is the safe
+  # direction — the value still decodes, only the typespec is wider than it has
+  # to be, whereas guessing non-null would make the typespec lie.
+  defp merged_directives(copies) do
+    if Enum.all?(copies, &SkipInclude.conditional?(&1.directives)),
+      do: Enum.flat_map(copies, & &1.directives),
+      else: []
+  end
+
+  # Both copies are the same schema field, so either all are leaves or none is.
+  defp merged_selection_set([%QueryField{selection_set: nil} | _rest]), do: nil
+
+  defp merged_selection_set([first | _rest] = copies) do
+    # Each copy's children were only selected under that copy's condition, so the
+    # condition moves onto them before the lists become one. Without this a child
+    # of a `@include(if: $a)` copy would look unconditional next to a child of
+    # the `@include(if: $b)` copy, and be generated non-null.
+    selections =
+      Enum.flat_map(copies, &prepend_directives(&1.selection_set.selections, &1.directives))
+
+    %{first.selection_set | selections: merge_fields(selections)}
   end
 
   # Two argument lists are the same when they name the same values, whatever the
@@ -472,37 +520,6 @@ defmodule TypedGql.TypeGenerator do
 
   defp without_locations(values) when is_list(values), do: Enum.map(values, &without_locations/1)
   defp without_locations(other), do: other
-
-  # Selected unconditionally anywhere means always present, so a copy that
-  # cannot be removed clears the other's @skip/@include.
-  #
-  # Deliberately not proven further: complementary conditions such as
-  # `id @include(if: $x)` and `id @skip(if: $x)` also guarantee the field, but
-  # deciding that in general means proving a boolean formula over the variables.
-  # Keeping both directives marks the field nullable, which is the safe
-  # direction — the value still decodes, only the typespec is wider than it has
-  # to be, whereas guessing non-null would make the typespec lie.
-  defp merge_directives(directives, other) do
-    if SkipInclude.conditional?(directives) and SkipInclude.conditional?(other),
-      do: directives ++ other,
-      else: []
-  end
-
-  # Both copies are the same schema field, so either both are leaves or neither is.
-  # Both copies are the same schema field, so either both are leaves or neither is.
-  defp merge_selection_sets(%QueryField{selection_set: nil}, _other), do: nil
-
-  defp merge_selection_sets(existing, other) do
-    # Each side's children were only selected under that side's condition, so the
-    # condition moves onto them before the two lists become one. Without this a
-    # child of a `@include(if: $a)` copy would look unconditional next to a child
-    # of the `@include(if: $b)` copy, and be generated non-null.
-    selections =
-      prepend_directives(existing.selection_set.selections, existing.directives) ++
-        prepend_directives(other.selection_set.selections, other.directives)
-
-    %{existing.selection_set | selections: merge_fields(selections)}
-  end
 
   defp resolve_field(%QueryField{} = field, parent_type_name, parent_module, context, opts) do
     field_name = field_name(field)

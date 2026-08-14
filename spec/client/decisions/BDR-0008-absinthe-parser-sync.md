@@ -44,7 +44,7 @@ Last verified against Absinthe `main` at commit `de0e411f` (2026-07-14, v1.11.0 
 
 ## Reason
 
-Hand-re-applying forces a human to look at each divergence against the new upstream text. Four of the twelve hunks exist because a location is silently lost otherwise, and a fifth because a whole field is — failure modes with no compile error and no test failure inside Absinthe itself, since Absinthe reports errors from its own phases while TypedGql reports them at compile time with a line and column. A merge that "succeeds" while quietly reordering an `extract_binary/1` call is exactly the outcome to avoid, and there are only eight divergences to re-apply.
+Hand-re-applying forces a human to look at each divergence against the new upstream text. Four of the twelve hunks exist because a location is silently lost otherwise, and a fifth because a whole field is — failure modes with no compile error and no test failure inside Absinthe itself, since Absinthe reports errors from its own phases while TypedGql reports them at compile time with a line and column. A merge that "succeeds" while quietly reordering an `extract_binary/1` call is exactly the outcome to avoid, and there are only nine divergences to re-apply.
 
 ## Rejected Alternatives
 
@@ -224,6 +224,31 @@ GraphQL is case-sensitive, and its keywords are contextual rather than reserved:
 Upstream lexes `ON` as an `:ON` token that no grammar rule can accept: `ON` entered `@reserved_words` in Absinthe's 2018 SDL Support commit (`01be95b5`, #503), and `git log -S"'ON'" -- src/absinthe_parser.yrl` shows an `'ON'` terminal has never existed in the grammar's entire history. So `query { ON { x } }`, `query { f(role: ON) { x } }` and `fragment ON on User { name }` all fail with `syntax error before: 'ON'`.
 
 Deleting the reserved word makes `ON` lex as a plain `:name` and take exactly the same path as any other name — no special case. The alternative, declaring an `'ON'` terminal plus a `NameWithoutOn -> 'ON'` rule, adds a second spelling to every `Name` consumer for no gain. Regression tests: `test/typed_gql/lexer_test.exs` ("uppercase ON is a plain name") and `test/typed_gql/parser_test.exs` ("`ON` is an ordinary name, not the fragment keyword").
+
+### L4 — A surrogate pair escape is a lex error, not a crash
+
+```diff
+--- a/lib/absinthe/lexer.ex
++++ b/lib/typed_gql/lexer.ex
+ defp unescape_unicode(rest, content, context, _loc, _) do
+-  code = content |> Enum.reverse()
+-  value = :erlang.list_to_integer(code, 16)
+-  binary = :unicode.characters_to_binary([value])
+-  {rest, [binary], context}
++  value = content |> Enum.reverse() |> :erlang.list_to_integer(16)
++  decode_unicode(rest, value, context)
+ end
++
++defp decode_unicode(_rest, value, _context) when value in 0xD800..0xDFFF do
++  {:error, @unsupported_escape}
++end
++
++defp decode_unicode(rest, value, context), do: {rest, [<<value::utf8>>], context}
+```
+
+**Why**: upstream decodes each `\uXXXX` on its own, so `"\uD83D\uDE00"` — the spec's way of writing a character above the BMP — tries to convert half a surrogate pair and raises `ArgumentError` straight out of `TypedGql.Parser.parse/1`, which documents an error tuple. Turning it into a lex error at least reports it the way every other malformed input is reported.
+
+**This is a limitation, not a fix.** Combining the halves needs the first one carried across the `choice/1` that `string_character` sits in, and nimble_parsec does not thread post-traverse context reliably through a backtracking choice. A character above the BMP written directly (`"😀"`) parses and prints fine; only the escaped spelling is rejected. Lifting the limit means restructuring the escape combinator to match a pair in one production.
 
 ### L3 — `line_and_column/3` is private
 

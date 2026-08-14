@@ -418,6 +418,16 @@ defmodule TypedGql.ParserTest do
       assert length(multi.types) == 2
     end
 
+    test "a surrogate pair escape is reported, not raised" do
+      # Each \uXXXX is decoded on its own, and half a pair cannot be converted;
+      # see BDR-0008 L4.
+      assert {:error, message} = Parser.parse(~S|{ f(s: "\uD83D\uDE00") }|)
+      assert message =~ "surrogate pair escapes are not supported"
+
+      # A character above the BMP written directly still works.
+      assert {:ok, _document} = Parser.parse(~S|{ f(s: "😀") }|)
+    end
+
     # The pipe is optional once, at the front — not a separator that may repeat.
     test "a doubled pipe is still a syntax error" do
       assert {:error, _message} = Parser.parse("union S = User | | Post")
@@ -431,6 +441,11 @@ defmodule TypedGql.ParserTest do
       # The document is reprinted before it is sent, so every escape the lexer
       # decoded has to go back in.
       printed = TypedGql.Printer.print(document)
+
+      # The reparse alone proves little: the lexer also accepts raw control
+      # bytes inside a quoted string. What matters is that none were emitted —
+      # bar the newlines the pretty-printer itself lays out.
+      refute printed =~ ~r/[\x00-\x09\x0b-\x1f]/
       assert {:ok, reparsed} = Parser.parse(printed)
       assert string_argument(reparsed) == string_argument(document)
     end

@@ -122,6 +122,7 @@ defmodule TypedGql.Compiler do
   @spec compile_fragment!(String.t(), Schema.t(), [option()]) :: fragment_entry()
   def compile_fragment!(fragment_string, schema, opts) do
     document = parse!(fragment_string)
+    reject_type_system_definitions!(document)
 
     fragment =
       extract_single!(

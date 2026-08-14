@@ -1317,7 +1317,11 @@ defmodule TypedGql.TypeGeneratorTest do
   # A union whose members implement two interfaces, so one field can be reached
   # through either condition.
   defp schema_with_two_interfaces do
-    profile = %SchemaField{name: "profile", type: %TypeRef{kind: :object, name: "Profile"}}
+    profile = %SchemaField{
+      name: "profile",
+      type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :object, name: "Profile"}}
+    }
+
     base = schema_with_union().types
 
     types =
@@ -1351,7 +1355,7 @@ defmodule TypedGql.TypeGeneratorTest do
           "name" => %SchemaField{name: "name", type: %TypeRef{kind: :scalar, name: "String"}},
           "profile" => %SchemaField{
             name: "profile",
-            type: %TypeRef{kind: :object, name: "Profile"}
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :object, name: "Profile"}}
           }
         }
       })
@@ -1359,8 +1363,16 @@ defmodule TypedGql.TypeGeneratorTest do
         kind: :object,
         name: "Profile",
         fields: %{
-          "bio" => %SchemaField{name: "bio", type: %TypeRef{kind: :scalar, name: "String"}},
-          "avatar" => %SchemaField{name: "avatar", type: %TypeRef{kind: :scalar, name: "String"}}
+          # Non-null in the schema, so a child that stays non-null after merging
+          # is a real assertion rather than the schema's own nullability.
+          "bio" => %SchemaField{
+            name: "bio",
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "String"}}
+          },
+          "avatar" => %SchemaField{
+            name: "avatar",
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "String"}}
+          }
         }
       })
 
