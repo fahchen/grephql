@@ -19,7 +19,10 @@ defmodule TypedGql.Schema do
   end
 
   # Introspection meta-fields exist on the query root per the spec, but an
-  # introspection result never lists them among Query's own fields.
+  # introspection result never lists them among Query's own fields. Their
+  # return types "__Schema"/"__Type" have to be present in the loaded schema
+  # for a sub-selection to validate — a dump that strips meta types still gets
+  # a clean validation error naming the missing type, not a crash.
   @root_introspection_fields %{
     "__schema" => %TypedGql.Schema.Field{
       name: "__schema",

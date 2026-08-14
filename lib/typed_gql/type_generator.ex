@@ -706,6 +706,7 @@ defmodule TypedGql.TypeGenerator do
     # Union type module names derived from schema at compile time
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     union_module = Module.concat(parent_module, "Union")
+    reject_variant_collisions!(typename_to_module, union_module, parent_type_name)
 
     %GenSchema{
       kind: :union,
@@ -714,6 +715,29 @@ defmodule TypedGql.TypeGenerator do
       typename_to_module: typename_to_module,
       children: :lists.reverse(variants)
     }
+  end
+
+  # Every variant gets a module named after its camelized typename, and the
+  # dispatcher takes "Union" — a member named Union, or two members whose names
+  # camelize identically ("Foo_bar"/"FooBar"), would define two different
+  # modules under one name and silently clobber whichever loads first.
+  defp reject_variant_collisions!(typename_to_module, union_module, parent_type_name) do
+    collided =
+      typename_to_module
+      |> Map.put("(union dispatcher)", union_module)
+      |> Enum.group_by(fn {_name, module} -> module end, fn {name, _module} -> name end)
+      |> Enum.filter(fn {_module, names} -> length(names) > 1 end)
+
+    if collided != [] do
+      details =
+        Enum.map_join(collided, "; ", fn {module, names} ->
+          "#{Enum.join(Enum.sort(names), " and ")} both name #{inspect(module)}"
+        end)
+
+      raise CompileError,
+        description:
+          "cannot generate variant modules for \"#{parent_type_name}\": #{details}"
+    end
   end
 
   # Flattens the fragments that apply to `type_name` down to plain fields.

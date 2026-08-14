@@ -122,7 +122,7 @@ defmodule TypedGql.GeneratorHelpers do
 
   defp field_def_to_type_ast({:field, field_name, ecto_type, opts}) do
     base_type =
-      case get_in(opts, [:typed, :type]) do
+      case Keyword.get(typed_opts(opts), :type) do
         nil -> ecto_type_to_type_ast(ecto_type)
         custom_type -> custom_type
       end
@@ -150,7 +150,17 @@ defmodule TypedGql.GeneratorHelpers do
   end
 
   defp nullable_from_opts(opts) do
-    opts |> Keyword.get(:typed, []) |> Keyword.get(:null, true)
+    Keyword.get(typed_opts(opts), :null, true)
+  end
+
+  # A plugin's after_lower may rewrite a field def; whatever non-keyword shape
+  # its typed: option takes, the safe reading is no options — a nullable field
+  # with a derived typespec, wider than the truth but never lying.
+  defp typed_opts(opts) do
+    case Keyword.get(opts, :typed, []) do
+      typed when is_list(typed) -> typed
+      _other -> []
+    end
   end
 
   @spec ecto_type_to_type_ast(TypedGql.TypeMapper.ecto_type()) :: Macro.t()

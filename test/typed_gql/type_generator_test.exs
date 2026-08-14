@@ -651,6 +651,37 @@ defmodule TypedGql.TypeGeneratorTest do
       assert :title in post_fields
     end
 
+    test "a member type named Union collides with the dispatcher and is rejected" do
+      schema =
+        update_in(
+          schema_with_union(),
+          [Access.key!(:types)],
+          fn types ->
+            types
+            |> put_in(["SearchResult", Access.key!(:possible_types)], ["User", "Union"])
+            |> Map.put("Union", %Type{
+              kind: :object,
+              name: "Union",
+              fields: %{
+                "id" => %SchemaField{
+                  name: "id",
+                  type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}}
+                }
+              }
+            })
+          end
+        )
+
+      operation = parse!("query { search { __typename ... on User { email } } }")
+
+      assert_raise CompileError, ~r/\(union dispatcher\) and Union both name/, fn ->
+        TypeGenerator.generate(operation, schema,
+          client_module: TypedGql.Test.UnionNameCollision,
+          function_name: :search
+        )
+      end
+    end
+
     test "a union selected without inline fragments generates a plain object" do
       schema = schema_with_union()
       operation = parse!("query { search { __typename } }")

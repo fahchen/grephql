@@ -72,6 +72,13 @@ defmodule TypedGql.GeneratorHelpersTest do
       {:%{}, [], [{key, _type}]} = ast
       assert {:optional, [], [:name]} = key
     end
+
+    test "a non-keyword typed: option reads as no options, not a crash" do
+      field_defs = [{:field, :name, :string, [typed: true]}]
+      ast = GeneratorHelpers.build_params_type_ast(field_defs, [])
+      {:%{}, [], [{_key, type}]} = ast
+      assert Macro.to_string(type) == "String.t() | nil"
+    end
   end
 
   describe "scalar_typed_opts/1" do
