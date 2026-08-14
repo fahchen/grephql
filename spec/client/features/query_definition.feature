@@ -59,6 +59,14 @@ Feature: GraphQL query definition and execution
       When the developer calls current_user(endpoint: "https://staging.example.com/graphql")
       Then the query is executed against the overridden endpoint
 
+    # GraphQL distinguishes absent from null: absent means "not given", null
+    # can mean "clear this value" in an update mutation.
+    Scenario: Omitted optional variables are absent from the request, explicit nil is null
+      Given a mutation whose input object has optional fields
+      When the developer calls it providing only some of those fields
+      Then the dumped variables JSON carries only the provided keys
+      And a field passed explicitly as nil is sent as JSON null
+
   Rule: Fragments are reused via string interpolation or deffragment
 
     Scenario: Interpolate a fragment string into a defgql query

@@ -79,6 +79,31 @@ defmodule TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTes
              |> Map.keys()
              |> Enum.any?(&String.contains?(&1, "_"))
     end
+
+    test "omitted optional input fields are absent from the JSON, not null" do
+      request = capture_request()
+
+      assert Map.keys(request["variables"]["input"]) == ["body", "repositoryId", "title"]
+    end
+
+    test "a list of nested input objects dumps each element pruned to its given keys" do
+      request =
+        capture_request(%{
+          input: %{
+            repository_id: "R_1",
+            title: "Bug",
+            issue_fields: [
+              %{field_id: "F_1", text_value: "high"},
+              %{field_id: "F_2", delete: true}
+            ]
+          }
+        })
+
+      assert request["variables"]["input"]["issueFields"] == [
+               %{"fieldId" => "F_1", "textValue" => "high"},
+               %{"fieldId" => "F_2", "delete" => true}
+             ]
+    end
   end
 
   describe "loaded response" do
@@ -96,7 +121,7 @@ defmodule TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTes
     end
   end
 
-  defp capture_request do
+  defp capture_request(variables \\ nil) do
     parent = self()
 
     Req.Test.expect(Client, fn conn ->
@@ -105,7 +130,7 @@ defmodule TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTes
       Req.Test.json(conn, %{"data" => nil})
     end)
 
-    assert {:ok, %Result{}} = call()
+    assert {:ok, %Result{}} = if(variables, do: call(variables), else: call())
     assert_received {:request, request}
     request
   end
@@ -133,9 +158,10 @@ defmodule TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTes
   end
 
   defp call do
-    Client.create_issue(
-      %{input: %{repository_id: "R_1", title: "Bug", body: "It crashes on startup"}},
-      req_options: [plug: {Req.Test, Client}]
-    )
+    call(%{input: %{repository_id: "R_1", title: "Bug", body: "It crashes on startup"}})
+  end
+
+  defp call(variables) do
+    Client.create_issue(variables, req_options: [plug: {Req.Test, Client}])
   end
 end

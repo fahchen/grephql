@@ -31,7 +31,9 @@ defmodule TypedGql.Macros do
           {:ok, TypedGql.Result.t()} | {:error, Ecto.Changeset.t() | Req.Response.t()}
   def __execute_with_variables__(%TypedGql.Query{} = query, variables, opts) do
     with {:ok, struct} <- query.variables_module.build(variables) do
-      TypedGql.execute(query, struct, opts)
+      # Dump here, where the caller's original params are still in hand, so
+      # omitted optional fields can be pruned to absent rather than null.
+      TypedGql.execute(query, TypedGql.VariablesDumper.dump(struct, variables), opts)
     end
   end
 
@@ -390,6 +392,7 @@ defmodule TypedGql.Macros do
               {:ok, TypedGql.Result.t(unquote(result_module).t())}
               | {:error, Ecto.Changeset.t()}
               | {:error, Req.Response.t()}
+              | {:error, Exception.t()}
     end
   end
 
@@ -399,6 +402,7 @@ defmodule TypedGql.Macros do
       @spec unquote(name)(keyword()) ::
               {:ok, TypedGql.Result.t(unquote(result_module).t())}
               | {:error, Req.Response.t()}
+              | {:error, Exception.t()}
     end
   end
 

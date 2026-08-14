@@ -64,6 +64,32 @@ defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVaria
 
       assert request["variables"]["input"]["metadata"]["publishAt"] == "2025-03-01T09:00:00Z"
     end
+
+    test "omitted optional input fields are absent from the JSON, not null" do
+      request = capture_request()
+
+      refute Map.has_key?(request["variables"]["input"], "body")
+      refute Map.has_key?(request["variables"]["input"]["metadata"], "slug")
+    end
+
+    test "an optional field passed explicitly as nil is sent as null" do
+      request = capture_request(%{input: %{title: "T", tags: [], body: nil}})
+
+      assert %{"title" => "T", "tags" => [], "body" => nil} = request["variables"]["input"]
+      refute Map.has_key?(request["variables"]["input"], "status")
+    end
+
+    test "a nested input object passed explicitly as nil is sent as null" do
+      request = capture_request(%{input: %{title: "T", tags: [], metadata: nil}})
+
+      assert %{"metadata" => nil} = request["variables"]["input"]
+    end
+
+    test "string-keyed params prune the same way as atom-keyed ones" do
+      request = capture_request(%{"input" => %{"title" => "T", "tags" => []}})
+
+      assert request["variables"]["input"] == %{"title" => "T", "tags" => []}
+    end
   end
 
   describe "loaded response" do
@@ -87,7 +113,7 @@ defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVaria
     end
   end
 
-  defp capture_request do
+  defp capture_request(variables \\ nil) do
     parent = self()
 
     Req.Test.expect(Client, fn conn ->
@@ -96,7 +122,7 @@ defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVaria
       Req.Test.json(conn, %{"data" => nil})
     end)
 
-    assert {:ok, %Result{}} = call()
+    assert {:ok, %Result{}} = if(variables, do: call(variables), else: call())
     assert_received {:request, request}
     request
   end
@@ -122,16 +148,17 @@ defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVaria
   end
 
   defp call do
-    Client.create_post(
-      %{
-        input: %{
-          title: "How Grephql Works",
-          status: "PUBLISHED",
-          tags: ["elixir", "graphql"],
-          metadata: %{seo_title: "How Grephql Works", publish_at: ~U[2025-03-01 09:00:00Z]}
-        }
-      },
-      req_options: [plug: {Req.Test, Client}]
-    )
+    call(%{
+      input: %{
+        title: "How Grephql Works",
+        status: "PUBLISHED",
+        tags: ["elixir", "graphql"],
+        metadata: %{seo_title: "How Grephql Works", publish_at: ~U[2025-03-01 09:00:00Z]}
+      }
+    })
+  end
+
+  defp call(variables) do
+    Client.create_post(variables, req_options: [plug: {Req.Test, Client}])
   end
 end
