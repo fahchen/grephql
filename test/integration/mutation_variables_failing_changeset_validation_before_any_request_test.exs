@@ -1,7 +1,11 @@
 defmodule TypedGql.Integration.MutationVariablesFailingChangesetValidationBeforeAnyRequestTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: invalid mutation variables never reach the wire — they
-  # fail as an Ecto.Changeset error before any HTTP request is made.
+  @moduledoc """
+  Invalid mutation variables never reach the wire:
+
+  - missing required nested fields fail with "can't be blank"
+  - a wrong-typed nested value returns a changeset error instead of crashing
+  - neither case makes an HTTP request (no `Req.Test` expectation is ever set)
+  """
   use TypedGql.IntegrationCase, async: true
 
   import TypedGql.Test.Helpers, only: [errors_on: 2]

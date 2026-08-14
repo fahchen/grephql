@@ -1,8 +1,15 @@
 defmodule TypedGql.Integration.QuerySelectingUnionAndInterfaceVariantsViaFragmentsTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: union and interface selections with per-variant inline
-  # fragments, whose bodies come from named fragments shared across the two
-  # root fields.
+  @moduledoc """
+  Union and interface selections whose per-variant inline fragments spread named
+  fragments shared across two root fields:
+
+  - both selections lower to generated dispatcher types, one struct module per variant
+  - the named fragments are printed once at document level and spread in both variants
+  - a list variable serializes as a JSON array
+  - union elements cast to their variant structs by `__typename`
+  - a fragment spread inside a variant decodes its nested object
+  - a null element in the interface list survives the cast
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

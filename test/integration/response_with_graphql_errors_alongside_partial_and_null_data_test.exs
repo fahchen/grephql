@@ -1,7 +1,13 @@
 defmodule TypedGql.Integration.ResponseWithGraphqlErrorsAlongsidePartialAndNullDataTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: GraphQL-level errors coexist with data — the Result
-  # struct carries both, whether data is partial, null, or clean.
+  @moduledoc """
+  GraphQL-level errors coexisting with data in the Result struct:
+
+  - partial data decodes even when the response carries field errors
+  - errors arrive as `TypedGql.Error` structs with message, path, locations, and extensions
+  - an error without path, locations, or extensions decodes those fields as nil
+  - null data with errors still returns `:ok`, keeping data nil and every error
+  - a clean response leaves errors as an empty list
+  """
   use TypedGql.IntegrationCase, async: true
 
   alias TypedGql.Error

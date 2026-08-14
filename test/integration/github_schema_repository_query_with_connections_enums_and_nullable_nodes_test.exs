@@ -1,10 +1,15 @@
 defmodule TypedGql.Integration.GithubSchemaRepositoryQueryWithConnectionsEnumsAndNullableNodesTest do
-  # Integration suite realism layer: one document against the real GitHub
-  # schema (a pinned copy under test/support/schemas — TypedGql caches the
-  # parsed schema per source path, so per-file clients parse it only once
-  # per compile). Theme here: Relay connection pagination with enum literal
-  # arguments, and the null shapes GitHub really returns — null connection
-  # nodes and a null author for a deleted account.
+  @moduledoc """
+  Relay connection pagination against the real GitHub schema, and the null shapes
+  GitHub actually returns:
+
+  - a connection's `nodes` is a plain array field, since `[Issue]` is nullable throughout
+  - the URI custom scalar maps to `:string` and DateTime to the custom Ecto type
+  - the `IssueState` enum carries exactly the states the schema defines
+  - connection arguments and the enum literal survive printing
+  - a nested connection decodes with DateTime and enum casts
+  - a null connection node and a null author (deleted account) survive the cast
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

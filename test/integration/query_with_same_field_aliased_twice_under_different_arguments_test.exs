@@ -1,8 +1,11 @@
 defmodule TypedGql.Integration.QueryWithSameFieldAliasedTwiceUnderDifferentArgumentsTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: the everyday pattern of selecting the same root field
-  # twice under different aliases with different arguments — two response
-  # keys, two independent selections, no merging between them.
+  @moduledoc """
+  The same root field selected twice under different aliases and arguments:
+
+  - each alias gets its own module carrying only its own selection
+  - both copies are printed with their own arguments
+  - the two response keys decode independently into their own structs
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

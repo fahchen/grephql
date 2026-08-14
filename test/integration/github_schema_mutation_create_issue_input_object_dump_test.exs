@@ -1,9 +1,14 @@
 defmodule TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTest do
-  # Integration suite realism layer: one document against the real GitHub
-  # schema (a pinned copy under test/support/schemas — TypedGql caches the
-  # parsed schema per source path, so per-file clients parse it only once
-  # per compile). Theme here: a real mutation whose CreateIssueInput input
-  # object exercises snake_case field generation and camelCase dumping.
+  @moduledoc """
+  A real GitHub mutation whose `CreateIssueInput` exercises input-object dumping:
+
+  - `Variables` embeds the generated `CreateIssueInput` module
+  - camelCase schema fields become snake_case struct fields
+  - input fields dump back to camelCase JSON keys, with no snake_case key leaking
+  - omitted optional fields are absent from the JSON rather than null
+  - a list of nested input objects dumps each element pruned to its given keys
+  - the nested issue decodes with enum, DateTime, and nested author casts
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

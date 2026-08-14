@@ -1,9 +1,13 @@
 defmodule TypedGql.Integration.QuerySelectingTypenameExplicitlyOnAnObjectTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: the user selecting __typename themselves — on a plain
-  # object, and on a union whose selection already gets __typename injected
-  # automatically. Pins that __typename decodes to a downcased atom, not
-  # the raw string the server sent.
+  @moduledoc """
+  Selecting `__typename` explicitly, on a plain object and on a union whose
+  selection already gets it injected:
+
+  - an explicit `__typename` becomes a struct field of the Typename type
+  - it is not duplicated by the automatic injection on the union
+  - it decodes to a downcased atom rather than the string the server sent
+  - union variants each decode their own `__typename`
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

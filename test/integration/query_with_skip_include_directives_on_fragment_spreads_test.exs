@@ -1,11 +1,19 @@
 defmodule TypedGql.Integration.QueryWithSkipIncludeDirectivesOnFragmentSpreadsTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: @include on a fragment spread and @skip on an inline
-  # fragment (directives on selections, not fields). Their nullability only
-  # shows in the generated @type (`| nil`), which is unreadable for modules
-  # compiled inside a test file (mix test disables debug_info at runtime),
-  # so shape tests pin the flattened struct and decode tests pin the
-  # nil-when-skipped behavior.
+  @moduledoc """
+  Directives on selections rather than fields — `@include` on a fragment spread
+  and `@skip` on an inline fragment.
+
+  Their nullability shows only in the generated `@type`, which is unreadable for
+  modules compiled inside a test file (mix test disables debug_info at runtime),
+  so the shape is pinned through the struct instead:
+
+  - fields reached only through the conditional spread and inline fragment
+    flatten into the parent struct
+  - the inline fragment's object becomes an `embeds_one` defaulting to nil
+  - the printed document keeps both directives where they were written
+  - both control variables reach the variables JSON
+  - the fields decode as nil when the server skips the fragments, normally when it does not
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

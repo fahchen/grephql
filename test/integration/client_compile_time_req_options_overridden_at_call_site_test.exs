@@ -1,8 +1,12 @@
 defmodule TypedGql.Integration.ClientCompileTimeReqOptionsOverriddenAtCallSiteTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: compile-time config layering without touching the
-  # runtime Application env — the use options (endpoint + req_options) act
-  # as defaults, and call-site opts override them per request.
+  @moduledoc """
+  Config layering through `use` options alone, without the runtime Application env:
+
+  - compile-time `endpoint` and `req_options` are the request defaults
+  - a call-site `endpoint` overrides the compile-time one, keeping other defaults
+  - a call-site `req_options` key replaces the value set for it at compile time
+  - `req_options` keys set at different layers merge into one request
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

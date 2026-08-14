@@ -1,8 +1,12 @@
 defmodule TypedGql.Integration.TransportHttpStatusAndMalformedBodyErrorTuplesTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: everything below the GraphQL layer — HTTP status
-  # failures, transport failures, and undecodable bodies — surfaces as
-  # {:error, _} tuples rather than raising or masquerading as results.
+  @moduledoc """
+  Everything below the GraphQL layer surfaces as an `{:error, _}` tuple rather
+  than raising or masquerading as a result:
+
+  - a non-2xx status returns the response struct, body preserved
+  - a transport failure returns the exception the adapter produced
+  - a 200 response with a body that is not JSON returns a decode exception
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

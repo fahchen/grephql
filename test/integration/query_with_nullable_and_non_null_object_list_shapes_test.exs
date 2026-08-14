@@ -1,9 +1,13 @@
 defmodule TypedGql.Integration.QueryWithNullableAndNonNullObjectListShapesTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: BDR-0009 — a [Post!]! selection is a real embeds_many
-  # while a [Post] selection is a plain array field whose list and elements
-  # may be null. The dump direction adds nothing for this theme, so the file
-  # only checks shape and loading.
+  @moduledoc """
+  How a list of objects lowers, depending on the nullability the schema declares:
+
+  - `[Post!]!` generates an `embeds_many`
+  - `[Post]` generates a plain array field whose struct default is nil
+  - every `[Post!]!` element decodes into a struct
+  - a null `[Post]` list stays nil instead of becoming `[]`
+  - a null element inside `[Post]` survives the cast
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

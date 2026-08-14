@@ -1,8 +1,15 @@
 defmodule TypedGql.Integration.RegisteredFragmentsViaDeffragmentReusedAcrossOperationsTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: the deffragment workflow — fragments registered once on
-  # the client (one spreading the other) and reused from two operations, so
-  # each printed document carries exactly the fragments it needs.
+  @moduledoc """
+  The `deffragment` workflow — fragments registered once on the client, one
+  spreading the other, reused from two operations:
+
+  - each operation generates its own Result module
+  - a registered fragment generates its own struct under `Client.Fragments`
+  - the fragment spreading another embeds the nested selection
+  - fields reached only through a spread land on the operation's struct
+  - each printed document appends exactly the fragments it needs, each one once
+  - fields and nested objects reached through spreads decode into the Result struct
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

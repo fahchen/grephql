@@ -1,10 +1,21 @@
 defmodule TypedGql.Integration.MalformedServerDataEnumTypenameAndTypeMismatchHandlingTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: a server that violates its own schema — the client's
-  # contract for malformed data in a union selection. Data Ecto cannot load
-  # (unknown __typename, out-of-range enum, wrong scalar type) surfaces as
-  # {:error, %TypedGql.DecodeError{}}; shape violations Ecto tolerates
-  # (null where non-null was promised, extra keys) load leniently.
+  @moduledoc """
+  A server that violates its own schema. Data Ecto cannot load surfaces as
+  `{:error, %TypedGql.DecodeError{}}`; shape violations Ecto tolerates load leniently.
+
+  Reported as a DecodeError:
+
+  - a union element whose `__typename` is unknown, or missing entirely
+  - an enum value outside the schema
+  - a scalar of the wrong JSON type
+
+  Tolerated on load:
+
+  - a non-null root list sent as null, and a root field missing from the data map
+  - a null element inside a list of non-null union members
+  - an enum value differing from the schema only in case
+  - fields the server sends beyond the selection
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

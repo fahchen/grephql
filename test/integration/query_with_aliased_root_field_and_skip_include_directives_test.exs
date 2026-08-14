@@ -1,8 +1,14 @@
 defmodule TypedGql.Integration.QueryWithAliasedRootFieldAndSkipIncludeDirectivesTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: an aliased root field combined with @include/@skip on
-  # scalar fields, checked across generated shape, dumped request, and
-  # loaded response.
+  @moduledoc """
+  An aliased root field selected with `@include`/`@skip` on its scalar fields:
+
+  - the alias names both the struct field and the generated module
+  - enum and DateTime fields map to their custom Ecto types
+  - every operation variable becomes a snake_case `Variables` field
+  - the printed document keeps the alias and both directives
+  - variables serialize to camelCase JSON
+  - an included field decodes, while a field the server skipped falls back to nil
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

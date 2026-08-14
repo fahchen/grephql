@@ -1,8 +1,13 @@
 defmodule TypedGql.Integration.EnumVariableInputFormsAndWireDumpContractTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: which input forms an enum variable accepts (wire
-  # string, atom, lowercase string) and the exact string that reaches the
-  # wire, plus the rejection of values outside the enum.
+  @moduledoc """
+  The input forms an enum variable accepts, and the value each one puts on the wire:
+
+  - the wire string `"ADMIN"` dumps unchanged
+  - the atom `:admin` is accepted and dumps as `"ADMIN"`
+  - the lowercase string `"admin"` normalizes to the canonical `"ADMIN"`
+  - a string or an atom outside the enum fails as a changeset before any request
+  - an enum in the response decodes back to its atom
+  """
   use TypedGql.IntegrationCase, async: true
 
   import TypedGql.Test.Helpers, only: [errors_on: 2]

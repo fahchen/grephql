@@ -1,8 +1,14 @@
 defmodule TypedGql.Integration.OperationWithoutVariablesAndEndpointOverrideAtCallSiteTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: common call-site behaviors — a no-variable operation
-  # generates an opts-only function, and the endpoint can be overridden per
-  # call. The document goes through the ~GQL sigil to exercise that path.
+  @moduledoc """
+  Call-site behaviors of an operation declared without variables, written with
+  the `~GQL` sigil:
+
+  - the generated function takes opts only, with no variables arity
+  - no `Variables` module is generated
+  - the request body carries an empty variables map under the operation name
+  - an endpoint given in call-site opts overrides the compile-time one
+  - the response decodes into typed structs
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

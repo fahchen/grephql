@@ -1,10 +1,16 @@
 defmodule TypedGql.Integration.GithubSchemaDeeplyNestedPullRequestReviewConnectionsTest do
-  # Integration suite realism layer: one document against the real GitHub
-  # schema (a pinned copy under test/support/schemas). Theme here: deep
-  # connection-in-connection nesting — pull requests > reviews > commits >
-  # statusCheckRollup — with the nullable chains GitHub really returns at
-  # every level (null rollup before checks run, null review author for a
-  # deleted account, empty review connections).
+  @moduledoc """
+  Deep connection-in-connection nesting against the real GitHub schema — pull
+  requests, their reviews, their commits, and the commit status rollup:
+
+  - module nesting mirrors the document down to the commit rollup
+  - the `PullRequestReviewState` and `StatusState` enums carry every schema value
+  - both connection arguments survive printing
+  - a full deep chain decodes its review and rollup enums end to end
+  - a pull request with no reviews decodes an empty nodes list
+  - a null rollup (no checks run yet) and a null review author (deleted account)
+    survive as nil
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

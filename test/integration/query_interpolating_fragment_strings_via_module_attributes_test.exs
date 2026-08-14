@@ -1,8 +1,13 @@
 defmodule TypedGql.Integration.QueryInterpolatingFragmentStringsViaModuleAttributesTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: the string-interpolation reuse path — documents built
-  # from module attributes, one splicing a plain field list and one splicing
-  # a whole fragment definition into the document source.
+  @moduledoc """
+  Documents built by interpolating module attributes into the query source:
+
+  - an interpolated field list becomes exactly those fields on the Result struct
+  - fields reached through an interpolated fragment definition land there too
+  - the sent document carries every field of the interpolated list
+  - the sent document carries the interpolated fragment definition exactly once
+  - both operations decode with their custom types
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

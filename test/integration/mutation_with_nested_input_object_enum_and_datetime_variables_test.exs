@@ -1,8 +1,15 @@
 defmodule TypedGql.Integration.MutationWithNestedInputObjectEnumAndDatetimeVariablesTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: the dump direction of a mutation whose single variable
-  # is a nested input object carrying an enum, a DateTime, and optional
-  # fields that the caller omits.
+  @moduledoc """
+  Dumping a mutation variable that is a nested input object:
+
+  - `Variables` embeds the shared `Client.Inputs` module, which embeds its own nested input
+  - fields dump to camelCase JSON keys
+  - an enum given as its wire string dumps unchanged, a DateTime as ISO8601
+  - omitted optional fields are absent from the JSON, not null
+  - a field or nested object passed explicitly as nil is sent as null
+  - string-keyed params prune the same way as atom-keyed ones
+  - the response decodes with enum atoms, %DateTime{}, and nested structs
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do

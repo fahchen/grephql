@@ -1,9 +1,16 @@
 defmodule TypedGql.Integration.QueryMergingDuplicateSelectionsAcrossFragmentsAndFieldsTest do
-  # Integration suite: one document per file, one observable behavior per
-  # test. Theme here: FieldsInSetCanMerge in practice — the same response
-  # key selected from several places (direct fields, named fragments, a
-  # repeated root field with inline fragments) collapses into one merged
-  # selection in the generated shape and decodes as the merged whole.
+  @moduledoc """
+  FieldsInSetCanMerge in practice — the same response key selected from several
+  places collapses into one selection:
+
+  - a nested module unions the fields of the direct selection and the fragment
+  - a scalar selected both directly and via a fragment becomes one field
+  - a repeated root field collapses into a single response key, generating every
+    variant struct its copies select
+  - printing keeps the source form: both selection sites, both root-field copies,
+    each copy getting `__typename` injected for variant dispatch
+  - the response decodes the merged whole, across selection sites and variants
+  """
   use TypedGql.IntegrationCase, async: true
 
   defmodule Client do
