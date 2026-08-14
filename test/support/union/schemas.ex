@@ -29,3 +29,15 @@ defmodule TypedGql.Test.UnionTypes.Post do
     field :title, :string, typed: [null: true]
   end
 end
+
+# A member that never selected __typename: the struct has no field to carry the
+# variant's identity, so a dumped map only round-trips if Union.dump writes the
+# key back from the module.
+defmodule TypedGql.Test.UnionTypes.BareUser do
+  @moduledoc false
+  use TypedGql.EmbeddedSchema
+
+  typed_embedded_schema do
+    field :name, :string, typed: [null: true]
+  end
+end

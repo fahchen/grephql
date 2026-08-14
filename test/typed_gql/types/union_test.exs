@@ -2,6 +2,8 @@ defmodule TypedGql.Types.UnionTest do
   use ExUnit.Case, async: true
 
   alias TypedGql.Test.UnionTypes.Address
+  alias TypedGql.Test.UnionTypes.BareUnion
+  alias TypedGql.Test.UnionTypes.BareUser
   alias TypedGql.Test.UnionTypes.Post
   alias TypedGql.Test.UnionTypes.SearchUnion
   alias TypedGql.Test.UnionTypes.User
@@ -9,6 +11,7 @@ defmodule TypedGql.Types.UnionTest do
 
   setup_all do
     Union.define(SearchUnion, %{"User" => User, "Post" => Post})
+    Union.define(BareUnion, %{"User" => BareUser})
 
     :ok
   end
@@ -105,6 +108,14 @@ defmodule TypedGql.Types.UnionTest do
 
     test "dumps nil" do
       assert {:ok, nil} = SearchUnion.dump(nil, nil, %{})
+    end
+
+    test "a variant without a __typename field still round-trips through dump" do
+      {:ok, user} = BareUnion.load(%{"__typename" => "User", "name" => "Alice"}, nil, %{})
+
+      assert {:ok, dumped} = BareUnion.dump(user, nil, %{})
+      assert dumped.__typename == "User"
+      assert {:ok, ^user} = BareUnion.load(dumped, nil, %{})
     end
   end
 

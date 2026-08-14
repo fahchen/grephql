@@ -42,7 +42,11 @@ defmodule TypedGql.Types.Union do
       use Ecto.ParameterizedType
 
       @typename_to_module unquote(Macro.escape(typename_to_module))
-      @variant_modules unquote(Macro.escape(Map.values(typename_to_module)))
+      @module_to_typename unquote(
+                            Macro.escape(
+                              Map.new(typename_to_module, fn {name, mod} -> {mod, name} end)
+                            )
+                          )
 
       @type t() :: struct()
 
@@ -59,7 +63,7 @@ defmodule TypedGql.Types.Union do
       # itself: falling through to `cast(%{} = map, _params)` would report them
       # as a missing `__typename` instead of rejecting them.
       def cast(%{__struct__: module} = struct, _params) do
-        if module in @variant_modules, do: {:ok, struct}, else: :error
+        if is_map_key(@module_to_typename, module), do: {:ok, struct}, else: :error
       end
 
       def cast(%{} = map, _params) do
@@ -86,10 +90,18 @@ defmodule TypedGql.Types.Union do
 
       # Delegating to the variant's own dumpers is what makes the result
       # JSON-encodable: enums become strings and nested embeds become maps.
+      # The struct's module is the variant's identity, so dump writes the
+      # __typename back into the map — the struct itself carries the field only
+      # when the query selected it, and without the key the dumped map could
+      # never be loaded again.
       def dump(%{__struct__: module} = struct, _dumper, _params) do
-        if module in @variant_modules,
-          do: {:ok, Ecto.embedded_dump(struct, :json)},
-          else: :error
+        case @module_to_typename do
+          %{^module => typename} ->
+            {:ok, struct |> Ecto.embedded_dump(:json) |> Map.put(:__typename, typename)}
+
+          _not_a_member ->
+            :error
+        end
       end
 
       def dump(_other, _dumper, _params), do: :error
