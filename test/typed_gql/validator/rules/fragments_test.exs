@@ -74,6 +74,80 @@ defmodule TypedGql.Validator.Rules.FragmentsTest do
     end
   end
 
+  # Spec 5.5.2.2. Without this the document is infinite, and TypeGenerator's
+  # spread expansion loops forever rather than failing.
+  describe "fragment spread cycles" do
+    test "a fragment that spreads itself is rejected" do
+      query = """
+      query { user(id: "1") { ...F } }
+      fragment F on User { name ...F }
+      """
+
+      assert [error] = errors(validate(query))
+      assert error.message =~ ~s(fragment "F" spreads itself)
+    end
+
+    test "a cycle through another fragment is rejected" do
+      query = """
+      query { user(id: "1") { ...A } }
+      fragment A on User { ...B }
+      fragment B on User { ...A }
+      """
+
+      assert [_a, _b] = errors(validate(query))
+    end
+
+    test "a cycle that runs through a field is rejected" do
+      query = """
+      query { user(id: "1") { ...F } }
+      fragment F on User { name posts { author { ...F } } }
+      """
+
+      assert [error] = errors(validate(query, types: types_with_author_cycle()))
+      assert error.message =~ ~s(fragment "F" spreads itself)
+    end
+
+    test "a cycle that runs through an inline fragment is rejected" do
+      query = """
+      query { user(id: "1") { ...F } }
+      fragment F on User { ... on User { ...F } }
+      """
+
+      assert [error] = errors(validate(query))
+      assert error.message =~ ~s(fragment "F" spreads itself)
+    end
+
+    test "spreading the same fragment twice is not a cycle" do
+      query = """
+      query { user(id: "1") { ...F } }
+      fragment F on User { ...G }
+      fragment G on User { name }
+      """
+
+      assert errors(validate(query)) == []
+    end
+  end
+
+  defp types_with_author_cycle do
+    Map.merge(SchemaHelper.default_types(), %{
+      "User" => %Type{
+        kind: :object,
+        name: "User",
+        fields: %{
+          "name" => %SchemaField{name: "name", type: %TypeRef{kind: :scalar, name: "String"}},
+          "posts" => %SchemaField{name: "posts", type: %TypeRef{kind: :object, name: "Post"}}
+        }
+      },
+      "Post" => %Type{
+        kind: :object,
+        name: "Post",
+        fields: %{
+          "author" => %SchemaField{name: "author", type: %TypeRef{kind: :object, name: "User"}}
+        }
+      }
+    })
+  end
+
   describe "unresolvable parent type" do
     test "inline fragment under a missing root type is skipped" do
       ctx = validate(~s|query { ... on User { name } }|, query_type: nil)

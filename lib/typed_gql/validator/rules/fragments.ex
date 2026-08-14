@@ -4,6 +4,7 @@ defmodule TypedGql.Validator.Rules.Fragments do
   alias TypedGql.Language.Document
   alias TypedGql.Language.Field
   alias TypedGql.Language.Fragment
+  alias TypedGql.Language.FragmentSpread
   alias TypedGql.Language.InlineFragment
   alias TypedGql.Language.OperationDefinition
   alias TypedGql.Language.SelectionSet
@@ -21,12 +22,56 @@ defmodule TypedGql.Validator.Rules.Fragments do
         validate_selection_set(acc, op.selection_set, root_type_name, acc.schema)
       end)
 
-    definitions
-    |> Enum.filter(&match?(%Fragment{}, &1))
-    |> Enum.reduce(ctx, fn frag, acc ->
-      frag_type = frag.type_condition.name
-      acc = validate_fragment_type_condition(acc, frag, frag_type)
-      validate_selection_set(acc, frag.selection_set, frag_type, acc.schema)
+    fragments = Enum.filter(definitions, &match?(%Fragment{}, &1))
+
+    ctx =
+      Enum.reduce(fragments, ctx, fn frag, acc ->
+        frag_type = frag.type_condition.name
+        acc = validate_fragment_type_condition(acc, frag, frag_type)
+        validate_selection_set(acc, frag.selection_set, frag_type, acc.schema)
+      end)
+
+    check_cycles(ctx, fragments)
+  end
+
+  # Spec 5.5.2.2: a cycle would make the document infinite. It also makes
+  # TypeGenerator's spread expansion loop forever, so this has to be caught here
+  # rather than left to fail somewhere downstream.
+  defp check_cycles(ctx, fragments) do
+    spreads = Map.new(fragments, &{&1.name, spread_names(&1.selection_set)})
+
+    Enum.reduce(fragments, ctx, fn fragment, acc ->
+      if cycles_back?(spreads, fragment.name, [fragment.name]) do
+        Context.add_error(
+          acc,
+          "fragment \"#{fragment.name}\" spreads itself, directly or through another fragment",
+          fragment
+        )
+      else
+        acc
+      end
+    end)
+  end
+
+  defp cycles_back?(spreads, start, [current | _rest] = path) do
+    spreads
+    |> Map.get(current, [])
+    |> Enum.any?(fn name ->
+      cond do
+        name == start -> true
+        name in path -> false
+        true -> cycles_back?(spreads, start, [name | path])
+      end
+    end)
+  end
+
+  defp spread_names(nil), do: []
+
+  defp spread_names(%SelectionSet{selections: selections}) do
+    Enum.flat_map(selections, fn
+      %FragmentSpread{name: name} -> [name]
+      %Field{} = field -> spread_names(field.selection_set)
+      %InlineFragment{} = fragment -> spread_names(fragment.selection_set)
     end)
   end
 
