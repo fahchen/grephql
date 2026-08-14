@@ -218,7 +218,16 @@ defmodule TypedGql.TypeGenerator do
         |> prepend_directives(fragment.directives)
         |> normalize(condition, context)
 
-      [%{fragment | selection_set: %{fragment.selection_set | selections: normalized}}]
+      # The wrapper's directives now live on its members, so clear them: anything
+      # left there afterwards was pushed down by a later merge and still has to
+      # reach the members — see member_selections/3.
+      [
+        %{
+          fragment
+          | directives: [],
+            selection_set: %{fragment.selection_set | selections: normalized}
+        }
+      ]
     end
   end
 
@@ -638,9 +647,13 @@ defmodule TypedGql.TypeGenerator do
         [field]
 
       %InlineFragment{} = fragment ->
-        if applies_to?(context.schema, fragment.type_condition.name, type_name),
-          do: member_selections(fragment.selection_set.selections, type_name, context),
-          else: []
+        if applies_to?(context.schema, fragment.type_condition.name, type_name) do
+          fragment.selection_set.selections
+          |> prepend_directives(fragment.directives)
+          |> member_selections(type_name, context)
+        else
+          []
+        end
     end)
   end
 

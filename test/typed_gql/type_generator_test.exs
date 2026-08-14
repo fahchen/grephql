@@ -924,7 +924,7 @@ defmodule TypedGql.TypeGeneratorTest do
 
       # Three copies: folding pairwise would feed the running aggregate back in
       # and re-prepend it to children that already carry their own condition.
-      assert length(profile.query_field.directives) == 3
+      assert directive_variables(profile) == ["a", "b", "c"]
 
       # bio came from the $a copy and avatar from the $b copy; either can be
       # absent while the other is present, so neither may be non-null.
@@ -937,7 +937,24 @@ defmodule TypedGql.TypeGeneratorTest do
       assert Enum.all?(profile_node.fields, & &1.resolved.nullable)
 
       bio = Enum.find(profile_node.fields, &(&1.name == :bio))
-      assert length(bio.query_field.directives) == 2
+      assert directive_variables(bio) == ["a", "c"]
+    end
+
+    test "a repeated union field pushes its condition through the inline fragment" do
+      schema = schema_with_union()
+
+      tree =
+        resolved_tree(
+          schema,
+          "query Q($a: Boolean!, $b: Boolean!) { search @include(if: $a) { __typename ... on User { id } } search @include(if: $b) { __typename ... on User { email } } }",
+          TypedGql.Test.RepeatedUnionDirectives
+        )
+
+      # Each copy's condition has to reach the fields inside its own fragment:
+      # with $a false and $b true the response carries email but not id.
+      assert directive_variables(variant_field(tree, "User", :id)) == ["a"]
+      assert directive_variables(variant_field(tree, "User", :email)) == ["b"]
+      assert variant_field(tree, "User", :id).resolved.nullable
     end
 
     test "a repeated field returning a union keeps resolving" do
@@ -1153,6 +1170,12 @@ defmodule TypedGql.TypeGeneratorTest do
   end
 
   # The `search` field's union node holds one object node per member.
+  defp directive_variables(gen_field) do
+    Enum.map(gen_field.query_field.directives, fn directive ->
+      directive.arguments |> hd() |> Map.fetch!(:value) |> Map.fetch!(:name)
+    end)
+  end
+
   defp variant_field(tree, type_name, field_name) do
     [union_node] = tree.children
     variant = Enum.find(union_node.children, &(&1.parent_type == type_name))
