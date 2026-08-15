@@ -135,19 +135,22 @@ A value crosses your type three times, and each crossing hands it to a
 different callback:
 
 ```
-              caller's value        Elixir value         wire value
-                     │                    │                   │
-   request           ├──── cast/1 ───────▶├──── dump/1 ──────▶├───▶  server
-                     │                    │                   │
-   response          │                    ├◀─── load/1 ───────┤◀───  server
-                     │                    │                   │
-                     ╵                    ╵                   ╵
-                                  kept in the struct
+              TypedGql                      Ecto.Type
+                  │                              │
+  request         │  cast/1("9.99")              │
+   from caller ──▶├─────────────────────────────▶│
+                  │◀─────────────────────────────┤ %Money{}
+                  │                              │
+                  │  dump/1(%Money{})            │
+                  ├─────────────────────────────▶│
+                  │◀─────────────────────────────┤ "9.99"
+   to server   ◀──┤                              │
+                  │                              │
+  response        │  load/1("12.50")             │
+   from server ──▶├─────────────────────────────▶│
+                  │◀─────────────────────────────┤ %Money{}
+   to caller   ◀──┤                              │
 ```
-
-Read it column by column: the request crosses two callbacks, the response
-crosses one, and nothing on the way back ever reaches the caller's-value
-column.
 
 | Callback | Receives | Returns | Runs when |
 |----------|----------|---------|-----------|
