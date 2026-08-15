@@ -43,6 +43,39 @@ defmodule TypedGql.Integration.CustomScalarMappingOverridingABuiltinTest do
     def embed_as(_format), do: :dump
   end
 
+  defmodule StrictScalar do
+    @moduledoc false
+    use Ecto.Type
+
+    def type, do: :string
+    def cast("reject-in"), do: :error
+    def cast(value) when is_binary(value), do: {:ok, value}
+    def cast(_other), do: :error
+    def dump("reject-out"), do: :error
+    def dump(value) when is_binary(value), do: {:ok, value}
+    def dump(_other), do: :error
+    def load("reject-back"), do: :error
+    def load(value) when is_binary(value), do: {:ok, value}
+    def load(_other), do: :error
+    def embed_as(_format), do: :dump
+  end
+
+  defmodule StrictClient do
+    use TypedGql,
+      otp_app: :typed_gql,
+      source: "../support/schemas/integration.json",
+      endpoint: "https://api.example.com/graphql",
+      req_options: [plug: {Req.Test, __MODULE__}],
+      scalars: %{
+        "DateTime" => TypedGql.Integration.CustomScalarMappingOverridingABuiltinTest.StrictScalar
+      }
+
+    defgql(
+      :create_post,
+      "mutation P($input: CreatePostInput!) { createPost(input: $input) { id publishedAt } }"
+    )
+  end
+
   defmodule SelfClient do
     use TypedGql,
       otp_app: :typed_gql,
@@ -145,8 +178,34 @@ defmodule TypedGql.Integration.CustomScalarMappingOverridingABuiltinTest do
     request
   end
 
-  defp create_post(client) do
-    client.create_post(%{input: %{title: "T", tags: [], metadata: %{publish_at: "raw"}}})
+  defp create_post(client, publish_at \\ "raw") do
+    client.create_post(%{input: %{title: "T", tags: [], metadata: %{publish_at: publish_at}}})
+  end
+
+  describe "a callback returning :error" do
+    test "from cast/1 the call fails with a changeset and sends nothing" do
+      # No Req.Test expectation is set, so verify_on_exit! proves no request.
+      assert {:error, %Ecto.Changeset{}} = create_post(StrictClient, "reject-in")
+    end
+
+    test "from load/1 the call returns a DecodeError" do
+      Req.Test.expect(StrictClient, fn conn ->
+        Req.Test.json(conn, %{
+          "data" => %{"createPost" => %{"id" => "p1", "publishedAt" => "reject-back"}}
+        })
+      end)
+
+      assert {:error, %TypedGql.DecodeError{}} = create_post(StrictClient, "ok")
+    end
+
+    # Documents current behaviour, and the asymmetry: the other two directions
+    # answer with a tuple, while a value cast/1 accepted and dump/1 rejects
+    # escapes as an Ecto error.
+    test "from dump/1 the call raises instead of answering with a tuple" do
+      assert_raise ArgumentError, ~r/cannot dump/, fn ->
+        create_post(StrictClient, "reject-out")
+      end
+    end
   end
 
   describe "compile errors" do

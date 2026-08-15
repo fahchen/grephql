@@ -149,12 +149,16 @@ Two consequences are easy to get wrong:
   integer…" matching belongs in `cast/1`, which is the only one facing
   arbitrary caller input.
 
-Returning `:error` decides what a bad value costs:
+Returning `:error` costs something different from each callback:
 
-- from `cast/1`, the call fails with an `Ecto.Changeset` error and no HTTP
+- from `cast/1`, the call returns `{:error, %Ecto.Changeset{}}` and no HTTP
   request is made
 - from `load/1`, the call returns `{:error, %TypedGql.DecodeError{}}` rather
   than raising
+- from `dump/1`, the call **raises** `ArgumentError` — the value has already
+  passed `cast/1` by then, so a type that accepts a value on the way in and
+  rejects it on the way out is treating it as a bug in itself rather than as
+  bad input. Keep `dump/1` total over whatever `cast/1` can return.
 
 ### `embed_as/1` decides whether `dump/1` and `load/1` run at all
 
