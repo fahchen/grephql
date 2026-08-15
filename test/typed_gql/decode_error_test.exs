@@ -13,8 +13,13 @@ defmodule TypedGql.DecodeErrorTest do
       assert %DecodeError{message: "bad enum"} = DecodeError.exception(message: "bad enum")
     end
 
-    test "requires the enforced message field" do
-      assert_raise ArgumentError, fn -> DecodeError.exception([]) end
+    # Asserted on the struct literal rather than on exception([]), whose
+    # enforcement of @enforce_keys arrived in a later Elixir than the oldest
+    # this library supports.
+    test "the message field is enforced when building the struct" do
+      assert_raise ArgumentError, ~r/must also be given.+\[:message\]/s, fn ->
+        Code.eval_string("%TypedGql.DecodeError{}")
+      end
     end
   end
 
