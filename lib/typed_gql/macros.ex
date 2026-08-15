@@ -1,5 +1,15 @@
 defmodule TypedGql.Macros do
-  @moduledoc false
+  @moduledoc """
+  The macros a client module gets from `use TypedGql`.
+
+  `defgql/2` and `defgqlp/2` define a query function from a GraphQL document,
+  `deffragment/1` registers a fragment those documents can spread, and `~GQL`
+  marks a string as GraphQL so `mix format` can format it.
+
+  All three run at compile time: the document is parsed, validated against the
+  loaded schema, and lowered into embedded schemas for its result and its
+  variables, so a query the schema rejects fails the build rather than a call.
+  """
 
   @doc """
   A sigil for writing GraphQL query strings that can be formatted by `mix format`.

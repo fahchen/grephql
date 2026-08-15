@@ -2,6 +2,8 @@
 # Original work Copyright (c) 2015 CargoSense, LLC — MIT License
 # See NOTICE file for attribution details.
 defmodule TypedGql.Lexer do
+  @moduledoc false
+
   import NimbleParsec
 
   # Codepoints

@@ -92,21 +92,32 @@ defmodule TypedGql.MixProject do
       groups_for_modules: [
         "Core API": [
           TypedGql,
+          TypedGql.Macros,
           TypedGql.Query,
           TypedGql.Result,
           TypedGql.Error,
-          TypedGql.OperationInfo
+          TypedGql.DecodeError,
+          TypedGql.OperationInfo,
+          TypedGql.JSON
         ],
         "Type System": [
           TypedGql.EmbeddedSchema,
           TypedGql.ResponseDecoder,
+          TypedGql.VariablesDumper,
           TypedGql.TypeMapper,
           TypedGql.TypeGenerator,
           TypedGql.InputTypeGenerator,
           TypedGql.Types.DateTime,
           TypedGql.Types.Enum,
           TypedGql.Types.Union,
-          TypedGql.Types.PathSegment
+          TypedGql.Types.PathSegment,
+          TypedGql.Types.Typename
+        ],
+        "Generation Plugins": [
+          TypedGql.Generation.Plugin,
+          TypedGql.Generation.Context,
+          TypedGql.Generation.Schema,
+          TypedGql.Generation.Field
         ],
         Formatting: [
           TypedGql.Formatter
