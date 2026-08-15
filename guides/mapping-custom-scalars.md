@@ -135,21 +135,23 @@ A value crosses your type three times, and each crossing hands it to a
 different callback:
 
 ```
-              TypedGql                      Ecto.Type
-                  │                              │
-  request         │  cast/1("9.99")              │
-   from caller ──▶├─────────────────────────────▶│
-                  │◀─────────────────────────────┤ %Money{}
-                  │                              │
-                  │  dump/1(%Money{})            │
-                  ├─────────────────────────────▶│
-                  │◀─────────────────────────────┤ "9.99"
-   to server   ◀──┤                              │
-                  │                              │
-  response        │  load/1("12.50")             │
-   from server ──▶├─────────────────────────────▶│
-                  │◀─────────────────────────────┤ %Money{}
-   to caller   ◀──┤                              │
+                       TypedGql                    Ecto.Type
+                          │                            │
+    caller's params ─────▶│                            │
+                          │  cast/1("9.99")            │
+                          ├───────────────────────────▶│
+                          │◀───────────────────────────┤ %Money{}
+                          │                            │
+                          │  dump/1(%Money{})          │
+                          ├───────────────────────────▶│
+                          │◀───────────────────────────┤ "9.99"
+       request JSON ◀─────┤                            │
+                          │                            │
+      response JSON ─────▶│                            │
+                          │  load/1("12.50")           │
+                          ├───────────────────────────▶│
+                          │◀───────────────────────────┤ %Money{}
+          %Result{} ◀─────┤                            │
 ```
 
 | Callback | Receives | Returns | Runs when |
