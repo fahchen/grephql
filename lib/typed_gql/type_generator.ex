@@ -407,7 +407,7 @@ defmodule TypedGql.TypeGenerator do
       # Dropping the spread would generate a struct missing every field it
       # selected, and the request would still ask the server for them.
       :error ->
-        raise CompileError, description: "undefined fragment spread: ...#{name}"
+        raise CompileError, description: GeneratorHelpers.undefined_spread_message([name])
     end
   end
 

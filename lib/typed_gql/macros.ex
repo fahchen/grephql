@@ -132,8 +132,8 @@ defmodule TypedGql.Macros do
       )
 
     if undefined != [] do
-      names = Enum.map_join(undefined, ", ", &"...#{&1}")
-      raise CompileError, description: "undefined fragment spread: #{names}"
+      raise CompileError,
+        description: TypedGql.GeneratorHelpers.undefined_spread_message(undefined)
     end
 
     # Seeding `seen` with the local names is what makes a local definition

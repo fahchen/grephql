@@ -111,6 +111,8 @@ Feature: GraphQL query definition and execution
       And fragment B is defined after fragment A
       When the module is compiled
       Then compilation fails with "undefined fragment spread: ...B"
+      And the error also names definition order as the likely cause, since spreads
+        may not form a cycle and can therefore always be ordered as a DAG
 
     Scenario: Later fragment definitions override earlier ones for subsequent queries
       Given fragment UserFields is defined before defgql :get_user_name with field name

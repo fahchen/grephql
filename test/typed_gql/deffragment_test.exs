@@ -465,6 +465,32 @@ defmodule TypedGql.DeffragmentTest do
       end
     end
 
+    # The name being absent and the name being defined further down produce the
+    # same failure, and the second is the likelier mistake, so the message has
+    # to raise it rather than leave the author rereading their spelling.
+    test "the undefined spread error offers definition order as the other cause" do
+      error =
+        assert_raise CompileError, fn ->
+          Code.compile_string("""
+          defmodule TypedGql.Test.ForwardSpreadHint do
+            use TypedGql,
+              otp_app: :typed_gql,
+              source: "test/support/schemas/minimal.json"
+
+            deffragment "fragment UserDetails on User { ...UserName email }"
+            deffragment "fragment UserName on User { name }"
+          end
+          """)
+        end
+
+      # The message is hard-wrapped, so match against it unwrapped.
+      description = String.replace(error.description, ~r/\s+/, " ")
+
+      assert description =~ "or it is defined after this point"
+      assert description =~ "GraphQL forbids fragment cycles"
+      assert description =~ "Fragments defined inside a single query string are exempt"
+    end
+
     test "fragment with invalid field raises" do
       assert_raise CompileError, ~r/does not exist on type/, fn ->
         Code.compile_string("""

@@ -206,6 +206,27 @@ defmodule TypedGql.GeneratorHelpers do
   end
 
   @doc """
+  Builds the compile error for spreads naming a fragment that is not in scope.
+
+  Names the second, likelier cause alongside the obvious one: `deffragment`
+  resolves lexically, so a fragment defined further down the module is not
+  visible yet.
+  """
+  @spec undefined_spread_message([String.t()]) :: String.t()
+  def undefined_spread_message(names) do
+    """
+    undefined fragment spread: #{Enum.map_join(names, ", ", &"...#{&1}")}
+
+    Either no fragment of that name is defined, or it is defined after this
+    point: a deffragment compiles as it is expanded, so it sees only the
+    fragments above it. GraphQL forbids fragment cycles, so the definitions
+    form a DAG and can always be reordered to put each one before its uses.
+    Fragments defined inside a single query string are exempt — there, order
+    does not matter.\
+    """
+  end
+
+  @doc """
   Reverses accumulated field definitions and extracts cast field names.
 
   Takes the reversed accumulators from a reduce pass and returns
