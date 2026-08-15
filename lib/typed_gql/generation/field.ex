@@ -6,9 +6,8 @@ defmodule TypedGql.Generation.Field do
   so lifecycle plugins can read GraphQL context (`query_field`/`schema_field`)
   and mutate generation intent (e.g. set `resolved.nullable` to `true`).
 
-  Lowering rebuilds the field tuple from `resolved` plus the names via
-  `TypedGql.GeneratorHelpers`, so a plugin mutating `resolved` flows through
-  naturally.
+  Lowering rebuilds the field definition from `resolved` plus the names, so a
+  plugin mutating `resolved` flows through naturally.
   """
   use TypedStructor
 

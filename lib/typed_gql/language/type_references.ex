@@ -1,5 +1,7 @@
 defmodule TypedGql.Language.NamedType do
-  @moduledoc false
+  @moduledoc """
+  A type referred to by name, such as `User`.
+  """
   use TypedStructor
 
   typed_structor do
@@ -9,7 +11,9 @@ defmodule TypedGql.Language.NamedType do
 end
 
 defmodule TypedGql.Language.ListType do
-  @moduledoc false
+  @moduledoc """
+  A list type, written `[Type]`.
+  """
   use TypedStructor
 
   typed_structor do
@@ -19,7 +23,9 @@ defmodule TypedGql.Language.ListType do
 end
 
 defmodule TypedGql.Language.NonNullType do
-  @moduledoc false
+  @moduledoc """
+  A non-null type, written `Type!`.
+  """
   use TypedStructor
 
   typed_structor do

@@ -1,5 +1,7 @@
 defmodule TypedGql.Language.IntValue do
-  @moduledoc false
+  @moduledoc """
+  An integer literal.
+  """
   use TypedStructor
 
   typed_structor do
@@ -9,7 +11,9 @@ defmodule TypedGql.Language.IntValue do
 end
 
 defmodule TypedGql.Language.FloatValue do
-  @moduledoc false
+  @moduledoc """
+  A float literal.
+  """
   use TypedStructor
 
   typed_structor do
@@ -19,7 +23,9 @@ defmodule TypedGql.Language.FloatValue do
 end
 
 defmodule TypedGql.Language.StringValue do
-  @moduledoc false
+  @moduledoc """
+  A string literal, from either the quoted or the block-string form.
+  """
   use TypedStructor
 
   typed_structor do
@@ -29,7 +35,9 @@ defmodule TypedGql.Language.StringValue do
 end
 
 defmodule TypedGql.Language.BooleanValue do
-  @moduledoc false
+  @moduledoc """
+  A `true` or `false` literal.
+  """
   use TypedStructor
 
   typed_structor do
@@ -39,7 +47,9 @@ defmodule TypedGql.Language.BooleanValue do
 end
 
 defmodule TypedGql.Language.NullValue do
-  @moduledoc false
+  @moduledoc """
+  The `null` literal.
+  """
   use TypedStructor
 
   typed_structor do
@@ -48,7 +58,9 @@ defmodule TypedGql.Language.NullValue do
 end
 
 defmodule TypedGql.Language.EnumValue do
-  @moduledoc false
+  @moduledoc """
+  An unquoted enum member literal, such as `ACTIVE`.
+  """
   use TypedStructor
 
   typed_structor do
@@ -58,7 +70,9 @@ defmodule TypedGql.Language.EnumValue do
 end
 
 defmodule TypedGql.Language.ListValue do
-  @moduledoc false
+  @moduledoc """
+  A list literal, written `[...]`.
+  """
   use TypedStructor
 
   typed_structor do
@@ -68,7 +82,9 @@ defmodule TypedGql.Language.ListValue do
 end
 
 defmodule TypedGql.Language.ObjectValue do
-  @moduledoc false
+  @moduledoc """
+  An input object literal, written `{...}`.
+  """
   use TypedStructor
 
   typed_structor do
@@ -78,7 +94,9 @@ defmodule TypedGql.Language.ObjectValue do
 end
 
 defmodule TypedGql.Language.ObjectField do
-  @moduledoc false
+  @moduledoc """
+  A single name/value pair inside an input object literal.
+  """
   use TypedStructor
 
   typed_structor do

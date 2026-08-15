@@ -1,5 +1,8 @@
 defmodule TypedGql.Schema.Type do
-  @moduledoc false
+  @moduledoc """
+  A named type in a loaded schema: object, interface, union, enum, scalar or
+  input object, with whichever shape its kind gives it.
+  """
   use TypedStructor
 
   alias TypedGql.Schema.EnumValue

@@ -1,5 +1,8 @@
 defmodule TypedGql.Language.ScalarTypeDefinition do
-  @moduledoc false
+  @moduledoc """
+  A `scalar` definition, introducing a leaf type whose representation the
+  service decides.
+  """
   use TypedStructor
 
   typed_structor do
@@ -11,7 +14,10 @@ defmodule TypedGql.Language.ScalarTypeDefinition do
 end
 
 defmodule TypedGql.Language.ObjectTypeDefinition do
-  @moduledoc false
+  @moduledoc """
+  A `type` definition: a concrete object type, the interfaces it implements
+  and the fields it exposes.
+  """
   use TypedStructor
 
   typed_structor do
@@ -25,7 +31,9 @@ defmodule TypedGql.Language.ObjectTypeDefinition do
 end
 
 defmodule TypedGql.Language.InterfaceTypeDefinition do
-  @moduledoc false
+  @moduledoc """
+  An `interface` definition: the fields every implementing type must provide.
+  """
   use TypedStructor
 
   typed_structor do
@@ -39,7 +47,9 @@ defmodule TypedGql.Language.InterfaceTypeDefinition do
 end
 
 defmodule TypedGql.Language.UnionTypeDefinition do
-  @moduledoc false
+  @moduledoc """
+  A `union` definition: the set of object types a value of this type may be.
+  """
   use TypedStructor
 
   typed_structor do
@@ -52,7 +62,9 @@ defmodule TypedGql.Language.UnionTypeDefinition do
 end
 
 defmodule TypedGql.Language.EnumTypeDefinition do
-  @moduledoc false
+  @moduledoc """
+  An `enum` definition: the set of named values the type admits.
+  """
   use TypedStructor
 
   typed_structor do
@@ -65,7 +77,10 @@ defmodule TypedGql.Language.EnumTypeDefinition do
 end
 
 defmodule TypedGql.Language.InputObjectTypeDefinition do
-  @moduledoc false
+  @moduledoc """
+  An `input` definition: an object type usable only as an argument or
+  variable value.
+  """
   use TypedStructor
 
   typed_structor do
@@ -78,7 +93,10 @@ defmodule TypedGql.Language.InputObjectTypeDefinition do
 end
 
 defmodule TypedGql.Language.FieldDefinition do
-  @moduledoc false
+  @moduledoc """
+  A field declared on an object or interface type, with the arguments it
+  accepts and the type it returns.
+  """
   use TypedStructor
 
   typed_structor do
@@ -93,7 +111,10 @@ defmodule TypedGql.Language.FieldDefinition do
 end
 
 defmodule TypedGql.Language.InputValueDefinition do
-  @moduledoc false
+  @moduledoc """
+  An input position — an argument or an input object field — with the type it
+  accepts and the default it falls back to.
+  """
   use TypedStructor
 
   typed_structor do
@@ -107,7 +128,9 @@ defmodule TypedGql.Language.InputValueDefinition do
 end
 
 defmodule TypedGql.Language.EnumValueDefinition do
-  @moduledoc false
+  @moduledoc """
+  A single member declared by an enum type definition.
+  """
   use TypedStructor
 
   typed_structor do

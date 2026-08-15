@@ -1,5 +1,13 @@
 defmodule TypedGql.Language do
-  @moduledoc false
+  @moduledoc """
+  The abstract syntax tree of a parsed GraphQL document.
+
+  Each `TypedGql.Language.*` module is one node of the GraphQL grammar, and the
+  types below name the alternatives the grammar allows at a given position: a
+  selection, a value, a type reference, or a top-level definition. Generation
+  plugins see these nodes as the query *as written*, next to the loaded
+  `TypedGql.Schema` describing what the server actually offers.
+  """
 
   @type selection_t() ::
           TypedGql.Language.Field.t()
@@ -37,7 +45,10 @@ defmodule TypedGql.Language do
           | TypedGql.Language.TypeExtensionDefinition.t()
 
   defmodule Source do
-    @moduledoc false
+    @moduledoc """
+    The raw GraphQL text a document was parsed from, and the label used for it
+    when reporting errors.
+    """
     use TypedStructor
 
     typed_structor do
@@ -47,7 +58,10 @@ defmodule TypedGql.Language do
   end
 
   defmodule Document do
-    @moduledoc false
+    @moduledoc """
+    A parsed GraphQL document: the root of the tree, holding every operation,
+    fragment and type definition the source declared.
+    """
     use TypedStructor
 
     typed_structor do

@@ -1,5 +1,8 @@
 defmodule TypedGql.Schema.Directive do
-  @moduledoc false
+  @moduledoc """
+  A directive a loaded schema declares, along with the locations it may be
+  applied to.
+  """
   use TypedStructor
 
   alias TypedGql.Schema.InputValue

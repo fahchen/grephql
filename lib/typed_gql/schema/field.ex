@@ -1,5 +1,7 @@
 defmodule TypedGql.Schema.Field do
-  @moduledoc false
+  @moduledoc """
+  A field an object or interface type exposes in a loaded schema.
+  """
   use TypedStructor
 
   alias TypedGql.Schema.InputValue

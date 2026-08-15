@@ -1,5 +1,7 @@
 defmodule TypedGql.Schema.EnumValue do
-  @moduledoc false
+  @moduledoc """
+  One member of an enum type in a loaded schema.
+  """
   use TypedStructor
 
   typed_structor do

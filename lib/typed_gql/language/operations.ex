@@ -1,5 +1,8 @@
 defmodule TypedGql.Language.OperationDefinition do
-  @moduledoc false
+  @moduledoc """
+  A query, mutation or subscription operation, whether written with the
+  operation keyword or in the shorthand selection-set form.
+  """
   use TypedStructor
 
   typed_structor do
@@ -15,7 +18,9 @@ defmodule TypedGql.Language.OperationDefinition do
 end
 
 defmodule TypedGql.Language.SelectionSet do
-  @moduledoc false
+  @moduledoc """
+  A braced block of selections requested from one type.
+  """
   use TypedStructor
 
   typed_structor do
@@ -25,7 +30,10 @@ defmodule TypedGql.Language.SelectionSet do
 end
 
 defmodule TypedGql.Language.Field do
-  @moduledoc false
+  @moduledoc """
+  A field selection: a name, optional alias, arguments, directives and
+  sub-selections.
+  """
   use TypedStructor
 
   typed_structor do
@@ -39,7 +47,9 @@ defmodule TypedGql.Language.Field do
 end
 
 defmodule TypedGql.Language.Argument do
-  @moduledoc false
+  @moduledoc """
+  A single argument supplied to a field or a directive.
+  """
   use TypedStructor
 
   typed_structor do
@@ -50,7 +60,9 @@ defmodule TypedGql.Language.Argument do
 end
 
 defmodule TypedGql.Language.Variable do
-  @moduledoc false
+  @moduledoc """
+  A use of an operation variable, written `$name`.
+  """
   use TypedStructor
 
   typed_structor do
@@ -60,7 +72,10 @@ defmodule TypedGql.Language.Variable do
 end
 
 defmodule TypedGql.Language.VariableDefinition do
-  @moduledoc false
+  @moduledoc """
+  A variable declared in an operation's signature, with the type it must
+  satisfy and the default it falls back to.
+  """
   use TypedStructor
 
   typed_structor do
@@ -73,7 +88,9 @@ defmodule TypedGql.Language.VariableDefinition do
 end
 
 defmodule TypedGql.Language.Directive do
-  @moduledoc false
+  @moduledoc """
+  A directive applied to a node, written `@name(...)`.
+  """
   use TypedStructor
 
   typed_structor do
@@ -84,7 +101,10 @@ defmodule TypedGql.Language.Directive do
 end
 
 defmodule TypedGql.Language.Fragment do
-  @moduledoc false
+  @moduledoc """
+  A named fragment definition: a type condition and the selections it
+  contributes wherever it is spread.
+  """
   use TypedStructor
 
   typed_structor do
@@ -98,7 +118,9 @@ defmodule TypedGql.Language.Fragment do
 end
 
 defmodule TypedGql.Language.FragmentSpread do
-  @moduledoc false
+  @moduledoc """
+  A spread of a named fragment into a selection set, written `...Name`.
+  """
   use TypedStructor
 
   typed_structor do
@@ -109,7 +131,9 @@ defmodule TypedGql.Language.FragmentSpread do
 end
 
 defmodule TypedGql.Language.InlineFragment do
-  @moduledoc false
+  @moduledoc """
+  An inline fragment: an optional type condition and the selections it guards.
+  """
   use TypedStructor
 
   typed_structor do

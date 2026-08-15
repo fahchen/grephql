@@ -1,5 +1,10 @@
 defmodule TypedGql.Language.SchemaDefinition do
-  @moduledoc false
+  @moduledoc """
+  A schema definition: the root operation types a service exposes.
+
+  The parser emits `TypedGql.Language.SchemaDeclaration` for the `schema { ... }`
+  block; this node stays in the definition union for compatibility.
+  """
   use TypedStructor
 
   typed_structor do
@@ -11,7 +16,10 @@ defmodule TypedGql.Language.SchemaDefinition do
 end
 
 defmodule TypedGql.Language.SchemaDeclaration do
-  @moduledoc false
+  @moduledoc """
+  A `schema { ... }` block declaring which types serve as the query, mutation
+  and subscription roots.
+  """
   use TypedStructor
 
   typed_structor do
@@ -23,7 +31,10 @@ defmodule TypedGql.Language.SchemaDeclaration do
 end
 
 defmodule TypedGql.Language.DirectiveDefinition do
-  @moduledoc false
+  @moduledoc """
+  A `directive @name on ...` definition: where a custom directive may be
+  applied and whether it may repeat.
+  """
   use TypedStructor
 
   typed_structor do
@@ -38,7 +49,9 @@ defmodule TypedGql.Language.DirectiveDefinition do
 end
 
 defmodule TypedGql.Language.TypeExtensionDefinition do
-  @moduledoc false
+  @moduledoc """
+  An `extend` definition, adding members to a type declared elsewhere.
+  """
   use TypedStructor
 
   typed_structor do

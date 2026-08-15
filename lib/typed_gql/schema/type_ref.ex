@@ -1,5 +1,8 @@
 defmodule TypedGql.Schema.TypeRef do
-  @moduledoc false
+  @moduledoc """
+  A reference to a type in a loaded schema, wrapping a named type in the list
+  and non-null modifiers that apply to it.
+  """
   use TypedStructor
 
   @type kind() ::
