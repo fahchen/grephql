@@ -1,4 +1,4 @@
-# typedGql
+# TypedGql
 
 Compile-time GraphQL client for Elixir using Ecto embedded schemas.
 
@@ -11,7 +11,7 @@ Run `mix precommit` before every commit. It runs:
 - `format`
 - `credo --strict`
 - `dialyzer`
-- `test`
+- `test --cover` (coverage threshold is 100%, so an uncovered branch fails the build)
 
 Do not commit if `mix precommit` fails. Fix all issues first.
 
@@ -20,7 +20,7 @@ Do not commit if `mix precommit` fails. Fix all issues first.
 - Use `typed_structor` for internal data structs (AST, schema types)
 - Use `ecto_typed_schema` (embedded schemas) for generated GraphQL types
 - Use `Ecto.Type` for custom scalar and enum serialization
-- Use `mimic` for mocking in tests
+- Use `Req.Test` for HTTP stubbing in tests; integration tests get it from `TypedGql.IntegrationCase`
 - Never use `any()` or `term()` in typespecs unless the value is genuinely unconstrained
 - Always use parentheses in `@type` definitions: `@type foo() :: bar()`, not `@type foo :: bar`
 - Function ordering: public functions above private. If a private function is only used by one public function, place it directly below that public function. In test files, private helpers go below test cases.
@@ -39,7 +39,7 @@ Do not commit if `mix precommit` fails. Fix all issues first.
 - `ecto` + `ecto_typed_schema` — embedded schemas, changesets, type system
 - `typed_structor` — internal struct definitions with auto typespecs
 - `req` — HTTP client for runtime query execution
-- `jason` — JSON encoding/decoding
-- `mimic` — test mocking
+- `jason` — optional JSON fallback for Elixir < 1.18
+- `plug` — Plug.Conn assertions in Req.Test stubs (test only)
 - `credo` — static analysis
 - `dialyxir` — dialyzer integration

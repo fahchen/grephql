@@ -19,7 +19,7 @@ defmodule TypedGql.MixProject do
       description: description(),
       package: package(),
       docs: docs(),
-      name: "typedGql",
+      name: "TypedGql",
       source_url: @source_url
     ]
   end
@@ -48,7 +48,6 @@ defmodule TypedGql.MixProject do
       {:ecto_typed_schema, "~> 0.1"},
       {:typed_structor, "~> 0.6"},
       {:plug, "~> 1.0", only: :test},
-      {:mimic, "~> 2.3", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
