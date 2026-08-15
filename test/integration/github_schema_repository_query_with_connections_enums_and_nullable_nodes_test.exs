@@ -18,9 +18,7 @@ defmodule TypedGql.Integration.GithubSchemaRepositoryQueryWithConnectionsEnumsAn
       source: "../support/schemas/github.json",
       endpoint: "https://api.github.com/graphql",
       req_options: [
-        plug:
-          {Req.Test,
-           TypedGql.Integration.GithubSchemaRepositoryQueryWithConnectionsEnumsAndNullableNodesTest.Client}
+        plug: {Req.Test, __MODULE__}
       ],
       scalars: %{
         # GitHub-specific scalars not covered by builtins
@@ -123,14 +121,25 @@ defmodule TypedGql.Integration.GithubSchemaRepositoryQueryWithConnectionsEnumsAn
                created_at: ~U[2011-01-09 22:44:31Z],
                stargazer_count: 25_000,
                is_private: false,
-               owner: %{login: "elixir-lang"}
+               owner: %Client.RepositoryOverview.Result.Repository.Owner{login: "elixir-lang"}
              } = result.data.repository
 
-      assert %{
+      assert %Client.RepositoryOverview.Result.Repository.Issues.Nodes{
                state: :open,
                created_at: ~U[2025-05-01 09:00:00Z],
-               author: %{login: "josevalim"},
-               labels: %{nodes: [%{name: "Kind:Bug"}, %{name: "Area:Compiler"}]}
+               author: %Client.RepositoryOverview.Result.Repository.Issues.Nodes.Author{
+                 login: "josevalim"
+               },
+               labels: %Client.RepositoryOverview.Result.Repository.Issues.Nodes.Labels{
+                 nodes: [
+                   %Client.RepositoryOverview.Result.Repository.Issues.Nodes.Labels.Nodes{
+                     name: "Kind:Bug"
+                   },
+                   %Client.RepositoryOverview.Result.Repository.Issues.Nodes.Labels.Nodes{
+                     name: "Area:Compiler"
+                   }
+                 ]
+               }
              } = hd(result.data.repository.issues.nodes)
     end
 
@@ -138,7 +147,12 @@ defmodule TypedGql.Integration.GithubSchemaRepositoryQueryWithConnectionsEnumsAn
       result = fetch()
 
       assert [_first, nil, orphan] = result.data.repository.issues.nodes
-      assert %{number: 14_002, author: nil, labels: %{nodes: []}} = orphan
+
+      assert %Client.RepositoryOverview.Result.Repository.Issues.Nodes{
+               number: 14_002,
+               author: nil,
+               labels: %Client.RepositoryOverview.Result.Repository.Issues.Nodes.Labels{nodes: []}
+             } = orphan
     end
   end
 

@@ -44,6 +44,33 @@ defmodule TypedGql.VariablesDumperTest do
                VariablesDumper.dump(variables, %{id: "u1"})
     end
 
+    test "an outer string key and an inner atom key both resolve" do
+      variables = %Params{
+        id: "u1",
+        input: %Input{title: "T", metadata: %Metadata{seo_title: "S"}}
+      }
+
+      dumped =
+        VariablesDumper.dump(variables, %{
+          "id" => "u1",
+          "input" => %{title: "T", metadata: %{seo_title: "S"}}
+        })
+
+      assert dumped == %{id: "u1", input: %{title: "T", metadata: %{seoTitle: "S"}}}
+    end
+
+    test "an outer atom key and an inner string key both resolve" do
+      variables = %Params{id: "u1", input: %Input{title: "T", tags: [%Tag{name: "a"}]}}
+
+      dumped =
+        VariablesDumper.dump(variables, %{
+          id: "u1",
+          input: %{"title" => "T", "tags" => [%{"name" => "a"}]}
+        })
+
+      assert dumped == %{id: "u1", input: %{title: "T", tags: [%{name: "a"}]}}
+    end
+
     test "params given as an empty map prune every field" do
       assert VariablesDumper.dump(%Params{id: "u1", show_email: true}, %{}) == %{}
     end

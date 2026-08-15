@@ -19,7 +19,7 @@ defmodule TypedGql.Integration.OperationVariablesCarryingDefaultValuesTest do
       source: "../support/schemas/integration.json",
       endpoint: "https://api.example.com/graphql",
       req_options: [
-        plug: {Req.Test, TypedGql.Integration.OperationVariablesCarryingDefaultValuesTest.Client}
+        plug: {Req.Test, __MODULE__}
       ]
 
     # $term is nullable but defaulted, and `search(query:)` takes String! —

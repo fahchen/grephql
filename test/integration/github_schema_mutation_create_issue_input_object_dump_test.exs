@@ -17,9 +17,7 @@ defmodule TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTes
       source: "../support/schemas/github.json",
       endpoint: "https://api.github.com/graphql",
       req_options: [
-        plug:
-          {Req.Test,
-           TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTest.Client}
+        plug: {Req.Test, __MODULE__}
       ],
       scalars: %{
         # GitHub-specific scalars not covered by builtins
@@ -122,7 +120,7 @@ defmodule TypedGql.Integration.GithubSchemaMutationCreateIssueInputObjectDumpTes
                title: "Bug",
                state: :open,
                created_at: ~U[2025-06-01 12:00:00Z],
-               author: %{login: "octocat"}
+               author: %Client.CreateIssue.Result.CreateIssue.Issue.Author{login: "octocat"}
              } = result.data.create_issue.issue
     end
   end

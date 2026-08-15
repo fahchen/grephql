@@ -18,9 +18,7 @@ defmodule TypedGql.Integration.ResponseWithGraphqlErrorsAlongsidePartialAndNullD
       source: "../support/schemas/integration.json",
       endpoint: "https://api.example.com/graphql",
       req_options: [
-        plug:
-          {Req.Test,
-           TypedGql.Integration.ResponseWithGraphqlErrorsAlongsidePartialAndNullDataTest.Client}
+        plug: {Req.Test, __MODULE__}
       ]
 
     defgql(:get_user, """

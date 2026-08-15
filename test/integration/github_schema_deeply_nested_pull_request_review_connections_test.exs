@@ -19,9 +19,7 @@ defmodule TypedGql.Integration.GithubSchemaDeeplyNestedPullRequestReviewConnecti
       source: "../support/schemas/github.json",
       endpoint: "https://api.github.com/graphql",
       req_options: [
-        plug:
-          {Req.Test,
-           TypedGql.Integration.GithubSchemaDeeplyNestedPullRequestReviewConnectionsTest.Client}
+        plug: {Req.Test, __MODULE__}
       ],
       scalars: %{
         # GitHub-specific scalars not covered by builtins
@@ -71,6 +69,11 @@ defmodule TypedGql.Integration.GithubSchemaDeeplyNestedPullRequestReviewConnecti
     }
     """)
   end
+
+  # The generated modules mirror the document, so the deepest struct names run
+  # past the line limit; alias the pull-request node once and spell the rest of
+  # each path out from there.
+  alias Client.PullRequestBoard.Result.Repository.PullRequests.Nodes, as: PullRequest
 
   describe "generated shape" do
     test "module nesting mirrors the document down to the commit rollup" do
@@ -143,18 +146,32 @@ defmodule TypedGql.Integration.GithubSchemaDeeplyNestedPullRequestReviewConnecti
     test "a full deep chain decodes review and rollup enums end to end" do
       result = fetch()
 
-      assert %{
+      assert %PullRequest{
                title: "Speed up compiler",
                number: 501,
                state: :open,
-               author: %{login: "josevalim"},
-               reviews: %{nodes: [%{state: :approved, author: %{login: "ericmj"}} | _rest]},
-               commits: %{
+               author: %PullRequest.Author{
+                 login: "josevalim"
+               },
+               reviews: %PullRequest.Reviews{
                  nodes: [
-                   %{
-                     commit: %{
+                   %PullRequest.Reviews.Nodes{
+                     state: :approved,
+                     author: %PullRequest.Reviews.Nodes.Author{
+                       login: "ericmj"
+                     }
+                   }
+                   | _rest
+                 ]
+               },
+               commits: %PullRequest.Commits{
+                 nodes: [
+                   %PullRequest.Commits.Nodes{
+                     commit: %PullRequest.Commits.Nodes.Commit{
                        message: "Cache beam files",
-                       status_check_rollup: %{state: :success}
+                       status_check_rollup: %PullRequest.Commits.Nodes.Commit.StatusCheckRollup{
+                         state: :success
+                       }
                      }
                    }
                  ]
@@ -173,14 +190,28 @@ defmodule TypedGql.Integration.GithubSchemaDeeplyNestedPullRequestReviewConnecti
       result = fetch()
 
       assert [_reviewed, fresh] = result.data.repository.pull_requests.nodes
-      assert [%{commit: %{status_check_rollup: nil}}] = fresh.commits.nodes
+
+      assert [
+               %PullRequest.Commits.Nodes{
+                 commit: %PullRequest.Commits.Nodes.Commit{
+                   status_check_rollup: nil
+                 }
+               }
+             ] = fresh.commits.nodes
     end
 
     test "a null review author (deleted account) survives as nil" do
       result = fetch()
 
       assert [reviewed, _fresh] = result.data.repository.pull_requests.nodes
-      assert [_approved, %{state: :commented, author: nil}] = reviewed.reviews.nodes
+
+      assert [
+               _approved,
+               %PullRequest.Reviews.Nodes{
+                 state: :commented,
+                 author: nil
+               }
+             ] = reviewed.reviews.nodes
     end
   end
 

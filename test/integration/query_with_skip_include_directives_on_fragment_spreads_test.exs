@@ -22,9 +22,7 @@ defmodule TypedGql.Integration.QueryWithSkipIncludeDirectivesOnFragmentSpreadsTe
       source: "../support/schemas/integration.json",
       endpoint: "https://api.example.com/graphql",
       req_options: [
-        plug:
-          {Req.Test,
-           TypedGql.Integration.QueryWithSkipIncludeDirectivesOnFragmentSpreadsTest.Client}
+        plug: {Req.Test, __MODULE__}
       ]
 
     defgql(:conditional_spreads, """

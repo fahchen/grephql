@@ -16,8 +16,7 @@ defmodule TypedGql.Integration.QueryWithNullableAndNonNullObjectListShapesTest d
       source: "../support/schemas/integration.json",
       endpoint: "https://api.example.com/graphql",
       req_options: [
-        plug:
-          {Req.Test, TypedGql.Integration.QueryWithNullableAndNonNullObjectListShapesTest.Client}
+        plug: {Req.Test, __MODULE__}
       ]
 
     defgql(:post_board, """
@@ -68,8 +67,10 @@ defmodule TypedGql.Integration.QueryWithNullableAndNonNullObjectListShapesTest d
           "drafts" => []
         })
 
-      assert [%{id: "p1", status: :published}, %{id: "p2", status: :draft}] =
-               result.data.user.posts
+      assert [
+               %Client.PostBoard.Result.User.Posts{id: "p1", status: :published},
+               %Client.PostBoard.Result.User.Posts{id: "p2", status: :draft}
+             ] = result.data.user.posts
     end
 
     test "a null [Post] list stays nil instead of becoming []" do
@@ -88,7 +89,10 @@ defmodule TypedGql.Integration.QueryWithNullableAndNonNullObjectListShapesTest d
           ]
         })
 
-      assert [%{id: "d1", status: :draft, published_at: nil}, nil] = result.data.drafts
+      assert [
+               %Client.PostBoard.Result.Drafts{id: "d1", status: :draft, published_at: nil},
+               nil
+             ] = result.data.drafts
     end
   end
 

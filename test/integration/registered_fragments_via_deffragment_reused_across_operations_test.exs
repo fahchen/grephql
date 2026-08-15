@@ -18,9 +18,7 @@ defmodule TypedGql.Integration.RegisteredFragmentsViaDeffragmentReusedAcrossOper
       source: "../support/schemas/integration.json",
       endpoint: "https://api.example.com/graphql",
       req_options: [
-        plug:
-          {Req.Test,
-           TypedGql.Integration.RegisteredFragmentsViaDeffragmentReusedAcrossOperationsTest.Client}
+        plug: {Req.Test, __MODULE__}
       ]
 
     deffragment("fragment UserCore on User { id name role }")
@@ -102,10 +100,17 @@ defmodule TypedGql.Integration.RegisteredFragmentsViaDeffragmentReusedAcrossOper
     test "the nested spread decodes the author object inside each draft" do
       result = fetch_drafts()
 
-      assert [%{id: "p1", title: "Draft post", status: :draft, author: author}] =
-               result.data.drafts
+      assert [
+               %Client.ListDrafts.Result.Drafts{
+                 id: "p1",
+                 title: "Draft post",
+                 status: :draft,
+                 author: author
+               }
+             ] = result.data.drafts
 
-      assert %{id: "u1", name: "Alice", role: :admin} = author
+      assert %Client.ListDrafts.Result.Drafts.Author{id: "u1", name: "Alice", role: :admin} =
+               author
     end
   end
 

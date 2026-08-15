@@ -14,9 +14,7 @@ defmodule TypedGql.Integration.QueryWithSameFieldAliasedTwiceUnderDifferentArgum
       source: "../support/schemas/integration.json",
       endpoint: "https://api.example.com/graphql",
       req_options: [
-        plug:
-          {Req.Test,
-           TypedGql.Integration.QueryWithSameFieldAliasedTwiceUnderDifferentArgumentsTest.Client}
+        plug: {Req.Test, __MODULE__}
       ]
 
     defgql(:pair_of_users, """

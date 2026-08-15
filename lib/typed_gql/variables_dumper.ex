@@ -9,6 +9,10 @@ defmodule TypedGql.VariablesDumper do
   "clear this value" in an update mutation. Pruning the dump against the
   original params preserves the distinction — a key the caller passed
   (even as `nil`) is sent, a key they omitted is not.
+
+  Params are read the way `Ecto.Changeset.cast/3` reads them: a field is
+  looked up under its atom name and then under its string name, so atom
+  keys, string keys, and a mix of the two across nesting levels all work.
   """
 
   @spec dump(struct(), map()) :: map()

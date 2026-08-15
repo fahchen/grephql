@@ -15,9 +15,7 @@ defmodule TypedGql.Integration.ClientCompileTimeReqOptionsOverriddenAtCallSiteTe
       source: "../support/schemas/integration.json",
       endpoint: "https://compile.example.com/graphql",
       req_options: [
-        plug:
-          {Req.Test,
-           TypedGql.Integration.ClientCompileTimeReqOptionsOverriddenAtCallSiteTest.Client},
+        plug: {Req.Test, __MODULE__},
         headers: [{"x-config-layer", "compile-time"}]
       ]
 

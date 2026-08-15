@@ -18,9 +18,7 @@ defmodule TypedGql.Integration.QuerySelectingUnionAndInterfaceVariantsViaFragmen
       source: "../support/schemas/integration.json",
       endpoint: "https://api.example.com/graphql",
       req_options: [
-        plug:
-          {Req.Test,
-           TypedGql.Integration.QuerySelectingUnionAndInterfaceVariantsViaFragmentsTest.Client}
+        plug: {Req.Test, __MODULE__}
       ]
 
     defgql(:site_search, """
@@ -119,7 +117,16 @@ defmodule TypedGql.Integration.QuerySelectingUnionAndInterfaceVariantsViaFragmen
     test "a fragment spread inside a variant decodes its nested object" do
       result = fetch()
 
-      assert [_user, %{author: %{id: "u1", name: "Alice", role: :admin}}] = result.data.search
+      assert [
+               _user,
+               %Client.SiteSearch.Result.Search.Post{
+                 author: %Client.SiteSearch.Result.Search.Post.Author{
+                   id: "u1",
+                   name: "Alice",
+                   role: :admin
+                 }
+               }
+             ] = result.data.search
     end
 
     test "interface elements cast to variant structs and a null element survives" do

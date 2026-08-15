@@ -16,9 +16,7 @@ defmodule TypedGql.Integration.MutationVariablesFailingChangesetValidationBefore
       source: "../support/schemas/integration.json",
       endpoint: "https://api.example.com/graphql",
       req_options: [
-        plug:
-          {Req.Test,
-           TypedGql.Integration.MutationVariablesFailingChangesetValidationBeforeAnyRequestTest.Client}
+        plug: {Req.Test, __MODULE__}
       ]
 
     defgql(:create_user, """

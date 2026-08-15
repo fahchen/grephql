@@ -8,7 +8,7 @@ defmodule TypedGql.IntegrationTest do
       otp_app: :typed_gql,
       source: "support/schemas/integration.json",
       endpoint: "https://api.example.com/graphql",
-      req_options: [plug: {Req.Test, TypedGql.IntegrationTest.Client}]
+      req_options: [plug: {Req.Test, __MODULE__}]
 
     deffragment """
     fragment UserCore on User {
@@ -259,8 +259,10 @@ defmodule TypedGql.IntegrationTest do
 
       assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
-      assert %{bio: "Hello world", avatar_url: "https://example.com/avatar.png"} =
-               result.data.user.profile
+      assert %Client.GetUser.Result.User.Profile{
+               bio: "Hello world",
+               avatar_url: "https://example.com/avatar.png"
+             } = result.data.user.profile
     end
 
     test "decodes nullable nested object as nil" do
@@ -410,13 +412,18 @@ defmodule TypedGql.IntegrationTest do
       assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       assert [
-               %{
+               %Client.GetUser.Result.User.Posts{
                  title: "First Post",
                  status: :published,
                  published_at: ~U[2025-03-01 12:00:00Z],
                  tags: ["elixir", "graphql"]
                },
-               %{title: "Second Post", status: :draft, published_at: nil, tags: []}
+               %Client.GetUser.Result.User.Posts{
+                 title: "Second Post",
+                 status: :draft,
+                 published_at: nil,
+                 tags: []
+               }
              ] = result.data.user.posts
     end
 
@@ -522,8 +529,12 @@ defmodule TypedGql.IntegrationTest do
       assert {:ok, %Result{} = result} =
                Client.create_user(%{input: %{name: "New User", email: "new@example.com"}})
 
-      assert %{id: "42", name: "New User", role: :user, created_at: ~U[2025-06-15 12:00:00Z]} =
-               result.data.create_user
+      assert %Client.CreateUser.Result.CreateUser{
+               id: "42",
+               name: "New User",
+               role: :user,
+               created_at: ~U[2025-06-15 12:00:00Z]
+             } = result.data.create_user
     end
 
     test "mutation with nested input object variables serialized correctly" do
@@ -590,7 +601,8 @@ defmodule TypedGql.IntegrationTest do
       assert {:ok, %Result{} = result} =
                Client.update_user(%{id: "1", input: %{name: "Updated", role: "ADMIN"}})
 
-      assert %{name: "Updated", role: :admin} = result.data.update_user
+      assert %Client.UpdateUser.Result.UpdateUser{name: "Updated", role: :admin} =
+               result.data.update_user
     end
 
     test "mutation with invalid variables returns changeset error" do
@@ -606,7 +618,8 @@ defmodule TypedGql.IntegrationTest do
       assert {:ok, %Result{} = result} =
                Client.create_user_minimal(%{input: %{name: "Shared", email: "s@e.com"}})
 
-      assert %{id: "50", name: "Shared"} = result.data.create_user
+      assert %Client.CreateUserMinimal.Result.CreateUser{id: "50", name: "Shared"} =
+               result.data.create_user
 
       # Both mutations embed the exact same Inputs module (not two copies)
       %{related: module_a} = Client.CreateUser.Variables.__schema__(:embed, :input)
@@ -765,15 +778,22 @@ defmodule TypedGql.IntegrationTest do
                email: "alice@example.com",
                role: :admin,
                created_at: ~U[2025-01-15 10:30:00Z],
-               profile: %{bio: "Elixir dev", avatar_url: "https://img.example.com/alice.png"},
+               profile: %Client.SearchWithFragments.Result.Search.User.Profile{
+                 bio: "Elixir dev",
+                 avatar_url: "https://img.example.com/alice.png"
+               },
                posts: [
-                 %{
+                 %Client.SearchWithFragments.Result.Search.User.Posts{
                    title: "First Post",
                    status: :published,
                    published_at: ~U[2025-03-01 12:00:00Z],
                    tags: ["elixir", "graphql"]
                  },
-                 %{status: :draft, published_at: nil, tags: []}
+                 %Client.SearchWithFragments.Result.Search.User.Posts{
+                   status: :draft,
+                   published_at: nil,
+                   tags: []
+                 }
                ]
              } = alice
 
@@ -785,12 +805,15 @@ defmodule TypedGql.IntegrationTest do
                status: :published,
                published_at: ~U[2025-06-01 08:00:00Z],
                tags: ["graphql", "best-practices"],
-               author: %{
+               author: %Client.SearchWithFragments.Result.Search.Post.Author{
                  id: "2",
                  name: "Bob",
                  role: :user,
                  created_at: ~U[2024-12-01 00:00:00Z],
-                 profile: %{bio: "Writer", avatar_url: nil}
+                 profile: %Client.SearchWithFragments.Result.Search.Post.Author.Profile{
+                   bio: "Writer",
+                   avatar_url: nil
+                 }
                }
              } = post
 
@@ -868,20 +891,23 @@ defmodule TypedGql.IntegrationTest do
                  }
                })
 
-      assert %{
+      assert %Client.CreatePost.Result.CreatePost{
                id: "100",
                title: "Deep Nesting Test",
                body: "Testing deeply nested inputs and responses.",
                status: :draft,
                published_at: nil,
                tags: ["test", "integration"],
-               author: %{
+               author: %Client.CreatePost.Result.CreatePost.Author{
                  id: "1",
                  name: "Alice",
                  email: "alice@example.com",
                  role: :admin,
                  created_at: ~U[2025-01-15 10:30:00Z],
-                 profile: %{bio: "Elixir dev", avatar_url: "https://img.example.com/alice.png"}
+                 profile: %Client.CreatePost.Result.CreatePost.Author.Profile{
+                   bio: "Elixir dev",
+                   avatar_url: "https://img.example.com/alice.png"
+                 }
                }
              } = result.data.create_post
     end
@@ -940,29 +966,38 @@ defmodule TypedGql.IntegrationTest do
       assert {:ok, %Result{} = result} = Client.get_user(%{id: "1"})
 
       # Partial data is decoded
-      assert %{
+      assert %Client.GetUser.Result.User{
                id: "1",
                name: "Alice",
                email: nil,
                role: :admin,
-               profile: %{bio: "Hello", avatar_url: nil}
+               profile: %Client.GetUser.Result.User.Profile{bio: "Hello", avatar_url: nil}
              } = result.data.user
 
       # Nested list with mixed null fields
       assert [
-               %{title: "Published", status: :published, tags: ["elixir"]},
-               %{title: nil, status: :draft, published_at: nil, tags: []}
+               %Client.GetUser.Result.User.Posts{
+                 title: "Published",
+                 status: :published,
+                 tags: ["elixir"]
+               },
+               %Client.GetUser.Result.User.Posts{
+                 title: nil,
+                 status: :draft,
+                 published_at: nil,
+                 tags: []
+               }
              ] = result.data.user.posts
 
       # Errors with extensions
       assert [
-               %{
+               %TypedGql.Error{
                  message: "Field 'title' is null for restricted post",
                  path: ["user", "posts", 1, "title"],
                  locations: [%{"line" => 5, "column" => 9}],
                  extensions: %{"code" => "PERMISSION_DENIED", "retryable" => false}
                },
-               %{
+               %TypedGql.Error{
                  message: "Email is restricted",
                  path: ["user", "email"],
                  locations: nil,
@@ -1032,7 +1067,10 @@ defmodule TypedGql.IntegrationTest do
                status: :archived,
                published_at: nil,
                tags: [],
-               author: %{id: "99", profile: nil}
+               author: %Client.SearchWithFragments.Result.Search.Post.Author{
+                 id: "99",
+                 profile: nil
+               }
              } = post
     end
 
@@ -1064,12 +1102,12 @@ defmodule TypedGql.IntegrationTest do
       assert result.data == nil
 
       assert [
-               %{
+               %TypedGql.Error{
                  message: "Authentication required",
                  extensions: %{"code" => "UNAUTHENTICATED"},
                  path: nil
                },
-               %{extensions: %{"retryAfter" => 30}}
+               %TypedGql.Error{extensions: %{"retryAfter" => 30}}
              ] = result.errors
     end
 
@@ -1140,7 +1178,8 @@ defmodule TypedGql.IntegrationTest do
       assert {:ok, %Result{} = result} =
                Client.create_user(%{input: %{name: "Minimal", email: "min@example.com"}})
 
-      assert %{name: "Minimal", role: :user} = result.data.create_user
+      assert %Client.CreateUser.Result.CreateUser{name: "Minimal", role: :user} =
+               result.data.create_user
     end
 
     test "mutation with nested input, enum, and partial response with errors" do
@@ -1207,19 +1246,23 @@ defmodule TypedGql.IntegrationTest do
                  }
                })
 
-      assert %{
+      assert %Client.CreatePost.Result.CreatePost{
                id: "200",
                title: "Edge Post",
                body: nil,
                status: :published,
                published_at: ~U[2025-12-31 23:59:59Z],
                tags: ["a", "b", "c"],
-               author: %{email: nil, profile: nil}
+               author: %Client.CreatePost.Result.CreatePost.Author{email: nil, profile: nil}
              } = result.data.create_post
 
       # Partial success: data present + warning error
-      assert [%{message: "SEO title too short", extensions: %{"code" => "VALIDATION_WARNING"}}] =
-               result.errors
+      assert [
+               %TypedGql.Error{
+                 message: "SEO title too short",
+                 extensions: %{"code" => "VALIDATION_WARNING"}
+               }
+             ] = result.errors
     end
 
     test "mutation with deeply nested optional input all nil round-trips correctly" do
@@ -1259,13 +1302,13 @@ defmodule TypedGql.IntegrationTest do
       assert {:ok, %Result{} = result} =
                Client.create_post(%{input: %{title: "Bare", tags: []}})
 
-      assert %{
+      assert %Client.CreatePost.Result.CreatePost{
                id: "201",
                body: nil,
                status: :draft,
                published_at: nil,
                tags: [],
-               author: %{name: "System", profile: nil}
+               author: %Client.CreatePost.Result.CreatePost.Author{name: "System", profile: nil}
              } = result.data.create_post
 
       assert result.errors == []
