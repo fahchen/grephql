@@ -42,6 +42,11 @@ defmodule TypedGql.TypeGenerator do
   omit it entirely, and `embeds_many` pins `default: []`, which would report a
   list the server never sent as an empty one.
 
+  A list the schema declares non-null — `[T!]!` and `[T]!` alike — defaults to
+  `[]` rather than `nil`, since its typespec carries no `| nil`. Only a
+  conditional one keeps a `nil` default, for the same reason it loses
+  `embeds_many`.
+
   ## Union/Interface support
 
   When a field's type is a union or interface, inline fragments determine
@@ -895,7 +900,8 @@ defmodule TypedGql.TypeGenerator do
     typename_opts = GeneratorHelpers.typename_opts(resolved)
 
     opts =
-      [{:typed, typed_opts} | source_opt] ++ enum_opts ++ typename_opts ++ embedded_opts
+      [{:typed, typed_opts} | source_opt] ++
+        enum_opts ++ typename_opts ++ embedded_opts ++ list_default_opts(field)
 
     {:field, field.name, resolved.ecto_type, opts}
   end
@@ -905,6 +911,17 @@ defmodule TypedGql.TypeGenerator do
     typed_opts = GeneratorHelpers.embed_typed_opts(kind, field.resolved)
     {kind, field.name, field.embed_module, [{:typed, typed_opts} | source_opt]}
   end
+
+  # A list the schema declares non-null can never be nil, and the generated
+  # typespec already says so, so the struct default has to be the empty list —
+  # `embeds_many` gets this from Ecto, and every other list shape has to ask.
+  defp list_default_opts(
+         %GenField{resolved: %{nullable: false, ecto_type: {:array, _inner}}} = field
+       ) do
+    if SkipInclude.conditional?(field.query_field.directives), do: [], else: [default: []]
+  end
+
+  defp list_default_opts(_field), do: []
 
   # A composite leaf — a union dispatcher, or an object behind `Ecto.Embedded` —
   # takes its typespec from the GraphQL type, because the Ecto type says nothing

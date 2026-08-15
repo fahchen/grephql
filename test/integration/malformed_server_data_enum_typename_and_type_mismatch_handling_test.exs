@@ -45,21 +45,34 @@ defmodule TypedGql.Integration.MalformedServerDataEnumTypenameAndTypeMismatchHan
     """)
   end
 
+  # The baseline the malformed cases below are measured against: an empty list
+  # is a legal, complete value for [SearchResult!]! — non-null constrains
+  # null-ness, not length — and it is how a server reports "no results".
+  describe "well-formed empty result" do
+    test "an empty list decodes as an empty list" do
+      result = fetch(%{"search" => []})
+
+      assert result.data.search == []
+    end
+  end
+
   describe "malformed server data" do
+    # A conforming server cannot send this: a null in a [SearchResult!]! field
+    # is a field error that propagates to the root, arriving as "data": null
+    # with an errors list. Loading it leniently is what we do with the shape
+    # anyway, rather than raising.
     test "a non-null root list sent as null loads as nil instead of erroring" do
-      # Documents current contract: the schema's [SearchResult!]! is not
-      # enforced on load; a null root field simply becomes nil.
       result = fetch(%{"search" => nil})
 
       assert result.data.search == nil
     end
 
-    test "a root field missing from the data map loads as nil" do
-      # Documents current contract: an absent key is treated like an
-      # explicit null rather than a decode error.
+    test "a root field missing from the data map falls back to the schema's empty list" do
+      # The schema promises [SearchResult!]!, and the generated typespec says so
+      # too, so the struct default is [] — never nil — when nothing arrives.
       result = fetch(%{})
 
-      assert result.data.search == nil
+      assert result.data.search == []
     end
 
     test "a null element inside a list of non-null union members survives as nil" do

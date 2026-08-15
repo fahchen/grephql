@@ -57,6 +57,13 @@ defmodule TypedGql.Integration.QueryWithNullableAndNonNullObjectListShapesTest d
 
       assert result_mod.__struct__().drafts == nil
     end
+
+    # The schema promises the list is never null, and the typespec carries no
+    # `| nil`, so the struct default cannot be nil either. embeds_many gets
+    # this from Ecto; every other non-null list shape has to be told.
+    test "a non-null list defaults to the empty list, whatever it lowers to" do
+      assert Client.PostBoard.Result.User.__struct__().posts == []
+    end
   end
 
   describe "loaded response" do
