@@ -106,7 +106,14 @@ defmodule TypedGql.InputTypeGenerator do
           # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
           atom_name = var_name |> Macro.underscore() |> String.to_atom()
 
-          req = if resolved.nullable, do: reqs, else: [atom_name | reqs]
+          # A variable the operation gives a default value is optional for the
+          # caller: leaving it out of the request makes the server apply that
+          # default, which is the whole point of declaring one.
+          req =
+            if resolved.nullable or not is_nil(var_def.default_value),
+              do: reqs,
+              else: [atom_name | reqs]
+
           source_opt = GeneratorHelpers.source_opt(atom_name, var_name)
 
           build_input_field_def(

@@ -59,6 +59,12 @@ Feature: GraphQL query definition and execution
       When the developer calls current_user(endpoint: "https://staging.example.com/graphql")
       Then the query is executed against the overridden endpoint
 
+    Scenario: A variable with a default value is optional for the caller
+      Given an operation declaring "query($term: String! = \"elixir\")"
+      When the developer calls the generated function without that variable
+      Then no changeset error is raised
+      And the variable is absent from the request, so the server applies the default
+
     # GraphQL distinguishes absent from null: absent means "not given", null
     # can mean "clear this value" in an update mutation.
     Scenario: Omitted optional variables are absent from the request, explicit nil is null

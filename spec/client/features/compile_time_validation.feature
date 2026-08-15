@@ -148,6 +148,18 @@ Feature: Compile-time GraphQL validation
       When the developer writes ~GQL with "query($id: String!) { user(id: $id) { name } }"
       Then a compile error is raised indicating type mismatch between "String!" and "ID!"
 
+    # Spec 5.8.5 — the argument can never receive null when a default stands in
+    # for the missing value, so the nullable variable is allowed there.
+    Scenario: A nullable variable with a default is allowed for a non-null argument
+      Given a schema where "user" accepts argument "id" of type "ID!"
+      When the developer writes ~GQL with "query($id: ID = \"1\") { user(id: $id) { name } }"
+      Then the module compiles successfully
+
+    Scenario: A nullable variable defaulting to null is still rejected
+      Given a schema where "user" accepts argument "id" of type "ID!"
+      When the developer writes ~GQL with "query($id: ID = null) { user(id: $id) { name } }"
+      Then a compile error is raised indicating type mismatch between "ID" and "ID!"
+
   Rule: All defined variables must be used
 
     Scenario: Unused variable raises compile error
