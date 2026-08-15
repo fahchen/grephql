@@ -15,6 +15,17 @@ defmodule TypedGql.Test.Variables.Tag do
   typed_embedded_schema do
     field :name, :string
     field :color_hex, :string, source: :colorHex
+    embeds_one :meta, TypedGql.Test.Variables.Metadata
+  end
+end
+
+defmodule TypedGql.Test.Variables.Group do
+  @moduledoc false
+  use TypedGql.EmbeddedSchema
+
+  typed_embedded_schema do
+    field :label, :string
+    embeds_many :tags, TypedGql.Test.Variables.Tag
   end
 end
 
@@ -27,6 +38,7 @@ defmodule TypedGql.Test.Variables.Input do
     field :body, :string
     embeds_one :metadata, TypedGql.Test.Variables.Metadata
     embeds_many :tags, TypedGql.Test.Variables.Tag
+    embeds_many :groups, TypedGql.Test.Variables.Group
   end
 end
 

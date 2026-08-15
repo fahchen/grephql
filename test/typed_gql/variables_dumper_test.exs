@@ -1,6 +1,7 @@
 defmodule TypedGql.VariablesDumperTest do
   use ExUnit.Case, async: true
 
+  alias TypedGql.Test.Variables.Group
   alias TypedGql.Test.Variables.Input
   alias TypedGql.Test.Variables.Metadata
   alias TypedGql.Test.Variables.Params
@@ -127,6 +128,71 @@ defmodule TypedGql.VariablesDumperTest do
       dumped = VariablesDumper.dump(%Params{input: %Input{tags: []}}, %{input: %{tags: []}})
 
       assert dumped == %{input: %{tags: []}}
+    end
+
+    # Unreachable through a generated function, whose struct is cast from these
+    # very params: a mismatch would mean dropping elements the caller gave.
+    test "a params list of a different length leaves the dump whole" do
+      variables = %Params{input: %Input{tags: [%Tag{name: "a"}, %Tag{name: "b"}]}}
+
+      dumped = VariablesDumper.dump(variables, %{input: %{tags: [%{name: "a"}]}})
+
+      assert %{input: %{tags: [_first, _second]}} = dumped
+    end
+
+    test "a non-list where a list of embeds was expected leaves the dump whole" do
+      variables = %Params{input: %Input{tags: [%Tag{name: "a"}]}}
+
+      dumped = VariablesDumper.dump(variables, %{input: %{tags: "not a list"}})
+
+      assert %{input: %{tags: [_only]}} = dumped
+    end
+
+    test "a non-map where a nested embed was expected leaves the dump whole" do
+      variables = %Params{input: %Input{title: "T", metadata: %Metadata{slug: "s"}}}
+
+      dumped = VariablesDumper.dump(variables, %{input: %{metadata: "not a map"}})
+
+      assert %{input: %{metadata: %{slug: "s", seoTitle: nil}}} = dumped
+    end
+  end
+
+  describe "dump/2 with lists and embeds interleaved" do
+    test "every level keeps only the keys its own params carried" do
+      variables = %Params{
+        input: %Input{
+          title: "T",
+          groups: [
+            %Group{label: "g1", tags: [%Tag{name: "a", meta: %Metadata{seo_title: "S"}}]},
+            %Group{label: "g2", tags: [%Tag{name: "b"}]}
+          ]
+        }
+      }
+
+      params = %{
+        input: %{
+          groups: [
+            %{tags: [%{meta: %{seo_title: "S"}}]},
+            %{label: "g2"}
+          ]
+        }
+      }
+
+      # input.title, group 1's label, its tag's name, and group 2's tags are all
+      # absent from the params, so none of them reaches the wire.
+      assert VariablesDumper.dump(variables, params) == %{
+               input: %{groups: [%{tags: [%{meta: %{seoTitle: "S"}}]}, %{label: "g2"}]}
+             }
+    end
+
+    test "a list element given as an empty map keeps none of its fields" do
+      variables = %Params{
+        input: %Input{groups: [%Group{label: "g1", tags: [%Tag{name: "a"}]}]}
+      }
+
+      dumped = VariablesDumper.dump(variables, %{input: %{groups: [%{}]}})
+
+      assert dumped == %{input: %{groups: [%{}]}}
     end
   end
 end

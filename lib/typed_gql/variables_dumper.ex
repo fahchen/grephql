@@ -44,11 +44,18 @@ defmodule TypedGql.VariablesDumper do
 
   defp prune_embed(nil, _cardinality, _related, _param_value), do: nil
 
-  defp prune_embed(dumped, :one, related, param_value), do: prune(dumped, related, param_value)
+  defp prune_embed(dumped, :one, related, param_value) when is_map(param_value),
+    do: prune(dumped, related, param_value)
 
-  defp prune_embed(dumped, :many, related, param_values) do
+  defp prune_embed(dumped, :many, related, param_values)
+       when is_list(param_values) and length(dumped) == length(param_values) do
     Enum.zip_with(dumped, param_values, &prune(&1, related, &2))
   end
+
+  # The struct was cast from these very params, so the shapes line up. Should a
+  # caller hand the dumper params that do not, keep the dump whole rather than
+  # let a zip drop the elements it has no partner for.
+  defp prune_embed(dumped, _cardinality, _related, _param_value), do: dumped
 
   # Params reach the changeset with atom or string keys; accept both here too.
   defp fetch_param(params, field) do
