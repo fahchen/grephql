@@ -128,7 +128,7 @@ Feature: GraphQL query definition and execution
     Scenario: Transport-level failure
       Given a valid query is executed
       When the HTTP request fails due to network error
-      Then the response is {:error, %Exception{}}
+      Then the response is {:error, exception} carrying Req's transport error
 
     Scenario: Non-2xx HTTP response
       Given a valid query is executed

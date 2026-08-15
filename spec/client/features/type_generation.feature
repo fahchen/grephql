@@ -10,8 +10,8 @@ Feature: GraphQL to Elixir type generation
       Given a client module MyApp.UserService
       And a schema with type "User" having fields "name: String!" and "email: String"
       When the developer defines defgql :get_user with "query { user { name email } }"
-      Then the generated MyApp.UserService.GetUser.User is an embedded schema
-      And non-null fields are enforced, nullable fields default to nil
+      Then the generated MyApp.UserService.GetUser.Result.User is an embedded schema
+      And non-null fields are typed without | nil, nullable fields default to nil
       And automatic @type t() spec is generated
 
   Rule: Output struct names are derived from the query field path under a Result namespace (per-query isolation)
@@ -52,12 +52,12 @@ Feature: GraphQL to Elixir type generation
       Then user, posts, and author are all embedded schemas
       And the result is %User{name: "Alice", posts: [%Posts{title: "Hello", author: %Author{name: "Bob"}}]}
 
-  Rule: Response JSON is deserialized into embedded schemas via Ecto.Changeset
+  Rule: Response JSON is deserialized into embedded schemas via Ecto.embedded_load/3
 
     Scenario: Successful response is cast into typed structs
-      Given a defgql :get_user returning type MyApp.UserService.GetUser.User
+      Given a defgql :get_user returning type MyApp.UserService.GetUser.Result.User
       When the GraphQL server returns {"data": {"user": {"name": "Alice", "email": "a@b.com"}}}
-      Then the response data is cast via Ecto.Changeset into %MyApp.UserService.GetUser.User{name: "Alice", email: "a@b.com"}
+      Then the response data is loaded into %MyApp.UserService.GetUser.Result.User{name: "Alice", email: "a@b.com"}
 
     Scenario: Nested response is recursively cast
       Given a defgql :get_user with nested selection "user { name posts { title } }"
@@ -130,7 +130,7 @@ Feature: GraphQL to Elixir type generation
       Then an embedded schema MyApp.UserService.Inputs.CreateUserInput is generated with the corresponding fields
 
     Scenario: Input type provides build/1 to construct from plain map
-      Given a generated input type MyApp.UserService.CreateUserInput
+      Given a generated input type MyApp.UserService.Inputs.CreateUserInput
       When the developer calls MyApp.UserService.Inputs.CreateUserInput.build(%{name: "Alice", email: "a@b.com"})
       Then it returns {:ok, %MyApp.UserService.Inputs.CreateUserInput{name: "Alice", email: "a@b.com"}}
 
