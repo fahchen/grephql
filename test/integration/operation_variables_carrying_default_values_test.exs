@@ -8,6 +8,8 @@ defmodule TypedGql.Integration.OperationVariablesCarryingDefaultValuesTest do
     the default rather than receiving an explicit null
   - a value passed for a defaulted variable is sent and overrides the default
   - a non-null variable without a default is still required
+  - a null default is no default: the validator rejects it on a non-null
+    variable, so it can never make one optional
   """
   use TypedGql.IntegrationCase, async: true
 
@@ -72,6 +74,28 @@ defmodule TypedGql.Integration.OperationVariablesCarryingDefaultValuesTest do
       request = capture_request(fn -> Client.search_defaulted(%{}) end)
 
       assert request["query"] =~ ~s($term: String = "elixir")
+    end
+  end
+
+  describe "compile errors" do
+    # Spec 5.8.2. Left unchecked, `not is_nil(default_value)` would read a null
+    # default as a real one and drop the variable from the request entirely.
+    test "a non-null variable defaulting to null does not compile" do
+      error =
+        assert_raise CompileError, fn ->
+          Code.compile_string("""
+          defmodule TypedGql.Test.NullDefaultClient do
+            use TypedGql,
+              otp_app: :typed_gql,
+              source: "test/support/schemas/integration.json"
+
+            defgql(:search, "query S($term: String! = null) { search(query: $term) { __typename } }")
+          end
+          """)
+        end
+
+      assert error.description =~
+               ~s(variable "$term" of non-null type "String!" cannot default to null)
     end
   end
 

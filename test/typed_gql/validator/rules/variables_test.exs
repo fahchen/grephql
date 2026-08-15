@@ -60,6 +60,29 @@ defmodule TypedGql.Validator.Rules.VariablesTest do
     end
   end
 
+  # Spec 5.8.2 — the declaration promises a value the default cannot supply.
+  describe "null default values" do
+    test "a non-null variable defaulting to null is rejected" do
+      ctx = validate("query($id: ID! = null) { user(id: $id) { name } }")
+
+      assert [error] = errors(ctx)
+      assert error.message =~ ~s(variable "$id" of non-null type "ID!" cannot default to null)
+    end
+
+    test "a nullable variable may default to null" do
+      types = types_with_nullable_id_arg()
+      ctx = validate("query($id: ID = null) { user(id: $id) { name } }", types: types)
+
+      assert errors(ctx) == []
+    end
+
+    test "a non-null variable with a real default passes" do
+      ctx = validate(~s|query($id: ID! = "1") { user(id: $id) { name } }|)
+
+      assert errors(ctx) == []
+    end
+  end
+
   describe "variable type compatibility" do
     test "matching non-null type passes" do
       ctx = validate("query($id: ID!) { user(id: $id) { name } }")

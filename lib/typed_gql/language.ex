@@ -70,6 +70,18 @@ defmodule TypedGql.Language do
   end
 
   @doc """
+  Whether a variable definition's default value can stand in for a missing one.
+
+  `nil` means the definition declared no default. A `NullValue` declared one
+  that is null, which satisfies nothing a non-null type promises — so neither
+  makes the variable optional, nor lets it reach a non-null argument.
+  """
+  @spec usable_default?(TypedGql.Language.value_t() | nil) :: boolean()
+  def usable_default?(nil), do: false
+  def usable_default?(%TypedGql.Language.NullValue{}), do: false
+  def usable_default?(_value), do: true
+
+  @doc """
   Every fragment spread name in a selection set, depth first, duplicates kept.
   """
   @spec spread_names(TypedGql.Language.SelectionSet.t() | nil) :: [String.t()]

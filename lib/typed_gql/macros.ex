@@ -3,12 +3,14 @@ defmodule TypedGql.Macros do
   The macros a client module gets from `use TypedGql`.
 
   `defgql/2` and `defgqlp/2` define a query function from a GraphQL document,
-  `deffragment/1` registers a fragment those documents can spread, and `~GQL`
-  marks a string as GraphQL so `mix format` can format it.
-
-  All three run at compile time: the document is parsed, validated against the
+  and `deffragment/1` registers a fragment those documents can spread. All
+  three run at compile time: the document is parsed, validated against the
   loaded schema, and lowered into embedded schemas for its result and its
   variables, so a query the schema rejects fails the build rather than a call.
+
+  `~GQL` does none of that. It marks a string as GraphQL so `mix format` can
+  format it and returns that string unchanged; the macro it is passed to is
+  what compiles it.
   """
 
   @doc """
@@ -31,8 +33,8 @@ defmodule TypedGql.Macros do
       \"\"\"
   """
   defmacro sigil_GQL(query_string, _modifiers) do
-    # Uppercase sigils receive an already-interpolated binary in Elixir,
-    # so we simply return it as-is. The value is the formatter hook.
+    # An uppercase sigil does not interpolate, so its contents arrive as a
+    # plain binary and are returned untouched. The sigil is the formatter hook.
     query_string
   end
 

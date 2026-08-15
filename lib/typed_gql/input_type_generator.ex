@@ -108,9 +108,11 @@ defmodule TypedGql.InputTypeGenerator do
 
           # A variable the operation gives a default value is optional for the
           # caller: leaving it out of the request makes the server apply that
-          # default, which is the whole point of declaring one.
+          # default, which is the whole point of declaring one. A null default
+          # is not one — the validator rejects it, and it must not make a
+          # non-null variable optional here either.
           req =
-            if resolved.nullable or not is_nil(var_def.default_value),
+            if resolved.nullable or TypedGql.Language.usable_default?(var_def.default_value),
               do: reqs,
               else: [atom_name | reqs]
 

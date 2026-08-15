@@ -19,7 +19,9 @@ only struct mode exists.
 **Output types:**
 - Generated as embedded schemas with per-query field path naming
 - Response JSON is deserialized via `Ecto.embedded_load/3`, which recurses into
-  nested embedded schemas and invokes each `Ecto.Type`'s `load/3`
+  nested embedded schemas and invokes each field's `Ecto.Type` — `load/1` for a
+  type declaring `embed_as: :dump`, `cast/1` for one leaving the `:self`
+  default (see `guides/mapping-custom-scalars.md`)
 
 **Input types:**
 - Generated as schema-level embedded schemas with a `build/1` function

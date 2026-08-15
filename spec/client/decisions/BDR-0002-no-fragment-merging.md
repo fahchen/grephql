@@ -11,9 +11,11 @@ summary: The sigil returns its string unchanged; fragment reuse and merging move
 
 ## Decision
 
-`~GQL` returns the interpolated binary as-is. It parses nothing, so it merges
-nothing: composing a document out of Elixir strings is the caller's business,
-and the sigil exists only as a hook for `mix format`.
+`~GQL` returns its contents unchanged. Being an uppercase sigil it does not
+interpolate, and it parses nothing, so it merges nothing: composing a document
+out of Elixir strings is the caller's business — with an ordinary interpolated
+string, not through the sigil — and `~GQL` exists only as a hook for
+`mix format`.
 
 ## Reason
 
