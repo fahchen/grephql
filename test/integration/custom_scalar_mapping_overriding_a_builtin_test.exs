@@ -4,11 +4,15 @@ defmodule TypedGql.Integration.CustomScalarMappingOverridingABuiltinTest do
   Pins what `guides/mapping-custom-scalars.md` tells users:
 
   - a mapping for a name that already has a built-in replaces it
-  - the default `embed_as: :self` routes both directions through `cast/1`,
-    leaving `dump/1` and `load/1` unused
-  - declaring `embed_as: :dump` routes the request through `dump/1` and the
-    response through `load/1` instead
+  - under `embed_as: :dump`, a variable crosses `cast/1` then `dump/1`, and a
+    response value crosses `load/1` alone — the request path runs two
+    callbacks, the response path one
+  - under the default `embed_as: :self`, both directions run `cast/1` and the
+    `dump/1` and `load/1` that `Ecto.Type` requires are never called
   - a scalar the schema uses with no mapping at all fails the build
+
+  The types below mark each callback they pass through, so the nesting of the
+  markers in an asserted value is the order the callbacks ran in.
   """
   use TypedGql.IntegrationCase, async: true
 
@@ -17,11 +21,11 @@ defmodule TypedGql.Integration.CustomScalarMappingOverridingABuiltinTest do
     use Ecto.Type
 
     def type, do: :string
-    def cast(value) when is_binary(value), do: {:ok, "cast:" <> value}
+    def cast(value) when is_binary(value), do: {:ok, "C(" <> value <> ")"}
     def cast(_other), do: :error
-    def dump(value) when is_binary(value), do: {:ok, "dump:" <> value}
+    def dump(value) when is_binary(value), do: {:ok, "D(" <> value <> ")"}
     def dump(_other), do: :error
-    def load(value) when is_binary(value), do: {:ok, "load:" <> value}
+    def load(value) when is_binary(value), do: {:ok, "L(" <> value <> ")"}
     def load(_other), do: :error
   end
 
@@ -30,11 +34,11 @@ defmodule TypedGql.Integration.CustomScalarMappingOverridingABuiltinTest do
     use Ecto.Type
 
     def type, do: :string
-    def cast(value) when is_binary(value), do: {:ok, "cast:" <> value}
+    def cast(value) when is_binary(value), do: {:ok, "C(" <> value <> ")"}
     def cast(_other), do: :error
-    def dump(value) when is_binary(value), do: {:ok, "dump:" <> value}
+    def dump(value) when is_binary(value), do: {:ok, "D(" <> value <> ")"}
     def dump(_other), do: :error
-    def load(value) when is_binary(value), do: {:ok, "load:" <> value}
+    def load(value) when is_binary(value), do: {:ok, "L(" <> value <> ")"}
     def load(_other), do: :error
     def embed_as(_format), do: :dump
   end
@@ -50,6 +54,11 @@ defmodule TypedGql.Integration.CustomScalarMappingOverridingABuiltinTest do
       }
 
     defgql(:get_user, "query GetUser($id: ID!) { user(id: $id) { id createdAt } }")
+
+    defgql(
+      :create_post,
+      "mutation P($input: CreatePostInput!) { createPost(input: $input) { id } }"
+    )
   end
 
   defmodule DumpClient do
@@ -64,7 +73,7 @@ defmodule TypedGql.Integration.CustomScalarMappingOverridingABuiltinTest do
 
     defgql(
       :create_post,
-      "mutation P($input: CreatePostInput!) { createPost(input: $input) { id } }"
+      "mutation P($input: CreatePostInput!) { createPost(input: $input) { id publishedAt } }"
     )
   end
 
@@ -74,49 +83,70 @@ defmodule TypedGql.Integration.CustomScalarMappingOverridingABuiltinTest do
     end
   end
 
-  describe "loaded response" do
-    test "the default embed_as routes the response through cast/1, not load/1" do
-      Req.Test.expect(SelfClient, fn conn ->
-        Req.Test.json(conn, %{"data" => %{"user" => %{"id" => "u1", "createdAt" => "X"}}})
-      end)
+  describe "embed_as :dump — one callback per crossing" do
+    test "a variable crosses cast/1 and then dump/1, in that order" do
+      request = capture_dump_request()
 
-      assert {:ok, %Result{} = result} = SelfClient.get_user(%{id: "u1"})
-      assert result.data.user.created_at == "cast:X"
+      assert request["variables"]["input"]["metadata"]["publishAt"] == "D(C(raw))"
     end
 
-    test "embed_as :dump routes the response through load/1" do
+    test "a response value crosses load/1 alone" do
       Req.Test.expect(DumpClient, fn conn ->
-        Req.Test.json(conn, %{"data" => nil})
+        Req.Test.json(conn, %{
+          "data" => %{"createPost" => %{"id" => "p1", "publishedAt" => "srv"}}
+        })
       end)
 
-      assert {:ok, %Result{}} =
-               DumpClient.create_post(%{
-                 input: %{title: "T", tags: [], metadata: %{publish_at: "X"}}
-               })
+      assert {:ok, %Result{} = result} = create_post(DumpClient)
+
+      # No C( ) around it: cast/1 does not run on the way back.
+      assert result.data.create_post.published_at == "L(srv)"
     end
   end
 
-  describe "dumped request" do
-    test "the default embed_as sends the cast value, without calling dump/1" do
+  describe "embed_as :self — cast/1 does all of it" do
+    test "the response runs cast/1, not load/1" do
+      Req.Test.expect(SelfClient, fn conn ->
+        Req.Test.json(conn, %{"data" => %{"user" => %{"id" => "u1", "createdAt" => "srv"}}})
+      end)
+
+      assert {:ok, %Result{} = result} = SelfClient.get_user(%{id: "u1"})
+      assert result.data.user.created_at == "C(srv)"
+    end
+
+    test "the request sends what cast/1 returned, without running dump/1" do
       parent = self()
 
-      Req.Test.expect(DumpClient, fn conn ->
+      Req.Test.expect(SelfClient, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         send(parent, {:request, Jason.decode!(body)})
         Req.Test.json(conn, %{"data" => nil})
       end)
 
-      assert {:ok, %Result{}} =
-               DumpClient.create_post(%{
-                 input: %{title: "T", tags: [], metadata: %{publish_at: "X"}}
-               })
-
+      assert {:ok, %Result{}} = create_post(SelfClient)
       assert_received {:request, request}
 
-      # DumpScalar declares embed_as: :dump, so the value cast on the way in is
-      # dumped again for the wire.
-      assert request["variables"]["input"]["metadata"]["publishAt"] == "dump:cast:X"
+      # No D( ) around it: the cast value goes to the JSON encoder untouched.
+      assert request["variables"]["input"]["metadata"]["publishAt"] == "C(raw)"
     end
+  end
+
+  defp capture_dump_request do
+    parent = self()
+
+    Req.Test.expect(DumpClient, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send(parent, {:request, Jason.decode!(body)})
+      Req.Test.json(conn, %{"data" => nil})
+    end)
+
+    assert {:ok, %Result{}} = create_post(DumpClient)
+    assert_received {:request, request}
+    request
+  end
+
+  defp create_post(client) do
+    client.create_post(%{input: %{title: "T", tags: [], metadata: %{publish_at: "raw"}}})
   end
 
   describe "compile errors" do

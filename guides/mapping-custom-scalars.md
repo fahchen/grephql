@@ -87,23 +87,29 @@ atom conversion TypedGql would otherwise generate for it.
 ## Writing a scalar type
 
 An `Ecto.Type` module converts between the JSON on the wire and the Elixir
-value you want. The shortest useful one implements `type/0` and `cast/1`:
+value you want. `Ecto.Type` requires four callbacks, and the next section
+explains which value reaches each one:
 
 ```elixir
 defmodule MyApp.Types.Money do
   use Ecto.Type
 
+  # Run dump/1 and load/1 rather than routing everything through cast/1.
+  def embed_as(_format), do: :dump
+
   # The Ecto primitive the value is stored as.
   def type, do: :decimal
 
-  # Runs on a variable you pass in, and on the value the server sent.
+  # The caller's value, in any shape you choose to accept.
   def cast(%Decimal{} = amount), do: {:ok, amount}
   def cast(amount) when is_binary(amount), do: parse(amount)
   def cast(_other), do: :error
 
+  # The Elixir value, on its way into the request.
   def dump(%Decimal{} = amount), do: {:ok, Decimal.to_string(amount)}
   def dump(_other), do: :error
 
+  # The server's value, on its way into the result struct.
   def load(amount) when is_binary(amount), do: parse(amount)
   def load(_other), do: :error
 
@@ -116,42 +122,72 @@ defmodule MyApp.Types.Money do
 end
 ```
 
-### Which callback actually runs
+### Which value reaches which callback
 
-This is worth knowing before you write the module, because the answer depends
-on one callback you probably will not write.
+A value crosses your type three times, and each crossing hands it to a
+different callback:
 
-`use Ecto.Type` defaults `embed_as/1` to `:self`, and TypedGql moves values in
-and out of embedded schemas — so with that default **`cast/1` is the only
-callback that runs, in both directions**:
+```
+caller's value ──cast/1──▶ Elixir value ──dump/1──▶ wire value ──▶ server
+                                Elixir value ◀──load/1── wire value ◀── server
+```
 
-- a variable is `cast/1` on the way in, and the cast value goes into the
-  request JSON untouched — `dump/1` is not called
-- a response value is `cast/1` on the way out of the JSON — `load/1` is not
-  called
+| Callback | Receives | Returns | Runs when |
+|----------|----------|---------|-----------|
+| `cast/1` | whatever the caller passed as a variable | the Elixir value kept in the variables struct | `Variables.build/1`, while the changeset validates |
+| `dump/1` | **that Elixir value**, not the caller's | the value put into the request JSON | while the request body is serialized |
+| `load/1` | the value the server sent | the Elixir value kept in the result struct | while the response is decoded |
 
-So a scalar whose wire form and Elixir form differ needs a `cast/1` that
-accepts both: the Elixir value the caller passes, and the JSON value the
-server sends. `Money` above does exactly that.
+Two consequences are easy to get wrong:
 
-Declare `embed_as/1` as `:dump` when you want the conventional pair instead:
+- **The request path runs two callbacks, the response path one.** Outbound a
+  value goes `cast/1` then `dump/1`; inbound it goes through `load/1` alone,
+  with no `cast/1` afterwards. So `load/1` has to finish the conversion by
+  itself.
+- **`dump/1` never sees the caller's input.** Write its clauses against your
+  own Elixir representation. The lenient "accept a string, a struct, an
+  integer…" matching belongs in `cast/1`, which is the only one facing
+  arbitrary caller input.
+
+Returning `:error` decides what a bad value costs:
+
+- from `cast/1`, the call fails with an `Ecto.Changeset` error and no HTTP
+  request is made
+- from `load/1`, the call returns `{:error, %TypedGql.DecodeError{}}` rather
+  than raising
+
+### `embed_as/1` decides whether `dump/1` and `load/1` run at all
+
+The table above describes a type that declares
 
 ```elixir
 def embed_as(_format), do: :dump
 ```
 
-Then `dump/1` runs on the way into the request and `load/1` on the way out of
-the response, and `cast/1` handles caller input only. TypedGql's own enum,
-union and `__typename` types are written this way; `TypedGql.Types.DateTime`
-keeps the `:self` default, which is why its `cast/1` and `load/1` parse the
-same string.
+`use Ecto.Type` does **not** default to that. It defaults `embed_as/1` to
+`:self`, and TypedGql moves every value in and out of an embedded schema, so
+under the default the picture collapses:
 
-Returning `:error` decides what a bad value costs:
+| | `embed_as: :dump` | `embed_as: :self` (the default) |
+|---|---|---|
+| caller's value → struct | `cast/1` | `cast/1` |
+| struct → request JSON | `dump/1` | *nothing* — the value is handed to the JSON encoder as it is |
+| response JSON → struct | `load/1` | `cast/1` |
 
-- from the variable path, the call fails with an `Ecto.Changeset` error and no
-  HTTP request is made
-- from the response path, the call returns `{:error, %TypedGql.DecodeError{}}`
-  rather than raising
+So with the default, `cast/1` does all the work and the `dump/1` and `load/1`
+that `Ecto.Type` requires you to implement are never called. Two things follow:
+
+- `cast/1` receives values from **both** sources — the caller and the server —
+  and cannot tell them apart, so it has to accept both shapes and cannot be
+  strict about one and lenient about the other.
+- whatever `cast/1` returns is what gets JSON-encoded. That is fine for a
+  string or a number, and fine for `%DateTime{}` because the JSON libraries
+  encode it; a struct of your own with no encoder fails the request with a
+  `Protocol.UndefinedError` that says nothing about scalars.
+
+Prefer `:dump` unless your Elixir value *is* the wire value, in which case the
+required `dump/1` and `load/1` are one-liners either way. TypedGql's own enum,
+union and `__typename` types declare `:dump`.
 
 ## Where the mapping shows up
 
