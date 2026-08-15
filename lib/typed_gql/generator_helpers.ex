@@ -180,35 +180,33 @@ defmodule TypedGql.GeneratorHelpers do
 
   @doc """
   Converts a macro caller's `Macro.Env` into the `keyword()` location expected
-  by `create_modules/2`, so generated modules record the caller's file/line
+  by `create_modules/1`, so generated modules record the caller's file/line
   (used by tooling like editor "go to definition") instead of wherever inside
   typed_gql happens to compile them.
   """
-  @spec location_from(Macro.Env.t() | nil) :: keyword() | nil
-  def location_from(nil), do: nil
+  @spec location_from(Macro.Env.t()) :: keyword()
   def location_from(%Macro.Env{} = caller_env), do: Macro.Env.location(caller_env)
 
   def location_from(other) do
     raise ArgumentError,
-          "expected caller_env to be a Macro.Env.t() or nil, got: #{inspect(other)}"
+          "expected caller_env to be a Macro.Env.t(), got: #{inspect(other)}"
   end
 
   @doc """
-  Creates multiple modules from `{module_name, quoted_ast}` tuples.
+  Creates multiple modules from `{module_name, quoted_ast, location}` tuples.
 
-  `location` sets the `:file`/`:line` recorded on each created module (used
-  by tooling like editor "go to definition"). Defaults to this module's own
-  location when omitted, for backwards compatibility.
+  `location` is a `keyword()` recording the `:file`/`:line` on each created
+  module (used by tooling like editor "go to definition"). It is specified per
+  module because each generated module records its own source location.
 
   Uses `Kernel.ParallelCompiler.pmap/2` (Elixir 1.16+) so that spawned
   processes can resolve dependencies via `Code.ensure_compiled/1` and the
   Mix compiler tracks the generated `.beam` files. Falls back to sequential
   creation on older Elixir versions or outside a compiler session.
   """
-  @spec create_modules([{module(), Macro.t()}], keyword() | nil) :: :ok
-  def create_modules(module_asts, location \\ nil) do
-    location = location || Macro.Env.location(__ENV__)
-    create_fn = fn {mod, ast} -> Module.create(mod, ast, location) end
+  @spec create_modules([{module(), Macro.t(), keyword()}]) :: :ok
+  def create_modules(module_asts) do
+    create_fn = fn {mod, ast, location} -> Module.create(mod, ast, location) end
 
     try do
       # apply/3 so Elixir 1.15 (no pmap/2) still compiles; the rescue covers both

@@ -68,7 +68,7 @@ defmodule TypedGql.Compiler do
         "multiple operation definitions found; defgql supports exactly one operation per query"
       )
 
-    caller_env = Keyword.get(opts, :caller_env)
+    caller_env = Keyword.fetch!(opts, :caller_env)
 
     raise_on_errors!(
       Validator.validate(document, schema, caller_env, registered_fragments(opts)),
@@ -146,7 +146,7 @@ defmodule TypedGql.Compiler do
         "multiple fragment definitions found; deffragment supports exactly one fragment per call"
       )
 
-    caller_env = Keyword.get(opts, :caller_env)
+    caller_env = Keyword.fetch!(opts, :caller_env)
 
     raise_on_errors!(
       Validator.validate_fragment(document, schema, caller_env, registered_fragments(opts)),
