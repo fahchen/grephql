@@ -32,7 +32,7 @@ defmodule TypedGql.OperationInfo do
   ## Use in tests
 
   The main use is telling apart multiple operations that share one `Req.Test`
-  stub/expect, so a single mock can answer each `defgql` function differently:
+  stub/expect, so a single stub can answer each `defgql` function differently:
 
       test "page renders user and their posts" do
         Req.Test.expect(MyApp.GitHub, 2, fn conn ->
