@@ -13,6 +13,13 @@ defmodule TypedGql.Types.DateTime do
   @impl Ecto.Type
   def type, do: :utc_datetime_usec
 
+  # Without this, `Ecto.embedded_dump/2` would hand the `%DateTime{}` straight
+  # to the JSON encoder and `dump/1` would never run — the wire format would
+  # depend on the encoder having an implementation for it rather than on this
+  # module. See `guides/mapping-custom-scalars.md`.
+  @impl Ecto.Type
+  def embed_as(_format), do: :dump
+
   @impl Ecto.Type
   def cast(%DateTime{} = dt), do: {:ok, dt}
   def cast(string) when is_binary(string), do: parse(string)

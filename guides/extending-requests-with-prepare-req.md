@@ -35,6 +35,14 @@ end
 result.assigns[:request_id]  #=> ["req-abc-123"]
 ```
 
+> #### Assigns hold whatever the step put there {: .tip}
+>
+> Nothing normalizes the value. `Req.Response.get_header/2` returns a list, so `:request_id` above is `["req-abc-123"]` rather than a string — unwrap it in the step if a bare value is what callers should see.
+
+> #### A response step returns the pair it was given {: .warning}
+>
+> `append_response_steps/2` expects `{request, response}` back. Returning only the response, or forgetting to thread `put_resp_assign/3`'s result through, drops the assign silently — the call still succeeds and `result.assigns` is simply empty.
+
 ## Storing Multiple Values
 
 Call `put_resp_assign/3` multiple times to store different pieces of metadata:
@@ -57,6 +65,10 @@ end
 ## Setting the URL
 
 `prepare_req/1` runs last, so it can also supply the request URL. `:endpoint` is optional — use this when the URL is only known at runtime (per-tenant hosts, secrets, feature flags):
+
+> #### `prepare_req/1` wins over every configured option {: .warning}
+>
+> It runs after the compile-time, runtime and per-call layers have been merged, so anything it sets replaces what they configured — including a `:endpoint` a caller passed at the call site. Read the request before overwriting a value someone may have meant to override.
 
 ```elixir
 defmodule MyApp.Shopify do
