@@ -34,8 +34,10 @@ defmodule TypedGql.Result do
     field :assigns, map(), default: %{}
   end
 
-  # `data` is nil whenever the server answers with "data": null, so the
-  # unparameterized form has to admit it.
+  # `data` is nil whenever there was nothing to decode — the response carried
+  # "data": null or no "data" key at all, or the query has no result module —
+  # so the unparameterized form has to admit it. Callers naming their own data
+  # type add `| nil` themselves when they can receive it.
   @type t() :: t(struct() | nil)
 
   @doc """
