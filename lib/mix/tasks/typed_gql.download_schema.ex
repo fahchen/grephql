@@ -8,9 +8,9 @@ defmodule Mix.Tasks.TypedGql.DownloadSchema do
 
   ## Options
 
-    * `--endpoint` (required) — the GraphQL endpoint URL
-    * `--output` (required) — file path to save the schema JSON
-    * `--header` — HTTP header in `"Key: Value"` format (may be repeated)
+    * `--endpoint` / `-e` (required) — the GraphQL endpoint URL
+    * `--output` / `-o` (required) — file path to save the schema JSON
+    * `--header` / `-h` — HTTP header in `"Key: Value"` format (may be repeated)
 
   ## Examples
 

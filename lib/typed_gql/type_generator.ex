@@ -7,10 +7,7 @@ defmodule TypedGql.TypeGenerator do
 
   ## Generation pipeline
 
-  Generation runs as four named steps. Lifecycle plugins
-  (`TypedGql.Generation.Plugin`) hook the first three via `after_normalize`,
-  `after_resolve`, and `after_lower` (plus `before_normalize` for the raw
-  entry); the terminal `create` step compiles modules and is not hookable:
+  Generation runs as four named steps:
 
     1. `normalize` — raw selections to canonical selections: expands fragment
        spreads, flattens inline fragments on object types, and propagates
@@ -22,9 +19,8 @@ defmodule TypedGql.TypeGenerator do
     3. `lower` — tree to `{module, quoted_ast}` pairs.
     4. `create` — `{module, ast}` pairs to BEAM modules.
 
-  TypedGql always runs its built-in plugins (currently
-  `TypedGql.Generation.Plugins.SkipInclude` for `@include`/`@skip`) before any
-  user plugins supplied via the `:generation_plugins` option.
+  `TypedGql.Generation.Plugin` documents which steps a plugin may hook and in
+  what order the built-in and user plugins run.
 
   ## Naming convention
 

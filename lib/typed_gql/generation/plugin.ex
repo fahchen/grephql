@@ -14,8 +14,11 @@ defmodule TypedGql.Generation.Plugin do
   hooks it cares about (the built-in `@include`/`@skip` plugin implements
   only `after_resolve`).
 
-  TypedGql always runs its built-in plugins before user plugins, in order,
-  at each juncture.
+  TypedGql always runs its built-in plugins — currently
+  `TypedGql.Generation.Plugins.SkipInclude` for `@include`/`@skip` — before the
+  ones given in the `:generation_plugins` option, in order, at each juncture.
+
+  `TypedGql.TypeGenerator` describes what each step does.
   """
 
   alias TypedGql.Generation.Context

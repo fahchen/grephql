@@ -98,6 +98,8 @@ result.data.viewer.login
 
 ## Macros
 
+A tour of the three macros follows; `TypedGql.Macros` documents each one in full.
+
 ### `defgql` / `defgqlp`
 
 Defines a public (or private) GraphQL query function. At compile time: parses, validates, generates typed modules, and defines a callable function.
