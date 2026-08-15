@@ -77,6 +77,7 @@ defmodule TypedGql.MixProject do
       source_url: @source_url,
       extras: [
         {"README.md", [title: "Introduction"]},
+        {"guides/mapping-custom-scalars.md", [title: "Mapping Custom Scalars"]},
         {"guides/extending-requests-with-prepare-req.md",
          [title: "Customizing Requests with prepare_req"]},
         {"LICENSE", [title: "License"]}

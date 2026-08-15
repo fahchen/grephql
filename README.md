@@ -240,7 +240,11 @@ use TypedGql,
 A scalar maps to a plain Ecto type or to any module implementing the `Ecto.Type`
 behaviour. Widely used scalars — `DateTime`, `Date`, `JSON`, `URI`, `URL`,
 `BigInt`, `HTML`, `Base64String` — are already mapped (`DateTime` to
-`TypedGql.Types.DateTime`), so only schema-specific ones need an entry.
+`TypedGql.Types.DateTime`), so only schema-specific ones need an entry, and a
+mapping you give for a name that already has one replaces it.
+
+See the [custom scalars guide](guides/mapping-custom-scalars.md) for the full
+list of built-ins and for which `Ecto.Type` callbacks run on each path.
 
 ## Enums
 
