@@ -292,8 +292,8 @@ defmodule TypedGql.LanguageTest do
       assert length(dir.locations) == 3
     end
 
-    test "SchemaDefinition" do
-      schema = %Language.SchemaDefinition{
+    test "SchemaDeclaration" do
+      schema = %Language.SchemaDeclaration{
         fields: [
           %Language.FieldDefinition{name: "query", type: %Language.NamedType{name: "Query"}}
         ]

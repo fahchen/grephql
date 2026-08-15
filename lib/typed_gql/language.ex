@@ -33,7 +33,6 @@ defmodule TypedGql.Language do
   @type definition_t() ::
           TypedGql.Language.OperationDefinition.t()
           | TypedGql.Language.Fragment.t()
-          | TypedGql.Language.SchemaDefinition.t()
           | TypedGql.Language.SchemaDeclaration.t()
           | TypedGql.Language.ObjectTypeDefinition.t()
           | TypedGql.Language.InterfaceTypeDefinition.t()

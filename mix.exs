@@ -134,7 +134,6 @@ defmodule TypedGql.MixProject do
           TypedGql.Language.Fragment,
           TypedGql.Language.FragmentSpread,
           TypedGql.Language.InlineFragment,
-          TypedGql.Language.SchemaDefinition,
           TypedGql.Language.SchemaDeclaration,
           TypedGql.Language.DirectiveDefinition,
           TypedGql.Language.TypeExtensionDefinition,
