@@ -58,9 +58,11 @@ defmodule TypedGql.Validator.Traversal do
     traverse_selection_set(field.selection_set, child_type_name, schema, ctx, cb)
   end
 
-  defp traverse_selection(%InlineFragment{} = fragment, _type_name, schema, ctx, cb) do
+  defp traverse_selection(%InlineFragment{} = fragment, type_name, schema, ctx, cb) do
+    # A condition-less inline fragment keeps the enclosing type. Passing nil
+    # instead made every rule built on this traversal skip its selections.
     fragment_type_name =
-      if fragment.type_condition, do: fragment.type_condition.name, else: nil
+      if fragment.type_condition, do: fragment.type_condition.name, else: type_name
 
     traverse_selection_set(fragment.selection_set, fragment_type_name, schema, ctx, cb)
   end
