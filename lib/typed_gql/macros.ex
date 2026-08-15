@@ -390,7 +390,7 @@ defmodule TypedGql.Macros do
             variables_module: variables_module
           ] do
       @spec unquote(name)(unquote(variables_module).params(), keyword()) ::
-              {:ok, TypedGql.Result.t(unquote(result_module).t())}
+              {:ok, TypedGql.Result.t(unquote(result_module).t() | nil)}
               | {:error, Ecto.Changeset.t()}
               | {:error, Req.Response.t()}
               | {:error, Exception.t()}
@@ -401,7 +401,7 @@ defmodule TypedGql.Macros do
   defmacro __define_spec_without_vars__(name, result_module) do
     quote bind_quoted: [name: name, result_module: result_module] do
       @spec unquote(name)(keyword()) ::
-              {:ok, TypedGql.Result.t(unquote(result_module).t())}
+              {:ok, TypedGql.Result.t(unquote(result_module).t() | nil)}
               | {:error, Req.Response.t()}
               | {:error, Exception.t()}
     end

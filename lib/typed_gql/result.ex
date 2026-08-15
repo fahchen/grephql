@@ -54,7 +54,9 @@ defmodule TypedGql.Result do
     field :assigns, map(), default: %{}
   end
 
-  @type t() :: t(struct())
+  # `data` is nil whenever the server answers with "data": null, so the
+  # unparameterized form has to admit it.
+  @type t() :: t(struct() | nil)
 
   @doc """
   Stores a key-value pair in the TypedGql assigns area of a `Req.Response`.

@@ -168,10 +168,17 @@ defmodule TypedGql do
   @doc """
   Executes a compiled GraphQL query.
 
-  Takes a `%TypedGql.Query{}` struct (produced by `defgql`/`defgqlp`),
-  a variables struct (built by `Variables.build/1`), and optional keyword options.
+  Takes a `%TypedGql.Query{}` struct (produced by `defgql`/`defgqlp`), the
+  variables, and optional keyword options.
 
   Options override runtime config which overrides compile-time defaults.
+
+  Variables given as a struct — one built by the operation's generated
+  `Variables.build/1` — are dumped whole, so an optional field the caller
+  never set is sent as `null`. The generated `defgql` functions instead
+  prune the dump against the params they were called with, keeping an
+  omitted field absent from the request. Prefer them unless you need to
+  execute a `%TypedGql.Query{}` you assembled yourself.
   """
   @spec execute(Query.t(), struct() | map(), keyword()) ::
           {:ok, Result.t()} | {:error, Req.Response.t() | Exception.t()}
