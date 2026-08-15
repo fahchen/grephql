@@ -100,9 +100,8 @@ defmodule TypedGql.Integration.TypenameInjectedIntoTheRequestAndDispatchedOnTheR
   end
 
   defp fetch(data) do
-    payload =
-      %{"search" => [], "nodes" => []}
-      |> Map.merge(Map.new(data, fn {k, v} -> {to_string(k), v} end))
+    given = Map.new(data, fn {key, value} -> {to_string(key), value} end)
+    payload = Map.merge(%{"search" => [], "nodes" => []}, given)
 
     Req.Test.expect(Client, fn conn -> Req.Test.json(conn, %{"data" => payload}) end)
 
