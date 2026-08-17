@@ -107,7 +107,6 @@ defmodule TypedGql.TypeGenerator do
     base_module = Module.concat([client_module, GeneratorHelpers.camelize(function_name), Result])
 
     root_type_name = Helpers.root_type_name(schema, operation.operation)
-    location = GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
 
     operation.selection_set.selections
     |> run_pipeline(
@@ -115,7 +114,7 @@ defmodule TypedGql.TypeGenerator do
       base_module,
       build_context(schema, opts),
       plugins(opts),
-      location
+      Keyword.fetch!(opts, :caller_env)
     )
     |> unwrap_module_names()
   end
@@ -157,7 +156,7 @@ defmodule TypedGql.TypeGenerator do
         base_module,
         build_context(schema, opts),
         plugins(opts),
-        GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
+        Keyword.fetch!(opts, :caller_env)
       )
 
     # base_module is the naming root the pipeline was given, not necessarily a
@@ -182,7 +181,7 @@ defmodule TypedGql.TypeGenerator do
   end
 
   # Runs the full generation pipeline and returns the tree's module result.
-  defp run_pipeline(selections, parent_type_name, parent_module, context, plugins, location) do
+  defp run_pipeline(selections, parent_type_name, parent_module, context, plugins, create_opts) do
     canonical =
       selections
       |> run_after(plugins, :before_normalize, context)
@@ -197,7 +196,7 @@ defmodule TypedGql.TypeGenerator do
     create_union_modules(tree)
 
     tree
-    |> lower(location)
+    |> lower(create_opts)
     |> run_after(plugins, :after_lower, context)
     |> GeneratorHelpers.create_modules()
 
@@ -887,19 +886,19 @@ defmodule TypedGql.TypeGenerator do
 
   # ── lower ──────────────────────────────────────────────────────────────
 
-  # Lowers the tree into {module, quoted_ast, location} triples, rebuilding each
-  # field's tuple/AST from its Generation.Field, so plugin nullability changes
-  # flow through naturally.
-  defp lower(%GenSchema{} = tree, location), do: lower(tree, [], location)
+  # Lowers the tree into {module, quoted_ast, create_opts} triples, rebuilding
+  # each field's tuple/AST from its Generation.Field, so plugin nullability
+  # changes flow through naturally.
+  defp lower(%GenSchema{} = tree, create_opts), do: lower(tree, [], create_opts)
 
-  defp lower(%GenSchema{kind: :union} = node, acc, location) do
-    Enum.reduce(node.children, acc, &lower(&1, &2, location))
+  defp lower(%GenSchema{kind: :union} = node, acc, create_opts) do
+    Enum.reduce(node.children, acc, &lower(&1, &2, create_opts))
   end
 
-  defp lower(%GenSchema{kind: :object} = node, acc, location) do
+  defp lower(%GenSchema{kind: :object} = node, acc, create_opts) do
     field_defs = Enum.map(node.fields, &lower_field/1)
-    ast = build_embedded_schema_ast(node.module, field_defs, location)
-    Enum.reduce(node.children, [ast | acc], &lower(&1, &2, location))
+    ast = build_embedded_schema_ast(node.module, field_defs, create_opts)
+    Enum.reduce(node.children, [ast | acc], &lower(&1, &2, create_opts))
   end
 
   defp lower_field(%GenField{kind: :field} = field) do
@@ -951,7 +950,7 @@ defmodule TypedGql.TypeGenerator do
     end
   end
 
-  defp build_embedded_schema_ast(module_name, field_defs, location) do
+  defp build_embedded_schema_ast(module_name, field_defs, create_opts) do
     field_asts = Enum.map(field_defs, &GeneratorHelpers.field_def_to_ast/1)
 
     ast =
@@ -963,7 +962,7 @@ defmodule TypedGql.TypeGenerator do
         end
       end
 
-    {module_name, ast, location}
+    {module_name, ast, create_opts}
   end
 
   # Extracts the module name list from the generated tree, root-first and

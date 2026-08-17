@@ -57,9 +57,9 @@ defmodule TypedGql.InputTypeGenerator do
         collect_input_type(type_name, context, collect_acc)
       end)
 
-    location = GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
+    create_opts = Keyword.fetch!(opts, :caller_env)
 
-    module_asts = Enum.map(module_asts, fn {module, ast} -> {module, ast, location} end)
+    module_asts = Enum.map(module_asts, fn {module, ast} -> {module, ast, create_opts} end)
 
     GeneratorHelpers.create_modules(module_asts)
 
@@ -153,11 +153,11 @@ defmodule TypedGql.InputTypeGenerator do
         required_names
       )
 
-    location = GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
+    create_opts = Keyword.fetch!(opts, :caller_env)
 
     module_asts =
       Enum.map([variables_ast | nested_asts], fn {module, ast} ->
-        {module, ast, location}
+        {module, ast, create_opts}
       end)
 
     GeneratorHelpers.create_modules(module_asts)

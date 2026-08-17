@@ -8,28 +8,9 @@ defmodule TypedGql.CallerEnvTest do
               TypedGql.Test.CallerEnv.Input.Inputs.CreateUserInput
             ]}
 
-  alias TypedGql.GeneratorHelpers
   alias TypedGql.InputTypeGenerator
   alias TypedGql.Test.SchemaHelper
   alias TypedGql.TypeGenerator
-
-  describe "GeneratorHelpers.location_from/1" do
-    test "returns the Macro.Env location for a Macro.Env" do
-      env = __ENV__
-      assert GeneratorHelpers.location_from(env) == Macro.Env.location(env)
-      assert [file: _file, line: _line] = GeneratorHelpers.location_from(env)
-    end
-
-    test "raises ArgumentError for a non-Macro.Env value" do
-      assert_raise ArgumentError, ~r/expected caller_env to be a Macro.Env/, fn ->
-        GeneratorHelpers.location_from("not an env")
-      end
-
-      assert_raise ArgumentError, ~r/expected caller_env to be a Macro.Env/, fn ->
-        GeneratorHelpers.location_from(nil)
-      end
-    end
-  end
 
   describe "generated module source location" do
     test "result module records the caller file" do

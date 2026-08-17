@@ -6,7 +6,8 @@ defmodule TypedGql.GeneratorHelpersTest do
             [
               TypedGql.Test.CreateModulesSequential,
               TypedGql.Test.CreateModulesFirst,
-              TypedGql.Test.CreateModulesSecond
+              TypedGql.Test.CreateModulesSecond,
+              TypedGql.Test.CreateModulesFromEnv
             ]}
 
   alias TypedGql.GeneratorHelpers
@@ -169,10 +170,10 @@ defmodule TypedGql.GeneratorHelpersTest do
       # A test process is never a Kernel.ParallelCompiler worker, so pmap/2
       # raises here and the sequential path runs.
       ast = quote(do: def(hello, do: :world))
-      location = [file: "hello.ex", line: 1]
+      create_opts = [file: "hello.ex", line: 1]
 
       assert GeneratorHelpers.create_modules([
-               {TypedGql.Test.CreateModulesSequential, ast, location}
+               {TypedGql.Test.CreateModulesSequential, ast, create_opts}
              ]) ==
                :ok
 
@@ -193,6 +194,20 @@ defmodule TypedGql.GeneratorHelpersTest do
 
       assert Path.basename(List.to_string(first)) == "first.ex"
       assert Path.basename(List.to_string(second)) == "second.ex"
+    end
+
+    # The generators hand their caller's env straight through, rather than
+    # converting it to a [file:, line:] keyword first.
+    test "takes a Macro.Env as well as a keyword" do
+      ast = quote(do: def(value, do: :ok))
+      env = %{__ENV__ | file: "from_env.ex", line: 1}
+
+      assert :ok =
+               GeneratorHelpers.create_modules([{TypedGql.Test.CreateModulesFromEnv, ast, env}])
+
+      source = TypedGql.Test.CreateModulesFromEnv.__info__(:compile)[:source]
+
+      assert Path.basename(List.to_string(source)) == "from_env.ex"
     end
   end
 end

@@ -25,6 +25,14 @@ defmodule TypedGql.Generation.Plugin do
   alias TypedGql.Generation.Schema
   alias TypedGql.Language
 
+  @typedoc """
+  What `Module.create/3` is handed to record where a generated module came
+  from: the caller's `Macro.Env`, or a keyword list carrying `:file`/`:line`.
+  """
+  # TODO: replace with `Module.create_opts()` once the minimum Elixir defines
+  # it — 1.17 and earlier do not, and mix.exs still allows `~> 1.15`.
+  @type module_create_opts() :: Macro.Env.t() | keyword()
+
   @type selection() ::
           Language.Field.t()
           | Language.InlineFragment.t()
@@ -51,10 +59,12 @@ defmodule TypedGql.Generation.Plugin do
   @callback after_resolve(Schema.t(), Context.t()) :: Schema.t()
 
   @doc """
-  Runs on the `{module, quoted_ast, location}` triples produced by lowering.
+  Runs on the `{module, quoted_ast, create_opts}` triples produced by lowering,
+  where `create_opts` is what `Module.create/3` is handed to record where the
+  generated module came from.
   """
-  @callback after_lower([{module(), Macro.t(), keyword()}], Context.t()) ::
-              [{module(), Macro.t(), keyword()}]
+  @callback after_lower([{module(), Macro.t(), module_create_opts()}], Context.t()) ::
+              [{module(), Macro.t(), module_create_opts()}]
 
   @optional_callbacks before_normalize: 2, after_normalize: 2, after_resolve: 2, after_lower: 2
 

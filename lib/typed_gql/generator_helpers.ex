@@ -1,6 +1,8 @@
 defmodule TypedGql.GeneratorHelpers do
   @moduledoc false
 
+  alias TypedGql.Generation.Plugin
+
   @doc """
   Builds `source:` option for Ecto field/embed when the snake_case atom name
   differs from the original GraphQL field name (camelCase).
@@ -179,39 +181,31 @@ defmodule TypedGql.GeneratorHelpers do
   end
 
   @doc """
-  Converts a macro caller's `Macro.Env` into the `keyword()` location expected
-  by `create_modules/1`, so generated modules record the caller's file/line
-  (used by tooling like editor "go to definition") instead of wherever inside
-  typed_gql happens to compile them.
-  """
-  @spec location_from(Macro.Env.t()) :: keyword()
-  def location_from(%Macro.Env{} = caller_env), do: Macro.Env.location(caller_env)
+  Creates multiple modules from `{module_name, quoted_ast, create_opts}` tuples.
 
-  def location_from(other) do
-    raise ArgumentError,
-          "expected caller_env to be a Macro.Env.t(), got: #{inspect(other)}"
-  end
-
-  @doc """
-  Creates multiple modules from `{module_name, quoted_ast, location}` tuples.
-
-  `location` is a `keyword()` recording the `:file`/`:line` on each created
-  module (used by tooling like editor "go to definition"). It is specified per
-  module because each generated module records its own source location.
+  `create_opts` says where the module comes from, so tooling like editor "go to
+  definition" lands on the caller's `defgql` rather than wherever inside
+  typed_gql the module happens to be compiled. Passing the caller's `Macro.Env`
+  is enough — `Module.create/3` takes the file and line off it. It is specified
+  per module because each generated module records its own source location.
 
   Uses `Kernel.ParallelCompiler.pmap/2` (Elixir 1.16+) so that spawned
   processes can resolve dependencies via `Code.ensure_compiled/1` and the
   Mix compiler tracks the generated `.beam` files. Falls back to sequential
   creation on older Elixir versions or outside a compiler session.
   """
-  @spec create_modules([{module(), Macro.t(), keyword()}]) :: :ok
+  @spec create_modules([{module(), Macro.t(), Plugin.module_create_opts()}]) :: :ok
   def create_modules(module_asts) do
-    create_fn = fn {mod, ast, location} -> Module.create(mod, ast, location) end
+    create_fn = fn {mod, ast, create_opts} -> Module.create(mod, ast, create_opts) end
 
     try do
       # apply/3 so Elixir 1.15 (no pmap/2) still compiles; the rescue covers both
       # UndefinedFunctionError there and pmap/2 raising when no compiler session
       # is active or the session is interrupted (e.g. inside capture_io in tests).
+      #
+      # TODO: once the minimum Elixir is 1.16, call pmap/2 directly and drop
+      # UndefinedFunctionError from the rescue — the try/rescue itself stays,
+      # since pmap/2 still raises outside a compiler session on every version.
       # credo:disable-for-next-line Credo.Check.Refactor.Apply
       apply(Kernel.ParallelCompiler, :pmap, [module_asts, create_fn])
     rescue
