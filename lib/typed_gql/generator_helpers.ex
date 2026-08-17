@@ -195,9 +195,16 @@ defmodule TypedGql.GeneratorHelpers do
   creation on older Elixir versions or outside a compiler session.
   """
   @spec create_modules([{module(), Macro.t(), Plugin.module_create_opts()}]) :: :ok
-  # Nothing to create still registers the caller as waiting on the compiler,
-  # which then reports every such file as `deadlocked waiting on pmap []` as
-  # soon as they are the only ones left with work to do.
+  # pmap/2 does not short-circuit an empty collection: it registers as waiting
+  # on the compiler and blocks on a receive until released, whatever the
+  # collection. The compiler runs deadlock resolution once every file it is
+  # compiling sits in `waiting`, and pmap registers as `:raise`, which none of
+  # the release passes handle — so a build where every remaining file is parked
+  # in an empty pmap fails with `deadlocked waiting on pmap []`.
+  #
+  # It takes two or more such files and no other file making progress, which is
+  # an incremental rebuild of a couple of client modules — a full build always
+  # has other work in flight, which is why this survived CI.
   def create_modules([]), do: :ok
 
   def create_modules(module_asts) do
