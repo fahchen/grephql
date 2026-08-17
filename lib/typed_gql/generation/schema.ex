@@ -11,9 +11,9 @@ defmodule TypedGql.Generation.Schema do
     * union node — `kind: :union`, carries `union_module`,
       `typename_to_module`, and `children` (one object node per concrete
       type). Lowers to the concrete-type modules; the parameterized
-      `TypedGql.Types.Union` type module is created eagerly during resolve
-      because Ecto validates parameterized type modules exist at schema
-      compile time.
+      `TypedGql.Types.Union` type module is created in a batch of its own
+      first, because Ecto validates parameterized type modules exist at
+      schema compile time.
 
   The full tree for an operation is built before any lowering happens, so
   lifecycle plugins see the complete structure.

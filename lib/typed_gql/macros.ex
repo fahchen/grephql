@@ -1,5 +1,17 @@
 defmodule TypedGql.Macros do
-  @moduledoc false
+  @moduledoc """
+  The macros a client module gets from `use TypedGql`.
+
+  `defgql/2` and `defgqlp/2` define a query function from a GraphQL document,
+  and `deffragment/1` registers a fragment those documents can spread. All
+  three run at compile time: the document is parsed, validated against the
+  loaded schema, and lowered into embedded schemas for its result and its
+  variables, so a query the schema rejects fails the build rather than a call.
+
+  `~GQL` does none of that. It marks a string as GraphQL so `mix format` can
+  format it and returns that string unchanged; the macro it is passed to is
+  what compiles it.
+  """
 
   @doc """
   A sigil for writing GraphQL query strings that can be formatted by `mix format`.
@@ -21,17 +33,20 @@ defmodule TypedGql.Macros do
       \"\"\"
   """
   defmacro sigil_GQL(query_string, _modifiers) do
-    # Uppercase sigils receive an already-interpolated binary in Elixir,
-    # so we simply return it as-is. The value is the formatter hook.
+    # An uppercase sigil does not interpolate, so its contents arrive as a
+    # plain binary and are returned untouched. The sigil is the formatter hook.
     query_string
   end
 
   @doc false
   @spec __execute_with_variables__(TypedGql.Query.t(), map(), keyword()) ::
-          {:ok, TypedGql.Result.t()} | {:error, Ecto.Changeset.t() | Req.Response.t()}
+          {:ok, TypedGql.Result.t()}
+          | {:error, Ecto.Changeset.t() | Req.Response.t() | Exception.t()}
   def __execute_with_variables__(%TypedGql.Query{} = query, variables, opts) do
     with {:ok, struct} <- query.variables_module.build(variables) do
-      TypedGql.execute(query, struct, opts)
+      # Dump here, where the caller's original params are still in hand, so
+      # omitted optional fields can be pruned to absent rather than null.
+      TypedGql.execute(query, TypedGql.VariablesDumper.dump(struct, variables), opts)
     end
   end
 
@@ -119,8 +134,8 @@ defmodule TypedGql.Macros do
       )
 
     if undefined != [] do
-      names = Enum.map_join(undefined, ", ", &"...#{&1}")
-      raise CompileError, description: "undefined fragment spread: #{names}"
+      raise CompileError,
+        description: TypedGql.GeneratorHelpers.undefined_spread_message(undefined)
     end
 
     # Seeding `seen` with the local names is what makes a local definition
@@ -387,9 +402,10 @@ defmodule TypedGql.Macros do
             variables_module: variables_module
           ] do
       @spec unquote(name)(unquote(variables_module).params(), keyword()) ::
-              {:ok, TypedGql.Result.t(unquote(result_module).t())}
+              {:ok, TypedGql.Result.t(unquote(result_module).t() | nil)}
               | {:error, Ecto.Changeset.t()}
               | {:error, Req.Response.t()}
+              | {:error, Exception.t()}
     end
   end
 
@@ -397,8 +413,9 @@ defmodule TypedGql.Macros do
   defmacro __define_spec_without_vars__(name, result_module) do
     quote bind_quoted: [name: name, result_module: result_module] do
       @spec unquote(name)(keyword()) ::
-              {:ok, TypedGql.Result.t(unquote(result_module).t())}
+              {:ok, TypedGql.Result.t(unquote(result_module).t() | nil)}
               | {:error, Req.Response.t()}
+              | {:error, Exception.t()}
     end
   end
 

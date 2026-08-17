@@ -63,4 +63,21 @@ defmodule TypedGql.Types.DateTimeTest do
       assert :error = DateTimeType.load(123)
     end
   end
+
+  describe "embed_as/1" do
+    # Left at the :self default, Ecto would hand the %DateTime{} to the JSON
+    # encoder untouched and dump/1 would never run — the wire format would
+    # depend on the encoder implementing DateTime rather than on this module,
+    # and load/1 would be dead code, cast/1 serving both directions.
+    test "declares :dump, so dump/1 and load/1 are the ones that run" do
+      assert DateTimeType.embed_as(:json) == :dump
+    end
+
+    test "the embedded round trip goes through dump/1 and load/1" do
+      dt = ~U[2024-01-15 10:30:00Z]
+
+      assert {:ok, "2024-01-15T10:30:00Z"} = Ecto.Type.embedded_dump(DateTimeType, dt, :json)
+      assert {:ok, ^dt} = Ecto.Type.embedded_load(DateTimeType, "2024-01-15T10:30:00Z", :json)
+    end
+  end
 end

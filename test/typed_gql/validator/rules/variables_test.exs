@@ -60,6 +60,29 @@ defmodule TypedGql.Validator.Rules.VariablesTest do
     end
   end
 
+  # Spec 5.8.2 — the declaration promises a value the default cannot supply.
+  describe "null default values" do
+    test "a non-null variable defaulting to null is rejected" do
+      ctx = validate("query($id: ID! = null) { user(id: $id) { name } }")
+
+      assert [error] = errors(ctx)
+      assert error.message =~ ~s(variable "$id" of non-null type "ID!" cannot default to null)
+    end
+
+    test "a nullable variable may default to null" do
+      types = types_with_nullable_id_arg()
+      ctx = validate("query($id: ID = null) { user(id: $id) { name } }", types: types)
+
+      assert errors(ctx) == []
+    end
+
+    test "a non-null variable with a real default passes" do
+      ctx = validate(~s|query($id: ID! = "1") { user(id: $id) { name } }|)
+
+      assert errors(ctx) == []
+    end
+  end
+
   describe "variable type compatibility" do
     test "matching non-null type passes" do
       ctx = validate("query($id: ID!) { user(id: $id) { name } }")
@@ -69,6 +92,12 @@ defmodule TypedGql.Validator.Rules.VariablesTest do
     test "non-null variable for nullable argument passes" do
       types = types_with_nullable_id_arg()
       ctx = validate("query($id: ID!) { user(id: $id) { name } }", types: types)
+      assert type_errors(ctx) == []
+    end
+
+    test "nullable variable for nullable argument passes" do
+      types = types_with_nullable_id_arg()
+      ctx = validate("query($id: ID) { user(id: $id) { name } }", types: types)
       assert type_errors(ctx) == []
     end
 
@@ -110,6 +139,35 @@ defmodule TypedGql.Validator.Rules.VariablesTest do
     test "undefined variable skips type check" do
       ctx = validate("query { user(id: $id) { name } }")
       assert type_errors(ctx) == []
+    end
+
+    # Spec 5.8.5: the location can never receive null when a default stands in
+    # for the missing value, so a nullable variable is allowed there.
+    test "a nullable variable with a default passes for a non-null argument" do
+      ctx = validate(~s|query($id: ID = "1") { user(id: $id) { name } }|)
+      assert type_errors(ctx) == []
+    end
+
+    test "a nullable variable defaulting to null still fails for a non-null argument" do
+      ctx = validate("query($id: ID = null) { user(id: $id) { name } }")
+      assert [error] = type_errors(ctx)
+
+      assert error.message =~
+               "variable \"$id\" of type \"ID\" is not compatible with argument \"id\" of type \"ID!\""
+    end
+
+    test "a nullable variable passes for a non-null argument that has its own default" do
+      types = types_with_defaulted_id_arg()
+      ctx = validate("query($id: ID) { user(id: $id) { name } }", types: types)
+      assert type_errors(ctx) == []
+    end
+
+    test "a defaulted variable of the wrong type still fails" do
+      ctx = validate(~s|query($id: String = "1") { user(id: $id) { name } }|)
+      assert [error] = type_errors(ctx)
+
+      assert error.message =~
+               "variable \"$id\" of type \"String\" is not compatible with argument \"id\" of type \"ID!\""
     end
 
     test "a mismatch inside a condition-less inline fragment is still reported" do
@@ -216,6 +274,28 @@ defmodule TypedGql.Validator.Rules.VariablesTest do
         }
       }
     }
+  end
+
+  defp types_with_defaulted_id_arg do
+    Map.merge(SchemaHelper.default_types(), %{
+      "Query" => %Type{
+        kind: :object,
+        name: "Query",
+        fields: %{
+          "user" => %SchemaField{
+            name: "user",
+            type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :object, name: "User"}},
+            args: %{
+              "id" => %InputValue{
+                name: "id",
+                type: %TypeRef{kind: :non_null, of_type: %TypeRef{kind: :scalar, name: "ID"}},
+                default_value: "\"1\""
+              }
+            }
+          }
+        }
+      }
+    })
   end
 
   defp types_with_nullable_id_arg do

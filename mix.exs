@@ -19,7 +19,7 @@ defmodule TypedGql.MixProject do
       description: description(),
       package: package(),
       docs: docs(),
-      name: "typedGql",
+      name: "TypedGql",
       source_url: @source_url
     ]
   end
@@ -48,7 +48,6 @@ defmodule TypedGql.MixProject do
       {:ecto_typed_schema, "~> 0.1"},
       {:typed_structor, "~> 0.6"},
       {:plug, "~> 1.0", only: :test},
-      {:mimic, "~> 2.3", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
@@ -78,6 +77,7 @@ defmodule TypedGql.MixProject do
       source_url: @source_url,
       extras: [
         {"README.md", [title: "Introduction"]},
+        {"guides/mapping-custom-scalars.md", [title: "Mapping Custom Scalars"]},
         {"guides/extending-requests-with-prepare-req.md",
          [title: "Customizing Requests with prepare_req"]},
         {"LICENSE", [title: "License"]}
@@ -93,21 +93,80 @@ defmodule TypedGql.MixProject do
       groups_for_modules: [
         "Core API": [
           TypedGql,
+          TypedGql.Macros,
           TypedGql.Query,
           TypedGql.Result,
           TypedGql.Error,
-          TypedGql.OperationInfo
+          TypedGql.DecodeError,
+          TypedGql.OperationInfo,
+          TypedGql.JSON
         ],
         "Type System": [
           TypedGql.EmbeddedSchema,
           TypedGql.ResponseDecoder,
+          TypedGql.VariablesDumper,
           TypedGql.TypeMapper,
           TypedGql.TypeGenerator,
           TypedGql.InputTypeGenerator,
           TypedGql.Types.DateTime,
           TypedGql.Types.Enum,
           TypedGql.Types.Union,
-          TypedGql.Types.PathSegment
+          TypedGql.Types.PathSegment,
+          TypedGql.Types.Typename
+        ],
+        "Generation Plugins": [
+          TypedGql.Generation.Plugin,
+          TypedGql.Generation.Context,
+          TypedGql.Generation.Schema,
+          TypedGql.Generation.Field
+        ],
+        "GraphQL AST": [
+          TypedGql.Language,
+          TypedGql.Language.Source,
+          TypedGql.Language.Document,
+          TypedGql.Language.OperationDefinition,
+          TypedGql.Language.VariableDefinition,
+          TypedGql.Language.Variable,
+          TypedGql.Language.SelectionSet,
+          TypedGql.Language.Field,
+          TypedGql.Language.Argument,
+          TypedGql.Language.Directive,
+          TypedGql.Language.Fragment,
+          TypedGql.Language.FragmentSpread,
+          TypedGql.Language.InlineFragment,
+          TypedGql.Language.SchemaDeclaration,
+          TypedGql.Language.DirectiveDefinition,
+          TypedGql.Language.TypeExtensionDefinition,
+          TypedGql.Language.ScalarTypeDefinition,
+          TypedGql.Language.ObjectTypeDefinition,
+          TypedGql.Language.InterfaceTypeDefinition,
+          TypedGql.Language.UnionTypeDefinition,
+          TypedGql.Language.EnumTypeDefinition,
+          TypedGql.Language.InputObjectTypeDefinition,
+          TypedGql.Language.FieldDefinition,
+          TypedGql.Language.InputValueDefinition,
+          TypedGql.Language.EnumValueDefinition,
+          TypedGql.Language.NamedType,
+          TypedGql.Language.ListType,
+          TypedGql.Language.NonNullType,
+          TypedGql.Language.IntValue,
+          TypedGql.Language.FloatValue,
+          TypedGql.Language.StringValue,
+          TypedGql.Language.BooleanValue,
+          TypedGql.Language.NullValue,
+          TypedGql.Language.EnumValue,
+          TypedGql.Language.ListValue,
+          TypedGql.Language.ObjectValue,
+          TypedGql.Language.ObjectField
+        ],
+        Schema: [
+          TypedGql.Schema,
+          TypedGql.Schema.Type,
+          TypedGql.Schema.TypeRef,
+          TypedGql.Schema.Field,
+          TypedGql.Schema.InputValue,
+          TypedGql.Schema.EnumValue,
+          TypedGql.Schema.Directive
         ],
         Formatting: [
           TypedGql.Formatter

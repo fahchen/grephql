@@ -1,5 +1,13 @@
 defmodule TypedGql.Language do
-  @moduledoc false
+  @moduledoc """
+  The abstract syntax tree of a parsed GraphQL document.
+
+  Each `TypedGql.Language.*` module is one node of the GraphQL grammar, and the
+  types below name the alternatives the grammar allows at a given position: a
+  selection, a value, a type reference, or a top-level definition. Generation
+  plugins see these nodes as the query *as written*, next to the loaded
+  `TypedGql.Schema` describing what the server actually offers.
+  """
 
   @type selection_t() ::
           TypedGql.Language.Field.t()
@@ -25,7 +33,6 @@ defmodule TypedGql.Language do
   @type definition_t() ::
           TypedGql.Language.OperationDefinition.t()
           | TypedGql.Language.Fragment.t()
-          | TypedGql.Language.SchemaDefinition.t()
           | TypedGql.Language.SchemaDeclaration.t()
           | TypedGql.Language.ObjectTypeDefinition.t()
           | TypedGql.Language.InterfaceTypeDefinition.t()
@@ -37,7 +44,10 @@ defmodule TypedGql.Language do
           | TypedGql.Language.TypeExtensionDefinition.t()
 
   defmodule Source do
-    @moduledoc false
+    @moduledoc """
+    The raw GraphQL text a document was parsed from, and the label used for it
+    when reporting errors.
+    """
     use TypedStructor
 
     typed_structor do
@@ -47,7 +57,10 @@ defmodule TypedGql.Language do
   end
 
   defmodule Document do
-    @moduledoc false
+    @moduledoc """
+    A parsed GraphQL document: the root of the tree, holding every operation,
+    fragment and type definition the source declared.
+    """
     use TypedStructor
 
     typed_structor do
@@ -68,6 +81,18 @@ defmodule TypedGql.Language do
           do: {fragment.name, fragment}
     end
   end
+
+  @doc """
+  Whether a variable definition's default value can stand in for a missing one.
+
+  `nil` means the definition declared no default. A `NullValue` declared one
+  that is null, which satisfies nothing a non-null type promises — so neither
+  makes the variable optional, nor lets it reach a non-null argument.
+  """
+  @spec usable_default?(TypedGql.Language.value_t() | nil) :: boolean()
+  def usable_default?(nil), do: false
+  def usable_default?(%TypedGql.Language.NullValue{}), do: false
+  def usable_default?(_value), do: true
 
   @doc """
   Every fragment spread name in a selection set, depth first, duplicates kept.

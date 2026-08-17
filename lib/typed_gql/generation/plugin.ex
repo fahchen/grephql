@@ -14,13 +14,24 @@ defmodule TypedGql.Generation.Plugin do
   hooks it cares about (the built-in `@include`/`@skip` plugin implements
   only `after_resolve`).
 
-  TypedGql always runs its built-in plugins before user plugins, in order,
-  at each juncture.
+  TypedGql always runs its built-in plugins — currently
+  `TypedGql.Generation.Plugins.SkipInclude` for `@include`/`@skip` — before the
+  ones given in the `:generation_plugins` option, in order, at each juncture.
+
+  `TypedGql.TypeGenerator` describes what each step does.
   """
 
   alias TypedGql.Generation.Context
   alias TypedGql.Generation.Schema
   alias TypedGql.Language
+
+  @typedoc """
+  What `Module.create/3` is handed to record where a generated module came
+  from: the caller's `Macro.Env`, or a keyword list carrying `:file`/`:line`.
+  """
+  # TODO: replace with `Module.create_opts()` once the minimum Elixir is 1.19,
+  # which is where that type was added; mix.exs still allows `~> 1.15`.
+  @type module_create_opts() :: Macro.Env.t() | keyword()
 
   @type selection() ::
           Language.Field.t()
@@ -48,10 +59,12 @@ defmodule TypedGql.Generation.Plugin do
   @callback after_resolve(Schema.t(), Context.t()) :: Schema.t()
 
   @doc """
-  Runs on the `{module, quoted_ast, location}` triples produced by lowering.
+  Runs on the `{module, quoted_ast, create_opts}` triples produced by lowering,
+  where `create_opts` is what `Module.create/3` is handed to record where the
+  generated module came from.
   """
-  @callback after_lower([{module(), Macro.t(), keyword()}], Context.t()) ::
-              [{module(), Macro.t(), keyword()}]
+  @callback after_lower([{module(), Macro.t(), module_create_opts()}], Context.t()) ::
+              [{module(), Macro.t(), module_create_opts()}]
 
   @optional_callbacks before_normalize: 2, after_normalize: 2, after_resolve: 2, after_lower: 2
 

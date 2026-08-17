@@ -1,9 +1,9 @@
 ---
 id: BDR-0007
-title: Use EctoTypedSchema embedded schemas and Changeset for type generation
+title: Use EctoTypedSchema embedded schemas for types, Changeset for input validation
 status: accepted
 date: 2026-04-04
-summary: Generate Ecto embedded schemas via ecto_typed_schema for all output/input types; use Ecto.Changeset for response deserialization and input validation
+summary: Generate Ecto embedded schemas via ecto_typed_schema for all output/input types; load responses with Ecto.embedded_load/3 and validate inputs with Ecto.Changeset
 ---
 
 **Feature**: client/features/type_generation.feature
@@ -13,12 +13,15 @@ summary: Generate Ecto embedded schemas via ecto_typed_schema for all output/inp
 
 All generated GraphQL types (output and input) are Ecto embedded schemas defined
 via `ecto_typed_schema` (`typed_embedded_schema` macro). This replaces
-`typed_structor` and removes the `type_style` configuration — only struct mode exists.
+`typed_structor` for generated types and removes the `type_style` configuration —
+only struct mode exists.
 
 **Output types:**
 - Generated as embedded schemas with per-query field path naming
-- Response JSON is deserialized via `Ecto.Changeset.cast/3` recursively into
-  nested embedded schema structs
+- Response JSON is deserialized via `Ecto.embedded_load/3`, which recurses into
+  nested embedded schemas and invokes each field's `Ecto.Type` — `load/1` for a
+  type declaring `embed_as: :dump`, `cast/1` for one leaving the `:self`
+  default (see `guides/mapping-custom-scalars.md`)
 
 **Input types:**
 - Generated as schema-level embedded schemas with a `build/1` function
@@ -27,7 +30,8 @@ via `ecto_typed_schema` (`typed_embedded_schema` macro). This replaces
 
 **Removed:**
 - `type_style` configuration (`:struct`, `:map`, `:query_shape`)
-- `typed_structor` dependency
+- `typed_structor` as the generator for GraphQL types — it is retained for the
+  library's own structs (AST, schema, config), per the project convention
 - Map mode for unions (only direct struct matching)
 
 ## Reason

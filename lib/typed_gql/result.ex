@@ -13,31 +13,11 @@ defmodule TypedGql.Result do
 
   ## Assigns
 
-  The `assigns` field lets you capture arbitrary response metadata
-  (e.g. rate-limit info from a GraphQL `extensions` field) by using
-  a Req response step in your client's `prepare_req/1` callback:
-
-      defmodule MyApp.Shopify do
-        use TypedGql,
-          otp_app: :my_app,
-          source: "priv/shopify_schema.json"
-
-        def prepare_req(req) do
-          Req.Request.append_response_steps(req,
-            shopify_extensions: fn {req, resp} ->
-              extensions = resp.body["extensions"]
-              {req, TypedGql.Result.put_resp_assign(resp, :extensions, extensions)}
-            end
-          )
-        end
-
-        defgql :get_products, ~GQL\"\"\"
-          query { products(first: 10) { edges { node { title } } } }
-        \"\"\"
-      end
-
-      {:ok, result} = MyApp.Shopify.get_products()
-      result.assigns[:extensions]["cost"]["throttleStatus"]
+  The `assigns` field carries response metadata a Req response step put
+  there with `put_resp_assign/3` — rate-limit numbers from a GraphQL
+  `extensions` field, say. See the
+  [prepare_req guide](guides/extending-requests-with-prepare-req.md) for a
+  worked client.
   """
 
   use TypedStructor
@@ -54,7 +34,11 @@ defmodule TypedGql.Result do
     field :assigns, map(), default: %{}
   end
 
-  @type t() :: t(struct())
+  # `data` is nil whenever there was nothing to decode — the response carried
+  # "data": null or no "data" key at all, or the query has no result module —
+  # so the unparameterized form has to admit it. Callers naming their own data
+  # type add `| nil` themselves when they can receive it.
+  @type t() :: t(struct() | nil)
 
   @doc """
   Stores a key-value pair in the TypedGql assigns area of a `Req.Response`.

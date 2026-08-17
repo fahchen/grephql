@@ -7,7 +7,7 @@ summary: Upstream Absinthe changes are pulled in by copying the file and hand-re
 ---
 
 **Feature**: client/features/compile_time_validation.feature
-**Rule**: Schema is loaded at compile time from the configured source
+**Rule**: All validation rules
 
 Follows on from [BDR-0005](BDR-0005-fork-absinthe-parser.md), which decided to fork the parser in the first place.
 

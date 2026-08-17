@@ -1,5 +1,8 @@
 defmodule TypedGql.Schema.InputValue do
-  @moduledoc false
+  @moduledoc """
+  An input position in a loaded schema: a field argument, a directive argument
+  or an input object field.
+  """
   use TypedStructor
 
   alias TypedGql.Schema.TypeRef

@@ -28,7 +28,28 @@ defmodule TypedGql.Validator.Rules.Variables do
     |> check_unique_definitions(op.variable_definitions)
     |> check_unused_variables(defined, used)
     |> check_undefined_variables(defined, used)
+    |> check_null_defaults(op.variable_definitions)
     |> check_variable_types(op, defined, ctx.schema)
+  end
+
+  # Spec 5.8.2: a default has to be usable as the variable's type, and null
+  # never is for a non-null one — the declaration promises a value it cannot
+  # supply, and generation would go on to treat the variable as optional.
+  defp check_null_defaults(ctx, var_defs) do
+    Enum.reduce(var_defs, ctx, fn var_def, acc ->
+      case {var_def.type, var_def.default_value} do
+        {%TypedGql.Language.NonNullType{}, %TypedGql.Language.NullValue{}} ->
+          Context.add_error(
+            acc,
+            "variable \"$#{var_def.variable.name}\" of non-null type " <>
+              "\"#{type_ref_to_string(var_def.type)}\" cannot default to null",
+            var_def
+          )
+
+        _usable_or_absent ->
+          acc
+      end
+    end)
   end
 
   defp check_unique_definitions(ctx, var_defs) do
@@ -176,7 +197,7 @@ defmodule TypedGql.Validator.Rules.Variables do
   defp check_var_type_match(ctx, arg, var_name, input_value, defined) do
     var_def = Map.fetch!(defined, var_name)
 
-    if compare_types(var_def.type, input_value.type) do
+    if usage_allowed?(var_def, input_value) do
       ctx
     else
       var_type_str = type_ref_to_string(var_def.type)
@@ -188,6 +209,30 @@ defmodule TypedGql.Validator.Rules.Variables do
         arg
       )
     end
+  end
+
+  # Spec 5.8.5: a nullable variable may still be used where a non-null value is
+  # expected, as long as one side carries a default the server falls back to —
+  # so the location can never actually receive null.
+  defp usage_allowed?(%VariableDefinition{type: %TypedGql.Language.NonNullType{}} = var_def, %{
+         type: location_type
+       }) do
+    compare_types(var_def.type, location_type)
+  end
+
+  defp usage_allowed?(
+         var_def,
+         %{type: %TypedGql.Schema.TypeRef{kind: :non_null, of_type: inner}} = input_value
+       ) do
+    default_supplied?(var_def, input_value) and compare_types(var_def.type, inner)
+  end
+
+  defp usage_allowed?(var_def, %{type: location_type}) do
+    compare_types(var_def.type, location_type)
+  end
+
+  defp default_supplied?(%VariableDefinition{default_value: variable_default}, input_value) do
+    TypedGql.Language.usable_default?(variable_default) or not is_nil(input_value.default_value)
   end
 
   defp compare_types(%TypedGql.Language.NonNullType{type: inner}, %TypedGql.Schema.TypeRef{

@@ -14,6 +14,15 @@ defmodule TypedGql.Validator.Rules.FieldsTest do
       assert errors(ctx) == []
     end
 
+    # A condition-less inline fragment keeps its enclosing type, so its
+    # selections are checked like any other. Dropping that type made the whole
+    # block invisible to this rule.
+    test "non-existent field inside a condition-less inline fragment fails" do
+      ctx = validate("query { user { ... { nonExistentField } } }")
+      assert [error] = errors(ctx)
+      assert error.message =~ "\"nonExistentField\" does not exist on type \"User\""
+    end
+
     test "non-existent field fails" do
       ctx = validate("query { user { nonExistentField } }")
       assert [error] = errors(ctx)

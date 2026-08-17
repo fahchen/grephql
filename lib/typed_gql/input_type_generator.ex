@@ -57,9 +57,9 @@ defmodule TypedGql.InputTypeGenerator do
         collect_input_type(type_name, context, collect_acc)
       end)
 
-    location = GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
+    create_opts = Keyword.fetch!(opts, :caller_env)
 
-    module_asts = Enum.map(module_asts, fn {module, ast} -> {module, ast, location} end)
+    module_asts = Enum.map(module_asts, fn {module, ast} -> {module, ast, create_opts} end)
 
     GeneratorHelpers.create_modules(module_asts)
 
@@ -118,7 +118,16 @@ defmodule TypedGql.InputTypeGenerator do
           # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
           atom_name = var_name |> Macro.underscore() |> String.to_atom()
 
-          req = if resolved.nullable, do: reqs, else: [atom_name | reqs]
+          # A variable the operation gives a default value is optional for the
+          # caller: leaving it out of the request makes the server apply that
+          # default, which is the whole point of declaring one. A null default
+          # is not one — the validator rejects it, and it must not make a
+          # non-null variable optional here either.
+          req =
+            if resolved.nullable or TypedGql.Language.usable_default?(var_def.default_value),
+              do: reqs,
+              else: [atom_name | reqs]
+
           source_opt = GeneratorHelpers.source_opt(atom_name, var_name)
 
           build_input_field_def(
@@ -144,11 +153,11 @@ defmodule TypedGql.InputTypeGenerator do
         required_names
       )
 
-    location = GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
+    create_opts = Keyword.fetch!(opts, :caller_env)
 
     module_asts =
       Enum.map([variables_ast | nested_asts], fn {module, ast} ->
-        {module, ast, location}
+        {module, ast, create_opts}
       end)
 
     GeneratorHelpers.create_modules(module_asts)

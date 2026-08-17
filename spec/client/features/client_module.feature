@@ -38,15 +38,16 @@ Feature: Client module configuration
       When a query is executed with opts endpoint: "https://staging.example.com/graphql"
       Then the staging endpoint is used
 
-  Rule: Compile-time config stays in use options, runtime config stays in otp_app config
+  Rule: :scalars and :generation_plugins are compile-time only; :endpoint and :req_options may be set in either layer
 
     Scenario: scalars mapping is a compile-time option
-      Given a client module configured with scalars %{"DateTime" => MyApp.Types.DateTime}
+      Given a client module configured with scalars %{"Money" => MyApp.Types.Money}
       Then the scalars mapping is applied during compilation and cannot be changed at runtime
 
-    Scenario: endpoint is a runtime option
-      Given runtime config sets endpoint to "https://api.example.com/graphql"
-      Then the endpoint is resolved at runtime when queries are executed
+    Scenario: endpoint set in use options is overridden by runtime config
+      Given a client module whose use options set endpoint to "https://compile.example.com/graphql"
+      And runtime config sets endpoint to "https://api.example.com/graphql"
+      Then the runtime endpoint is used when queries are executed
 
   Rule: Req options are passed through to the HTTP client
 

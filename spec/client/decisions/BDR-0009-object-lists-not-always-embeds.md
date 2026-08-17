@@ -46,10 +46,15 @@ the Ecto type keeps none of the per-level nullability.
 ## Consequences
 
 - For `[T]`, `[T]!` and `[T!]` fields the generated member is no longer an Ecto
-  embed: it leaves `__schema__(:embeds)`, its struct default is `nil` rather
-  than `[]`, and its typespec gains `| nil` on the list and/or its elements.
-  Callers that relied on the `[]` coercion see `nil` instead — which is exactly
-  the information the change restores.
+  embed: it leaves `__schema__(:embeds)` and its typespec gains `| nil` on the
+  list and/or its elements. Callers that relied on the `[]` coercion of a
+  nullable list see `nil` instead — which is exactly the information the change
+  restores.
+- Struct defaults follow the schema's outer nullability, not the lowering: a
+  list the schema declares non-null (`[T!]!`, `[T]!`) defaults to `[]` whether
+  it became an `embeds_many` or a plain field, because its typespec carries no
+  `| nil`. A nullable list, and a conditional one that the response may omit,
+  defaults to `nil`.
 - Decoding stays `Ecto.embedded_load/3` only, so `Ecto.Embedded.cast/2` (which
   rejects a list under `cardinality: :one`) is never on the decode path.
 - A `[T!]!` field carrying `@skip`/`@include` is a plain field too: `embeds_many`

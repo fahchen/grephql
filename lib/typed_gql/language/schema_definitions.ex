@@ -1,17 +1,8 @@
-defmodule TypedGql.Language.SchemaDefinition do
-  @moduledoc false
-  use TypedStructor
-
-  typed_structor do
-    field :description, String.t()
-    field :directives, [TypedGql.Language.Directive.t()], default: []
-    field :fields, [TypedGql.Language.FieldDefinition.t()], default: []
-    field :loc, map(), default: %{line: nil}
-  end
-end
-
 defmodule TypedGql.Language.SchemaDeclaration do
-  @moduledoc false
+  @moduledoc """
+  A `schema { ... }` block declaring which types serve as the query, mutation
+  and subscription roots.
+  """
   use TypedStructor
 
   typed_structor do
@@ -23,7 +14,10 @@ defmodule TypedGql.Language.SchemaDeclaration do
 end
 
 defmodule TypedGql.Language.DirectiveDefinition do
-  @moduledoc false
+  @moduledoc """
+  A `directive @name on ...` definition: where a custom directive may be
+  applied and whether it may repeat.
+  """
   use TypedStructor
 
   typed_structor do
@@ -38,7 +32,9 @@ defmodule TypedGql.Language.DirectiveDefinition do
 end
 
 defmodule TypedGql.Language.TypeExtensionDefinition do
-  @moduledoc false
+  @moduledoc """
+  An `extend` definition, adding members to a type declared elsewhere.
+  """
   use TypedStructor
 
   typed_structor do

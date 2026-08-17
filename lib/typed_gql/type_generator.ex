@@ -7,10 +7,7 @@ defmodule TypedGql.TypeGenerator do
 
   ## Generation pipeline
 
-  Generation runs as four named steps. Lifecycle plugins
-  (`TypedGql.Generation.Plugin`) hook the first three via `after_normalize`,
-  `after_resolve`, and `after_lower` (plus `before_normalize` for the raw
-  entry); the terminal `create` step compiles modules and is not hookable:
+  Generation runs as four named steps:
 
     1. `normalize` — raw selections to canonical selections: expands fragment
        spreads, flattens inline fragments on object types, and propagates
@@ -22,9 +19,8 @@ defmodule TypedGql.TypeGenerator do
     3. `lower` — tree to `{module, quoted_ast}` pairs.
     4. `create` — `{module, ast}` pairs to BEAM modules.
 
-  TypedGql always runs its built-in plugins (currently
-  `TypedGql.Generation.Plugins.SkipInclude` for `@include`/`@skip`) before any
-  user plugins supplied via the `:generation_plugins` option.
+  `TypedGql.Generation.Plugin` documents which steps a plugin may hook and in
+  what order the built-in and user plugins run.
 
   ## Naming convention
 
@@ -46,6 +42,11 @@ defmodule TypedGql.TypeGenerator do
   omit it entirely, and `embeds_many` pins `default: []`, which would report a
   list the server never sent as an empty one.
 
+  A list the schema declares non-null — `[T!]!` and `[T]!` alike — defaults to
+  `[]` rather than `nil`, since its typespec carries no `| nil`. Only a
+  conditional one keeps a `nil` default, for the same reason it loses
+  `embeds_many`.
+
   ## Union/Interface support
 
   When a field's type is a union or interface, inline fragments determine
@@ -65,6 +66,7 @@ defmodule TypedGql.TypeGenerator do
   alias TypedGql.Language.ObjectValue
   alias TypedGql.Schema
   alias TypedGql.TypeMapper
+  alias TypedGql.Types
   alias TypedGql.Validator.Helpers
 
   @builtin_plugins [SkipInclude]
@@ -106,7 +108,6 @@ defmodule TypedGql.TypeGenerator do
     base_module = Module.concat([client_module, GeneratorHelpers.camelize(function_name), Result])
 
     root_type_name = Helpers.root_type_name(schema, operation.operation)
-    location = GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
 
     operation.selection_set.selections
     |> run_pipeline(
@@ -114,7 +115,7 @@ defmodule TypedGql.TypeGenerator do
       base_module,
       build_context(schema, opts),
       plugins(opts),
-      location
+      Keyword.fetch!(opts, :caller_env)
     )
     |> unwrap_module_names()
   end
@@ -156,7 +157,7 @@ defmodule TypedGql.TypeGenerator do
         base_module,
         build_context(schema, opts),
         plugins(opts),
-        GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
+        Keyword.fetch!(opts, :caller_env)
       )
 
     # base_module is the naming root the pipeline was given, not necessarily a
@@ -181,7 +182,7 @@ defmodule TypedGql.TypeGenerator do
   end
 
   # Runs the full generation pipeline and returns the tree's module result.
-  defp run_pipeline(selections, parent_type_name, parent_module, context, plugins, location) do
+  defp run_pipeline(selections, parent_type_name, parent_module, context, plugins, create_opts) do
     canonical =
       selections
       |> run_after(plugins, :before_normalize, context)
@@ -193,10 +194,16 @@ defmodule TypedGql.TypeGenerator do
       |> resolve(parent_type_name, parent_module, context)
       |> run_after(plugins, :after_resolve, context)
 
-    create_union_modules(tree)
+    # Union dispatchers are their own batch, and go first: an embedded schema
+    # naming one resolves it through Ecto's `Code.ensure_compiled/1`, which
+    # cannot wait for a module a sibling task in the same batch has not created
+    # yet — the parallel compiler only waits for modules it knows are coming.
+    tree
+    |> union_asts(create_opts)
+    |> GeneratorHelpers.create_modules()
 
     tree
-    |> lower(location)
+    |> lower(create_opts)
     |> run_after(plugins, :after_lower, context)
     |> GeneratorHelpers.create_modules()
 
@@ -422,7 +429,7 @@ defmodule TypedGql.TypeGenerator do
       # Dropping the spread would generate a struct missing every field it
       # selected, and the request would still ask the server for them.
       :error ->
-        raise CompileError, description: "undefined fragment spread: ...#{name}"
+        raise CompileError, description: GeneratorHelpers.undefined_spread_message([name])
     end
   end
 
@@ -872,33 +879,35 @@ defmodule TypedGql.TypeGenerator do
 
   # ── create (union types) ─────────────────────────────────────────────────
 
-  # Union/interface parameterized type modules must be created eagerly because
-  # Ecto's __field__ validates parameterized type modules exist at schema
-  # compile time, before lowered embedded-schema modules are created.
-  defp create_union_modules(%GenSchema{kind: :union} = node) do
-    TypedGql.Types.Union.define(node.union_module, node.typename_to_module)
-    Enum.each(node.children, &create_union_modules/1)
+  # Collects the union/interface dispatcher modules anywhere in the tree.
+  # They depend on nothing that is generated — the variant modules reach them
+  # as escaped atoms — so one batch holds all of them.
+  defp union_asts(node, create_opts, acc \\ [])
+
+  defp union_asts(%GenSchema{kind: :union} = node, create_opts, acc) do
+    ast = {node.union_module, Types.Union.module_ast(node.typename_to_module), create_opts}
+    Enum.reduce(node.children, [ast | acc], &union_asts(&1, create_opts, &2))
   end
 
-  defp create_union_modules(%GenSchema{kind: :object} = node) do
-    Enum.each(node.children, &create_union_modules/1)
+  defp union_asts(%GenSchema{kind: :object} = node, create_opts, acc) do
+    Enum.reduce(node.children, acc, &union_asts(&1, create_opts, &2))
   end
 
   # ── lower ──────────────────────────────────────────────────────────────
 
-  # Lowers the tree into {module, quoted_ast, location} triples, rebuilding each
-  # field's tuple/AST from its Generation.Field, so plugin nullability changes
-  # flow through naturally.
-  defp lower(%GenSchema{} = tree, location), do: lower(tree, [], location)
+  # Lowers the tree into {module, quoted_ast, create_opts} triples, rebuilding
+  # each field's tuple/AST from its Generation.Field, so plugin nullability
+  # changes flow through naturally.
+  defp lower(%GenSchema{} = tree, create_opts), do: lower(tree, [], create_opts)
 
-  defp lower(%GenSchema{kind: :union} = node, acc, location) do
-    Enum.reduce(node.children, acc, &lower(&1, &2, location))
+  defp lower(%GenSchema{kind: :union} = node, acc, create_opts) do
+    Enum.reduce(node.children, acc, &lower(&1, &2, create_opts))
   end
 
-  defp lower(%GenSchema{kind: :object} = node, acc, location) do
+  defp lower(%GenSchema{kind: :object} = node, acc, create_opts) do
     field_defs = Enum.map(node.fields, &lower_field/1)
-    ast = build_embedded_schema_ast(node.module, field_defs, location)
-    Enum.reduce(node.children, [ast | acc], &lower(&1, &2, location))
+    ast = build_embedded_schema_ast(node.module, field_defs, create_opts)
+    Enum.reduce(node.children, [ast | acc], &lower(&1, &2, create_opts))
   end
 
   defp lower_field(%GenField{kind: :field} = field) do
@@ -910,7 +919,8 @@ defmodule TypedGql.TypeGenerator do
     typename_opts = GeneratorHelpers.typename_opts(resolved)
 
     opts =
-      [{:typed, typed_opts} | source_opt] ++ enum_opts ++ typename_opts ++ embedded_opts
+      [{:typed, typed_opts} | source_opt] ++
+        enum_opts ++ typename_opts ++ embedded_opts ++ list_default_opts(field)
 
     {:field, field.name, resolved.ecto_type, opts}
   end
@@ -920,6 +930,17 @@ defmodule TypedGql.TypeGenerator do
     typed_opts = GeneratorHelpers.embed_typed_opts(kind, field.resolved)
     {kind, field.name, field.embed_module, [{:typed, typed_opts} | source_opt]}
   end
+
+  # A list the schema declares non-null can never be nil, and the generated
+  # typespec already says so, so the struct default has to be the empty list —
+  # `embeds_many` gets this from Ecto, and every other list shape has to ask.
+  defp list_default_opts(
+         %GenField{resolved: %{nullable: false, ecto_type: {:array, _inner}}} = field
+       ) do
+    if SkipInclude.conditional?(field.query_field.directives), do: [], else: [default: []]
+  end
+
+  defp list_default_opts(_field), do: []
 
   # A composite leaf — a union dispatcher, or an object behind `Ecto.Embedded` —
   # takes its typespec from the GraphQL type, because the Ecto type says nothing
@@ -938,7 +959,7 @@ defmodule TypedGql.TypeGenerator do
     end
   end
 
-  defp build_embedded_schema_ast(module_name, field_defs, location) do
+  defp build_embedded_schema_ast(module_name, field_defs, create_opts) do
     field_asts = Enum.map(field_defs, &GeneratorHelpers.field_def_to_ast/1)
 
     ast =
@@ -950,7 +971,7 @@ defmodule TypedGql.TypeGenerator do
         end
       end
 
-    {module_name, ast, location}
+    {module_name, ast, create_opts}
   end
 
   # Extracts the module name list from the generated tree, root-first and

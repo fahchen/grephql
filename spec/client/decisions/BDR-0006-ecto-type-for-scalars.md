@@ -20,8 +20,8 @@ and shorthand `{type, serialize_fn, deserialize_fn}` tuple.
 - `cast/1` — External input → Elixir value (for user-facing input validation)
 - `type/0` — Declares the underlying Ecto primitive type
 
-Enum types also go through Ecto Type: atoms are dumped as uppercase strings, uppercase
-strings are loaded as downcased atoms.
+Enum types also go through Ecto Type: an atom is dumped back to the schema's own
+spelling of the value, and any casing of that string is loaded as a downcased atom.
 
 Built-in types are provided under `TypedGql.Types.*` (e.g., `TypedGql.Types.DateTime`).
 

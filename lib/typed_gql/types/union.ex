@@ -20,24 +20,17 @@ defmodule TypedGql.Types.Union do
   """
 
   @doc """
-  Defines a parameterized Ecto Type module for a GraphQL union/interface.
+  The body of a parameterized Ecto Type module for a GraphQL union/interface.
 
-  Called by the type generator at compile time. `typename_to_module` maps
-  GraphQL `__typename` strings to their corresponding embedded schema modules.
+  Called by the type generator at compile time, which creates the module from
+  it alongside the embedded schemas, so that this one records the caller's
+  source location like the rest. `typename_to_module` maps GraphQL
+  `__typename` strings to their corresponding embedded schema modules.
   """
-  @spec define(module(), %{String.t() => module()}) :: {:module, module(), binary(), term()}
-  def define(module_name, typename_to_module)
-      when is_atom(module_name) and is_map(typename_to_module) do
-    Module.create(
-      module_name,
-      module_body(typename_to_module),
-      Macro.Env.location(__ENV__)
-    )
-  end
-
+  @spec module_ast(%{String.t() => module()}) :: Macro.t()
   # Multiple function clauses required by Ecto.ParameterizedType behaviour
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
-  defp module_body(typename_to_module) do
+  def module_ast(typename_to_module) when is_map(typename_to_module) do
     quote do
       use Ecto.ParameterizedType
 

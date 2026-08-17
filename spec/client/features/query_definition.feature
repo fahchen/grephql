@@ -59,6 +59,20 @@ Feature: GraphQL query definition and execution
       When the developer calls current_user(endpoint: "https://staging.example.com/graphql")
       Then the query is executed against the overridden endpoint
 
+    Scenario: A variable with a default value is optional for the caller
+      Given an operation declaring "query($term: String! = \"elixir\")"
+      When the developer calls the generated function without that variable
+      Then no changeset error is raised
+      And the variable is absent from the request, so the server applies the default
+
+    # GraphQL distinguishes absent from null: absent means "not given", null
+    # can mean "clear this value" in an update mutation.
+    Scenario: Omitted optional variables are absent from the request, explicit nil is null
+      Given a mutation whose input object has optional fields
+      When the developer calls it providing only some of those fields
+      Then the dumped variables JSON carries only the provided keys
+      And a field passed explicitly as nil is sent as JSON null
+
   Rule: Fragments are reused via string interpolation or deffragment
 
     Scenario: Interpolate a fragment string into a defgql query
@@ -97,6 +111,8 @@ Feature: GraphQL query definition and execution
       And fragment B is defined after fragment A
       When the module is compiled
       Then compilation fails with "undefined fragment spread: ...B"
+      And the error also names definition order as the likely cause, since spreads
+        may not form a cycle and can therefore always be ordered as a DAG
 
     Scenario: Later fragment definitions override earlier ones for subsequent queries
       Given fragment UserFields is defined before defgql :get_user_name with field name
@@ -120,12 +136,17 @@ Feature: GraphQL query definition and execution
     Scenario: Transport-level failure
       Given a valid query is executed
       When the HTTP request fails due to network error
-      Then the response is {:error, %Exception{}}
+      Then the response is {:error, exception} carrying Req's transport error
 
     Scenario: Non-2xx HTTP response
       Given a valid query is executed
       When the GraphQL server returns a non-2xx HTTP status
       Then the response is {:error, %Req.Response{}}
+
+    Scenario: 2xx response with data the schema cannot load
+      Given a valid query is executed
+      When the server returns data violating its own schema (unknown union __typename, out-of-range enum, wrong scalar type)
+      Then the response is {:error, %TypedGql.DecodeError{}}
 
   Rule: GraphQL errors are represented as TypedGql.Error structs
 

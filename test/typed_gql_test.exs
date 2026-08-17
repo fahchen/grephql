@@ -221,6 +221,32 @@ defmodule TypedGqlTest do
       assert {:ok, %Result{data: nil}} = TypedGql.execute(query)
     end
 
+    test "execute/3 with a pre-built variables struct dumps the full struct" do
+      Req.Test.stub(StubbedClient, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        request = Jason.decode!(body)
+
+        # A bare struct carries no record of which keys the caller provided,
+        # so every schema field is dumped — unset optionals as null.
+        assert request["variables"] == %{"name" => "Alice", "email" => nil}
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(200, Jason.encode!(%{"data" => nil}))
+      end)
+
+      query = %TypedGql.Query{
+        document: "query { user(id: \"1\") { name } }",
+        operation_type: "query",
+        client_module: StubbedClient,
+        result_module: nil
+      }
+
+      variables = %TypedGql.Test.Response.ScalarUser{name: "Alice"}
+
+      assert {:ok, %Result{data: nil}} = TypedGql.execute(query, variables)
+    end
+
     test "a non-JSON body is reported as an error" do
       Req.Test.stub(StubbedClient, fn conn ->
         conn

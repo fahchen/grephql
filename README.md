@@ -1,4 +1,4 @@
-# typedGql (formerly Grephql)
+# TypedGql
 [![Build Status](https://github.com/fahchen/typed_gql/actions/workflows/ci.yml/badge.svg)](https://github.com/fahchen/typed_gql/actions/workflows/ci.yml)
 [![Hex.pm](https://img.shields.io/hexpm/v/typed_gql)](https://hex.pm/packages/typed_gql)
 [![HexDocs](https://img.shields.io/badge/HexDocs-gray)](https://hexdocs.pm/typed_gql)
@@ -85,6 +85,10 @@ case MyApp.GitHub.get_user(%{login: "octocat"}) do
   {:error, %Req.Response{} = response} ->
     # HTTP error
     response.status
+
+  {:error, %TypedGql.DecodeError{} = error} ->
+    # The server answered 2xx with data the result schema cannot load
+    error.message
 end
 
 # Without variables
@@ -93,6 +97,8 @@ result.data.viewer.login
 ```
 
 ## Macros
+
+A tour of the three macros follows; `TypedGql.Macros` documents each one in full.
 
 ### `defgql` / `defgqlp`
 
@@ -138,8 +144,9 @@ defgql :get_user, ~GQL"""
 """
 ```
 
-The fragment generates a typed module at `Client.Fragments.UserFields`.
-`defgql` only sees fragments defined before it in the module. If the same fragment name is defined multiple times before a query, the latest definition overrides earlier ones for that query.
+The fragment generates a typed module at `Client.Fragments.UserFields` — an embedded schema for an object condition, or the `TypedGql.Types.Union` parameterized type when the condition resolves to per-member selections.
+
+`defgql` only sees fragments defined before it in the module, and a fragment body may only spread fragments defined above it — spreading one defined later is a compile error. If the same name is defined several times before a query, the latest definition wins for that query. See `TypedGql.Macros.deffragment/1` for why the macro model requires this while GraphQL itself does not.
 
 ## Configuration
 
@@ -225,12 +232,19 @@ use TypedGql,
   otp_app: :my_app,
   source: "schema.json",
   scalars: %{
-    "DateTime" => TypedGql.Types.DateTime,
-    "JSON"     => :map
+    "GitObjectID" => :string,
+    "Money"       => MyApp.Types.Money
   }
 ```
 
-`TypedGql.Types.DateTime` is included for ISO 8601 DateTime strings. For other custom scalars, provide any module implementing the `Ecto.Type` behaviour.
+A scalar maps to a plain Ecto type or to any module implementing the `Ecto.Type`
+behaviour. Widely used scalars — `DateTime`, `Date`, `JSON`, `URI`, `URL`,
+`BigInt`, `HTML`, `Base64String` — are already mapped (`DateTime` to
+`TypedGql.Types.DateTime`), so only schema-specific ones need an entry, and a
+mapping you give for a name that already has one replaces it.
+
+See the [custom scalars guide](guides/mapping-custom-scalars.md) for the full
+list of built-ins and for which `Ecto.Type` callbacks run on each path.
 
 ## Enums
 
@@ -348,9 +362,7 @@ end
 
 The `posts: [Posts.t()]` above assumes the schema declares it `[Post!]!`. A list
 typespec mirrors the schema's nullability at every level — `[Post]` generates
-`[Posts.t() | nil] | nil` — and only `[Post!]!` is an `embeds_many`; every other
-shape is a plain field, so its default is `nil` rather than `[]`. See
-`spec/client/decisions/BDR-0009-object-lists-not-always-embeds.md`.
+`[Posts.t() | nil] | nil` — and a nullable list's struct default is `nil`, not `[]`.
 
 ## Access Behaviour
 
@@ -464,9 +476,10 @@ mix typed_gql.download_schema --endpoint URL --output PATH [--header "Key: Value
 |--------|----------|-------------|
 | `:otp_app` | yes | OTP application for runtime config lookup |
 | `:source` | yes | Path to introspection JSON (relative to caller file) or inline JSON string |
-| `:endpoint` | no | Default GraphQL endpoint URL. Shorthand for `req_options: [url: ...]` |
+| `:endpoint` | no | Default GraphQL endpoint URL. The URL may also come from `req_options` (`:url`/`:base_url`) or `prepare_req/1`, both of which take precedence over it |
 | `:req_options` | no | Default [Req options](https://hexdocs.pm/req/Req.html#new/1) (keyword list) |
 | `:scalars` | no | Map of GraphQL scalar name to Ecto type (default: `%{}`) |
+| `:generation_plugins` | no | Extra `TypedGql.Generation.Plugin` modules, run after the built-in ones |
 
 ## JSON Library
 
@@ -481,7 +494,7 @@ Any module implementing `encode!/1` and `decode/1` works.
 ## Requirements
 
 - Elixir ~> 1.15
-- Erlang/OTP 24+
+- Erlang/OTP 26+ (the oldest pair covered by CI)
 
 ## License
 

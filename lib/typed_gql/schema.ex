@@ -1,5 +1,11 @@
 defmodule TypedGql.Schema do
-  @moduledoc false
+  @moduledoc """
+  A GraphQL schema loaded from an introspection result.
+
+  This is what the server says it offers — the root operation types, every
+  named type and every directive — and what queries are validated and
+  generated against.
+  """
   use TypedStructor
 
   alias TypedGql.Schema.Directive
