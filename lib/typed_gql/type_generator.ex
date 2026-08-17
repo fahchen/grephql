@@ -141,7 +141,7 @@ defmodule TypedGql.TypeGenerator do
   """
   @spec generate_fragment(TypedGql.Language.Fragment.t(), Schema.t(), module(), [option()]) ::
           module()
-  def generate_fragment(fragment, schema, client_module, opts \\ []) do
+  def generate_fragment(fragment, schema, client_module, opts) do
     # Fragment module names from schema, bounded set
     # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
     base_module =
