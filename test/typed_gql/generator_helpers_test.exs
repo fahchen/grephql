@@ -2,7 +2,12 @@ defmodule TypedGql.GeneratorHelpersTest do
   use ExUnit.Case, async: true
 
   # Defined at test runtime by create_modules/1, so the compiler cannot see it.
-  @compile {:no_warn_undefined, TypedGql.Test.CreateModulesSequential}
+  @compile {:no_warn_undefined,
+            [
+              TypedGql.Test.CreateModulesSequential,
+              TypedGql.Test.CreateModulesFirst,
+              TypedGql.Test.CreateModulesSecond
+            ]}
 
   alias TypedGql.GeneratorHelpers
 
@@ -164,11 +169,30 @@ defmodule TypedGql.GeneratorHelpersTest do
       # A test process is never a Kernel.ParallelCompiler worker, so pmap/2
       # raises here and the sequential path runs.
       ast = quote(do: def(hello, do: :world))
+      location = [file: "hello.ex", line: 1]
 
-      assert GeneratorHelpers.create_modules([{TypedGql.Test.CreateModulesSequential, ast}]) ==
+      assert GeneratorHelpers.create_modules([
+               {TypedGql.Test.CreateModulesSequential, ast, location}
+             ]) ==
                :ok
 
       assert TypedGql.Test.CreateModulesSequential.hello() == :world
+    end
+
+    test "records each module at its own location" do
+      ast = quote(do: def(value, do: :ok))
+
+      assert :ok =
+               GeneratorHelpers.create_modules([
+                 {TypedGql.Test.CreateModulesFirst, ast, [file: "first.ex", line: 1]},
+                 {TypedGql.Test.CreateModulesSecond, ast, [file: "second.ex", line: 1]}
+               ])
+
+      first = TypedGql.Test.CreateModulesFirst.__info__(:compile)[:source]
+      second = TypedGql.Test.CreateModulesSecond.__info__(:compile)[:source]
+
+      assert Path.basename(List.to_string(first)) == "first.ex"
+      assert Path.basename(List.to_string(second)) == "second.ex"
     end
   end
 end

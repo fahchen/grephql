@@ -316,7 +316,8 @@ defmodule TypedGql.Generation.SkipIncludeTest do
       client_module: client_module,
       function_name: function_name,
       fragments: Keyword.get(opts, :fragments, %{}),
-      generation_plugins: plugins
+      generation_plugins: plugins,
+      caller_env: __ENV__
     )
 
     assert_received {:resolved_tree, root}

@@ -21,7 +21,11 @@ defmodule TypedGql.InputTypeGenerator do
 
   alias TypedGql.Schema.TypeRef
 
-  @type option() :: {:client_module, module()} | {:function_name, atom()} | {:scalar_types, map()}
+  @type option() ::
+          {:client_module, module()}
+          | {:function_name, atom()}
+          | {:scalar_types, map()}
+          | {:caller_env, Macro.Env.t()}
 
   @doc """
   Generates input type modules for all input types referenced by
@@ -33,6 +37,8 @@ defmodule TypedGql.InputTypeGenerator do
 
     - `:client_module` — the parent client module (e.g., `MyApp.UserService`)
     - `:scalar_types` — custom scalar type mappings (default: `%{}`)
+    - `:caller_env` — the macro caller's `Macro.Env`, used to set generated
+      modules' source location for editor "go to definition" support
   """
   @spec generate(TypedGql.Language.OperationDefinition.t(), Schema.t(), [option()]) :: [module()]
   def generate(operation, schema, opts) do
@@ -51,6 +57,10 @@ defmodule TypedGql.InputTypeGenerator do
         collect_input_type(type_name, context, collect_acc)
       end)
 
+    location = GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
+
+    module_asts = Enum.map(module_asts, fn {module, ast} -> {module, ast, location} end)
+
     GeneratorHelpers.create_modules(module_asts)
 
     modules
@@ -68,6 +78,8 @@ defmodule TypedGql.InputTypeGenerator do
     - `:client_module` — the parent client module
     - `:function_name` — the defgql function name (for module path)
     - `:scalar_types` — custom scalar type mappings (default: `%{}`)
+    - `:caller_env` — the macro caller's `Macro.Env`, used to set generated
+      modules' source location for editor "go to definition" support
   """
   @spec generate_variables(
           TypedGql.Language.OperationDefinition.t(),
@@ -132,7 +144,14 @@ defmodule TypedGql.InputTypeGenerator do
         required_names
       )
 
-    GeneratorHelpers.create_modules([variables_ast | nested_asts])
+    location = GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
+
+    module_asts =
+      Enum.map([variables_ast | nested_asts], fn {module, ast} ->
+        {module, ast, location}
+      end)
+
+    GeneratorHelpers.create_modules(module_asts)
 
     variables_module
   end
