@@ -25,7 +25,7 @@ Add `typed_gql` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:typed_gql, "~> 0.12.2"}
+    {:typed_gql, "~> 0.13.0"}
   ]
 end
 ```
