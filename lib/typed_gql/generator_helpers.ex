@@ -205,6 +205,12 @@ defmodule TypedGql.GeneratorHelpers do
   # It takes two or more such files and no other file making progress, which is
   # an incremental rebuild of a couple of client modules — a full build always
   # has other work in flight, which is why this survived CI.
+  #
+  # This is Elixir's to fix, not ours: `def pmap([], fun), do: []` upstream ends
+  # it for everyone. We are not reporting it, so this clause stays. Reproduce it
+  # with two files that each call `Kernel.ParallelCompiler.pmap([], & &1)`,
+  # compiled by `Kernel.ParallelCompiler.compile/1` on a cold VM — warm, the
+  # release message wins the race and it passes.
   def create_modules([]), do: :ok
 
   def create_modules(module_asts) do
