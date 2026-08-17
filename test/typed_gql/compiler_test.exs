@@ -134,7 +134,8 @@ defmodule TypedGql.CompilerTest do
       query =
         Compiler.compile_document!(document, "", SchemaHelper.build_schema(),
           client_module: TypedGql.Test.CompilerDocument,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
 
       assert query.operation_name == "GetUser"
@@ -150,7 +151,8 @@ defmodule TypedGql.CompilerTest do
           "not the query that is sent",
           SchemaHelper.build_schema(),
           client_module: TypedGql.Test.CompilerIgnoredString,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
 
       assert query.document == "query GetUser {\n  users {\n    name\n  }\n}"
@@ -220,13 +222,15 @@ defmodule TypedGql.CompilerTest do
   defp compile!(client_module, function_name, query_string) do
     Compiler.compile!(query_string, SchemaHelper.build_schema(),
       client_module: client_module,
-      function_name: function_name
+      function_name: function_name,
+      caller_env: __ENV__
     )
   end
 
   defp compile_fragment!(client_module, fragment_string) do
     Compiler.compile_fragment!(fragment_string, SchemaHelper.build_schema(),
-      client_module: client_module
+      client_module: client_module,
+      caller_env: __ENV__
     )
   end
 end
