@@ -66,6 +66,7 @@ defmodule TypedGql.TypeGenerator do
   alias TypedGql.Language.ObjectValue
   alias TypedGql.Schema
   alias TypedGql.TypeMapper
+  alias TypedGql.Types
   alias TypedGql.Validator.Helpers
 
   @builtin_plugins [SkipInclude]
@@ -193,7 +194,13 @@ defmodule TypedGql.TypeGenerator do
       |> resolve(parent_type_name, parent_module, context)
       |> run_after(plugins, :after_resolve, context)
 
-    create_union_modules(tree)
+    # Union dispatchers are their own batch, and go first: an embedded schema
+    # naming one resolves it through Ecto's `Code.ensure_compiled/1`, which
+    # cannot wait for a module a sibling task in the same batch has not created
+    # yet — the parallel compiler only waits for modules it knows are coming.
+    tree
+    |> union_asts(create_opts)
+    |> GeneratorHelpers.create_modules()
 
     tree
     |> lower(create_opts)
@@ -872,16 +879,18 @@ defmodule TypedGql.TypeGenerator do
 
   # ── create (union types) ─────────────────────────────────────────────────
 
-  # Union/interface parameterized type modules must be created eagerly because
-  # Ecto's __field__ validates parameterized type modules exist at schema
-  # compile time, before lowered embedded-schema modules are created.
-  defp create_union_modules(%GenSchema{kind: :union} = node) do
-    TypedGql.Types.Union.define(node.union_module, node.typename_to_module)
-    Enum.each(node.children, &create_union_modules/1)
+  # Collects the union/interface dispatcher modules anywhere in the tree.
+  # They depend on nothing that is generated — the variant modules reach them
+  # as escaped atoms — so one batch holds all of them.
+  defp union_asts(node, create_opts, acc \\ [])
+
+  defp union_asts(%GenSchema{kind: :union} = node, create_opts, acc) do
+    ast = {node.union_module, Types.Union.module_ast(node.typename_to_module), create_opts}
+    Enum.reduce(node.children, [ast | acc], &union_asts(&1, create_opts, &2))
   end
 
-  defp create_union_modules(%GenSchema{kind: :object} = node) do
-    Enum.each(node.children, &create_union_modules/1)
+  defp union_asts(%GenSchema{kind: :object} = node, create_opts, acc) do
+    Enum.reduce(node.children, acc, &union_asts(&1, create_opts, &2))
   end
 
   # ── lower ──────────────────────────────────────────────────────────────

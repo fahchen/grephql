@@ -10,8 +10,10 @@ defmodule TypedGql.Types.UnionTest do
   alias TypedGql.Types.Union
 
   setup_all do
-    Union.define(SearchUnion, %{"User" => User, "Post" => Post})
-    Union.define(BareUnion, %{"User" => BareUser})
+    TypedGql.GeneratorHelpers.create_modules([
+      {SearchUnion, Union.module_ast(%{"User" => User, "Post" => Post}), __ENV__},
+      {BareUnion, Union.module_ast(%{"User" => BareUser}), __ENV__}
+    ])
 
     :ok
   end
