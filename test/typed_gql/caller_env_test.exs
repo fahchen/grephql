@@ -42,12 +42,14 @@ defmodule TypedGql.CallerEnvTest do
   end
 
   # The fixture records the line each operation was declared on, so this stays
-  # correct when that file is edited.
+  # correct when that file is edited. The two facts come from different places:
+  # the docs chunk gained a :source_path only in Elixir 1.18, while the compile
+  # info has carried the file all along and has never carried the line.
   defp assert_located(module) do
-    expected_line = Map.fetch!(Fixture.lines(), module)
-    {:docs_v1, line, _lang, _format, _doc, meta, _docs} = Code.fetch_docs(module)
+    {:docs_v1, line, _lang, _format, _doc, _meta, _docs} = Code.fetch_docs(module)
+    file = List.to_string(module.__info__(:compile)[:source])
 
-    assert line == expected_line
-    assert Path.basename(List.to_string(meta[:source_path])) == "caller_location_fixture.ex"
+    assert line == Map.fetch!(Fixture.lines(), module)
+    assert Path.basename(file) == "caller_location_fixture.ex"
   end
 end
