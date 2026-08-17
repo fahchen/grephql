@@ -96,7 +96,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.Basic,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.Basic.GetUser.Result.User in modules
@@ -113,7 +114,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.NonNull,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       fields = TypedGql.Test.NonNull.GetUser.Result.User.__schema__(:fields)
@@ -126,7 +128,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Nullable,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       user = struct(TypedGql.Test.Nullable.GetUser.Result.User)
@@ -143,7 +146,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.ResultRoot,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
 
       # Compiler.compile_document!/4 uses hd(output_modules) as the decode root.
@@ -159,7 +163,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.ObjectInlineFrag,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.ObjectInlineFrag.GetUser.Result.User in modules
@@ -201,7 +206,8 @@ defmodule TypedGql.TypeGeneratorTest do
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.HookOrder,
         function_name: :get_user,
-        generation_plugins: [RecordingPlugin]
+        generation_plugins: [RecordingPlugin],
+        caller_env: __ENV__
       )
 
       assert_received :before_normalize
@@ -219,7 +225,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.Nested,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.Nested.GetUser.Result.User in modules
@@ -238,7 +245,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.Deep,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.Deep.GetUser.Result.User in modules
@@ -253,7 +261,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.ManyEmbed,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       assert :posts in TypedGql.Test.ManyEmbed.GetUser.Result.User.__schema__(:embeds)
@@ -266,7 +275,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.ListEmbed,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       # [Post]! — embeds_many raises on a nil element, so the field lowers to
@@ -287,7 +297,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.NullableListNonNull,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       module = TypedGql.Test.NullableListNonNull.GetUser.Result.User
@@ -306,7 +317,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.NonNullMatrix,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       module = TypedGql.Test.NonNullMatrix.GetUser.Result.User
@@ -333,7 +345,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.ConditionalMany,
-        function_name: :q
+        function_name: :q,
+        caller_env: __ENV__
       )
 
       module = TypedGql.Test.ConditionalMany.Q.Result.User
@@ -349,7 +362,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.NullableList,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       decode = &TypedGql.ResponseDecoder.decode!(TypedGql.Test.NullableList.GetUser.Result, &1)
@@ -372,7 +386,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.PostMatrix,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.PostMatrix.GetUser.Result.User.PostMatrix in modules
@@ -398,7 +413,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.TagMatrix,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       assert TypedGql.Test.TagMatrix.GetUser.Result.User.__schema__(:type, :tag_matrix) ==
@@ -414,7 +430,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.UnionGrid,
-          function_name: :search
+          function_name: :search,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.UnionGrid.Search.Result.Grid.User in modules
@@ -441,7 +458,8 @@ defmodule TypedGql.TypeGeneratorTest do
       assert_raise CompileError, ~r/both map to the struct field :type_name/, fn ->
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.KeyCollision,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
       end
     end
@@ -454,7 +472,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Introspection,
-        function_name: :introspect
+        function_name: :introspect,
+        caller_env: __ENV__
       )
 
       assert :name in TypedGql.Test.Introspection.Introspect.Result.Schema.QueryType.__schema__(
@@ -470,7 +489,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Alias,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       fields = TypedGql.Test.Alias.GetUser.Result.User.__schema__(:fields)
@@ -489,7 +509,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.AliasMulti,
-          function_name: :get_users
+          function_name: :get_users,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.AliasMulti.GetUsers.Result in modules
@@ -523,7 +544,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.AliasArgs,
-          function_name: :get_users
+          function_name: :get_users,
+          caller_env: __ENV__
         )
 
       result_mod = TypedGql.Test.AliasArgs.GetUsers.Result
@@ -570,7 +592,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.AliasNested,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.AliasNested.GetUser.Result.User.Articles in modules
@@ -586,14 +609,16 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(op1, schema,
         client_module: TypedGql.Test.Isolation,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       op2 = parse!("query { user(id: \"1\") { name } }")
 
       TypeGenerator.generate(op2, schema,
         client_module: TypedGql.Test.Isolation,
-        function_name: :list_users
+        function_name: :list_users,
+        caller_env: __ENV__
       )
 
       get_fields = TypedGql.Test.Isolation.GetUser.Result.User.__schema__(:fields)
@@ -613,7 +638,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.NoPK,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       fields = TypedGql.Test.NoPK.GetUser.Result.User.__schema__(:fields)
@@ -631,7 +657,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.Union,
-          function_name: :search
+          function_name: :search,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.Union.Search.Result in modules
@@ -677,7 +704,8 @@ defmodule TypedGql.TypeGeneratorTest do
       assert_raise CompileError, ~r/\(union dispatcher\) and Union both name/, fn ->
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.UnionNameCollision,
-          function_name: :search
+          function_name: :search,
+          caller_env: __ENV__
         )
       end
     end
@@ -689,7 +717,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.UnionSharedOnly,
-          function_name: :search
+          function_name: :search,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.UnionSharedOnly.Search.Result.Search in modules
@@ -711,7 +740,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.ObjectTypename,
-        function_name: :get_user
+        function_name: :get_user,
+        caller_env: __ENV__
       )
 
       assert {:parameterized, {TypedGql.Types.Typename, values}} =
@@ -728,7 +758,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.UnionField,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       # search field should be a regular field (parameterized type), not an embed
@@ -754,7 +785,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.UnionE2E,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       json = %{
@@ -783,7 +815,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.UnionUnknownTypename,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       json = %{"search" => [%{"__typename" => "Comment", "id" => "1"}]}
@@ -803,7 +836,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.AutoTypename,
-        function_name: :get_node
+        function_name: :get_node,
+        caller_env: __ENV__
       )
 
       # The variant is told apart by its module, and dispatch reads __typename
@@ -827,7 +861,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.NoDupTypename,
-        function_name: :get_node
+        function_name: :get_node,
+        caller_env: __ENV__
       )
 
       user_fields = TypedGql.Test.NoDupTypename.GetNode.Result.Node.User.__schema__(:fields)
@@ -850,7 +885,8 @@ defmodule TypedGql.TypeGeneratorTest do
       modules =
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.InterfaceNoTypename,
-          function_name: :get_node
+          function_name: :get_node,
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.AppSubscription in modules
@@ -889,7 +925,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.SingleUnion,
-        function_name: :get_node
+        function_name: :get_node,
+        caller_env: __ENV__
       )
 
       json = %{"node" => %{"__typename" => "User", "name" => "Alice"}}
@@ -905,7 +942,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.PartialUnion,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       json = %{"search" => [%{"__typename" => "Post", "id" => "7"}]}
@@ -923,7 +961,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.AbstractCondition,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       json = %{"search" => [%{"__typename" => "Post", "id" => "7"}]}
@@ -966,7 +1005,8 @@ defmodule TypedGql.TypeGeneratorTest do
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.DiamondFragments,
         function_name: :search,
-        fragments: fragments
+        fragments: fragments,
+        caller_env: __ENV__
       )
 
       assert :name in TypedGql.Test.DiamondFragments.Search.Result.Search.User.__schema__(:fields)
@@ -983,7 +1023,8 @@ defmodule TypedGql.TypeGeneratorTest do
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.SpreadCondition,
         function_name: :search,
-        fragments: %{"UserFields" => fragment}
+        fragments: %{"UserFields" => fragment},
+        caller_env: __ENV__
       )
 
       user_fields = TypedGql.Test.SpreadCondition.Search.Result.Search.User.__schema__(:fields)
@@ -1002,7 +1043,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.NestedAbstract,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       user_fields = TypedGql.Test.NestedAbstract.Search.Result.Search.User.__schema__(:fields)
@@ -1027,7 +1069,8 @@ defmodule TypedGql.TypeGeneratorTest do
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.AbstractSpread,
         function_name: :search,
-        fragments: %{"SearchFields" => fragment}
+        fragments: %{"SearchFields" => fragment},
+        caller_env: __ENV__
       )
 
       user_fields = TypedGql.Test.AbstractSpread.Search.Result.Search.User.__schema__(:fields)
@@ -1046,7 +1089,8 @@ defmodule TypedGql.TypeGeneratorTest do
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.SharedSpread,
         function_name: :search,
-        fragments: %{"ResultFields" => fragment}
+        fragments: %{"ResultFields" => fragment},
+        caller_env: __ENV__
       )
 
       # A plain embed, not a __typename-dispatched union: a shared-only selection
@@ -1159,7 +1203,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Covariant,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       # User.friend narrows Node.friend to User, so the inline fragment left over
@@ -1189,7 +1234,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.UnusableTypename,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       # Neither copy can be dispatched on, so a plain one is added alongside.
@@ -1214,7 +1260,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.OverlappingConditions,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       fields = TypedGql.Test.OverlappingConditions.Search.Result.Search.User.__schema__(:fields)
@@ -1233,7 +1280,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.MergedSubSelections,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       profile_fields =
@@ -1334,7 +1382,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.RepeatedUnion,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       # The two copies' inline fragments have no response key to merge on; they
@@ -1386,7 +1435,8 @@ defmodule TypedGql.TypeGeneratorTest do
       assert_raise CompileError, ~r/names both "id" and "name"/, fn ->
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.ConflictingKey,
-          function_name: :search
+          function_name: :search,
+          caller_env: __ENV__
         )
       end
     end
@@ -1400,7 +1450,8 @@ defmodule TypedGql.TypeGeneratorTest do
       assert_raise CompileError, ~r/different arguments/, fn ->
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.ConflictingArgs,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
       end
     end
@@ -1417,7 +1468,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.EqualArgs,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       assert_embedded_list(
@@ -1439,7 +1491,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.EqualObjectArgs,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       assert_embedded_list(
@@ -1455,7 +1508,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.PartialInterface,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       # Named covers User but not Post, so hoisting would hand `name` to Post too.
@@ -1472,7 +1526,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.TransitiveInterface,
-        function_name: :get_node
+        function_name: :get_node,
+        caller_env: __ENV__
       )
 
       # Parent implements Mid, Mid implements Base — so Parent declares `id` and
@@ -1487,7 +1542,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.ImplementedInterface,
-        function_name: :get_node
+        function_name: :get_node,
+        caller_env: __ENV__
       )
 
       # Resolved against Timestamped, which declares `id` because it implements
@@ -1504,7 +1560,8 @@ defmodule TypedGql.TypeGeneratorTest do
 
       TypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.GhostCondition,
-        function_name: :search
+        function_name: :search,
+        caller_env: __ENV__
       )
 
       fields = TypedGql.Test.GhostCondition.Search.Result.Search.User.__schema__(:fields)
@@ -1521,7 +1578,8 @@ defmodule TypedGql.TypeGeneratorTest do
                TypeGenerator.generate_fragment(
                  fragment,
                  schema,
-                 TypedGql.Test.FragmentNoPlugins
+                 TypedGql.Test.FragmentNoPlugins,
+                 caller_env: __ENV__
                )
 
       fields = TypedGql.Test.FragmentNoPlugins.Fragments.UserFields.__schema__(:fields)
@@ -1534,7 +1592,8 @@ defmodule TypedGql.TypeGeneratorTest do
       fragment = parse!("fragment UserDetails on User { ...UserName email }")
 
       TypeGenerator.generate_fragment(fragment, schema, TypedGql.Test.FragmentSpreadBody,
-        fragments: %{"UserName" => parse!("fragment UserName on User { name }")}
+        fragments: %{"UserName" => parse!("fragment UserName on User { name }")},
+        caller_env: __ENV__
       )
 
       fields = TypedGql.Test.FragmentSpreadBody.Fragments.UserDetails.__schema__(:fields)
@@ -1547,7 +1606,9 @@ defmodule TypedGql.TypeGeneratorTest do
       fragment = parse!("fragment SearchFields on SearchResult { ... on User { email } }")
 
       assert TypedGql.Test.UnionFrag.Fragments.SearchFields.Union ==
-               TypeGenerator.generate_fragment(fragment, schema, TypedGql.Test.UnionFrag)
+               TypeGenerator.generate_fragment(fragment, schema, TypedGql.Test.UnionFrag,
+                 caller_env: __ENV__
+               )
 
       assert Code.ensure_loaded?(TypedGql.Test.UnionFrag.Fragments.SearchFields.Union)
       assert :email in TypedGql.Test.UnionFrag.Fragments.SearchFields.User.__schema__(:fields)
@@ -1558,7 +1619,9 @@ defmodule TypedGql.TypeGeneratorTest do
       fragment = parse!("fragment NodeFields on SearchResult { __typename }")
 
       assert TypedGql.Test.SharedFrag.Fragments.NodeFields ==
-               TypeGenerator.generate_fragment(fragment, schema, TypedGql.Test.SharedFrag)
+               TypeGenerator.generate_fragment(fragment, schema, TypedGql.Test.SharedFrag,
+                 caller_env: __ENV__
+               )
 
       assert TypedGql.Test.SharedFrag.Fragments.NodeFields.__schema__(:fields) == [:__typename]
     end
@@ -1572,7 +1635,8 @@ defmodule TypedGql.TypeGeneratorTest do
       assert_raise CompileError, ~r/undefined fragment spread: \.\.\.Missing/, fn ->
         TypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.MissingSpread,
-          function_name: :get_user
+          function_name: :get_user,
+          caller_env: __ENV__
         )
       end
     end
@@ -1584,7 +1648,8 @@ defmodule TypedGql.TypeGeneratorTest do
     TypeGenerator.generate(parse!(query), schema,
       client_module: client_module,
       function_name: :search,
-      generation_plugins: [CaptureTreePlugin]
+      generation_plugins: [CaptureTreePlugin],
+      caller_env: __ENV__
     )
 
     assert_received {:resolved_tree, tree}

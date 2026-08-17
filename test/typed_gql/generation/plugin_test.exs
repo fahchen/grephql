@@ -25,7 +25,7 @@ defmodule TypedGql.Generation.PluginTest do
     test "all four callbacks return their input unchanged", %{context: context} do
       selections = [:a, :b]
       tree = %Schema{kind: :object, module: Foo}
-      module_asts = [{Foo, quote(do: :ok)}]
+      module_asts = [{Foo, quote(do: :ok), [file: "foo.ex", line: 1]}]
 
       assert IdentityPlugin.before_normalize(selections, context) == selections
       assert IdentityPlugin.after_normalize(selections, context) == selections

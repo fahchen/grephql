@@ -51,9 +51,10 @@ defmodule TypedGql.Generation.Plugin do
   @callback after_resolve(Schema.t(), Context.t()) :: Schema.t()
 
   @doc """
-  Runs on the `{module, quoted_ast}` pairs produced by lowering.
+  Runs on the `{module, quoted_ast, location}` triples produced by lowering.
   """
-  @callback after_lower([{module(), Macro.t()}], Context.t()) :: [{module(), Macro.t()}]
+  @callback after_lower([{module(), Macro.t(), keyword()}], Context.t()) ::
+              [{module(), Macro.t(), keyword()}]
 
   @optional_callbacks before_normalize: 2, after_normalize: 2, after_resolve: 2, after_lower: 2
 

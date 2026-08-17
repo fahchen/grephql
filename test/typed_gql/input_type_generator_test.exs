@@ -72,7 +72,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
       modules =
         InputTypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.Input.Basic,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.Input.Basic.Inputs.CreateUserInput in modules
@@ -92,7 +93,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Input.Build,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       assert {:ok, struct} =
@@ -115,7 +117,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Input.Required,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       assert {:error, changeset} =
@@ -134,7 +137,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Input.Nullable,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       assert {:ok, struct} =
@@ -156,7 +160,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
       modules =
         InputTypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.Input.Nested,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.Input.Nested.Inputs.CreateUserInput in modules
@@ -175,7 +180,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Input.NestedBuild,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       assert {:ok, struct} =
@@ -202,7 +208,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
       modules =
         InputTypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.Input.Deep,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       assert TypedGql.Test.Input.Deep.Inputs.CreateOrderInput in modules
@@ -226,7 +233,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Input.DeepBuild,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       assert {:ok, struct} =
@@ -269,7 +277,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Input.DeepReq,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       assert {:error, changeset} =
@@ -294,7 +303,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Input.DeepDump,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       {:ok, struct} =
@@ -325,7 +335,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Input.EmbedSource,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       {:ok, struct} =
@@ -353,14 +364,16 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Var.EmbedSource,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       variables_module =
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Var.EmbedSource,
           function_name: :update_profile,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       {:ok, vars} = variables_module.build(%{home_address: %{city: "NYC"}})
@@ -381,7 +394,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Input.EmbedEmpty,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       {:ok, struct} =
@@ -406,7 +420,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
       modules =
         InputTypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.Input.Dedup,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       shared_count = Enum.count(modules, &(&1 == TypedGql.Test.Input.Dedup.Inputs.SharedInput))
@@ -422,7 +437,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
       modules =
         InputTypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.Input.Scalar,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       assert modules == []
@@ -436,7 +452,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Input.UnknownScalar,
           function_name: :q,
-          scalar_types: %{"Unknown" => TypedGql.Types.DateTime}
+          scalar_types: %{"Unknown" => TypedGql.Types.DateTime},
+          caller_env: __ENV__
         )
 
       assert :when in variables_module.__schema__(:fields)
@@ -455,7 +472,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Input.NestedList,
           function_name: :q,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
       end
     end
@@ -468,7 +486,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Input.FlatList,
           function_name: :q,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       assert :f in module.__schema__(:embeds)
@@ -484,7 +503,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Var.IdField,
           function_name: :get_user,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       # No auto-generated primary key
@@ -506,7 +526,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Var.Scalar,
           function_name: :get_user,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       assert variables_module == TypedGql.Test.Var.Scalar.GetUser.Variables
@@ -523,7 +544,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Var.Required,
           function_name: :get_user,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       assert {:ok, vars} = variables_module.build(%{id: "123"})
@@ -541,7 +563,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
                InputTypeGenerator.generate_variables(operation, schema,
                  client_module: TypedGql.Test.Var.NoVars,
                  function_name: :get_user,
-                 scalar_types: %{}
+                 scalar_types: %{},
+                 caller_env: __ENV__
                )
     end
 
@@ -553,7 +576,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Var.Camel,
           function_name: :get_user,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       assert {:ok, vars} = variables_module.build(%{user_id: "123"})
@@ -573,14 +597,16 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Var.Embed,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       variables_module =
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Var.Embed,
           function_name: :create_user,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       assert variables_module == TypedGql.Test.Var.Embed.CreateUser.Variables
@@ -602,14 +628,16 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Var.Mixed,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       variables_module =
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Var.Mixed,
           function_name: :create_user,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       fields = variables_module.__schema__(:fields)
@@ -634,14 +662,16 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Var.Dump,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       variables_module =
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Var.Dump,
           function_name: :create_user,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       {:ok, vars} = variables_module.build(%{input: %{name: "Alice", email: "a@b.com"}})
@@ -662,7 +692,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Var.Params,
           function_name: :get_user,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       # Module is functional with build/1
@@ -681,7 +712,8 @@ defmodule TypedGql.InputTypeGeneratorTest do
       modules =
         InputTypeGenerator.generate(operation, schema,
           client_module: TypedGql.Test.Input.Params,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       input_module = hd(modules)
@@ -698,14 +730,16 @@ defmodule TypedGql.InputTypeGeneratorTest do
 
       InputTypeGenerator.generate(operation, schema,
         client_module: TypedGql.Test.Var.ParamsEmbed,
-        scalar_types: %{}
+        scalar_types: %{},
+        caller_env: __ENV__
       )
 
       variables_module =
         InputTypeGenerator.generate_variables(operation, schema,
           client_module: TypedGql.Test.Var.ParamsEmbed,
           function_name: :create_user,
-          scalar_types: %{}
+          scalar_types: %{},
+          caller_env: __ENV__
         )
 
       assert {:ok, vars} = variables_module.build(%{input: %{name: "Alice"}})

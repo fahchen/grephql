@@ -77,6 +77,7 @@ defmodule TypedGql.TypeGenerator do
           | {:scalar_types, map()}
           | {:fragments, %{String.t() => TypedGql.Language.Fragment.t()}}
           | {:generation_plugins, [module()]}
+          | {:caller_env, Macro.Env.t()}
 
   @doc """
   Generates embedded schema modules for an operation's output types.
@@ -93,6 +94,8 @@ defmodule TypedGql.TypeGenerator do
       `CompileError` (default: `%{}`)
     - `:generation_plugins` — user `TypedGql.Generation.Plugin` modules,
       appended after the built-in plugins (default: `[]`)
+    - `:caller_env` — the macro caller's `Macro.Env`, used to set generated
+      modules' source location for editor "go to definition" support
   """
   @spec generate(TypedGql.Language.OperationDefinition.t(), Schema.t(), [option()]) :: [module()]
   def generate(operation, schema, opts) do
@@ -104,9 +107,16 @@ defmodule TypedGql.TypeGenerator do
     base_module = Module.concat([client_module, GeneratorHelpers.camelize(function_name), Result])
 
     root_type_name = Helpers.root_type_name(schema, operation.operation)
+    location = GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
 
     operation.selection_set.selections
-    |> run_pipeline(root_type_name, base_module, build_context(schema, opts), plugins(opts))
+    |> run_pipeline(
+      root_type_name,
+      base_module,
+      build_context(schema, opts),
+      plugins(opts),
+      location
+    )
     |> unwrap_module_names()
   end
 
@@ -132,7 +142,7 @@ defmodule TypedGql.TypeGenerator do
   """
   @spec generate_fragment(TypedGql.Language.Fragment.t(), Schema.t(), module(), [option()]) ::
           module()
-  def generate_fragment(fragment, schema, client_module, opts \\ []) do
+  def generate_fragment(fragment, schema, client_module, opts) do
     # Fragment module names from schema, bounded set
     # credo:disable-for-lines:2 Credo.Check.Warning.UnsafeToAtom
     base_module =
@@ -146,7 +156,8 @@ defmodule TypedGql.TypeGenerator do
         type_name,
         base_module,
         build_context(schema, opts),
-        plugins(opts)
+        plugins(opts),
+        GeneratorHelpers.location_from(Keyword.fetch!(opts, :caller_env))
       )
 
     # base_module is the naming root the pipeline was given, not necessarily a
@@ -171,7 +182,7 @@ defmodule TypedGql.TypeGenerator do
   end
 
   # Runs the full generation pipeline and returns the tree's module result.
-  defp run_pipeline(selections, parent_type_name, parent_module, context, plugins) do
+  defp run_pipeline(selections, parent_type_name, parent_module, context, plugins, location) do
     canonical =
       selections
       |> run_after(plugins, :before_normalize, context)
@@ -186,7 +197,7 @@ defmodule TypedGql.TypeGenerator do
     create_union_modules(tree)
 
     tree
-    |> lower()
+    |> lower(location)
     |> run_after(plugins, :after_lower, context)
     |> GeneratorHelpers.create_modules()
 
@@ -876,19 +887,19 @@ defmodule TypedGql.TypeGenerator do
 
   # ── lower ──────────────────────────────────────────────────────────────
 
-  # Lowers the tree into {module, quoted_ast} pairs, rebuilding each field's
-  # tuple/AST from its Generation.Field, so plugin nullability changes flow
-  # through naturally.
-  defp lower(%GenSchema{} = tree), do: lower(tree, [])
+  # Lowers the tree into {module, quoted_ast, location} triples, rebuilding each
+  # field's tuple/AST from its Generation.Field, so plugin nullability changes
+  # flow through naturally.
+  defp lower(%GenSchema{} = tree, location), do: lower(tree, [], location)
 
-  defp lower(%GenSchema{kind: :union} = node, acc) do
-    Enum.reduce(node.children, acc, &lower/2)
+  defp lower(%GenSchema{kind: :union} = node, acc, location) do
+    Enum.reduce(node.children, acc, &lower(&1, &2, location))
   end
 
-  defp lower(%GenSchema{kind: :object} = node, acc) do
+  defp lower(%GenSchema{kind: :object} = node, acc, location) do
     field_defs = Enum.map(node.fields, &lower_field/1)
-    ast = build_embedded_schema_ast(node.module, field_defs)
-    Enum.reduce(node.children, [ast | acc], &lower/2)
+    ast = build_embedded_schema_ast(node.module, field_defs, location)
+    Enum.reduce(node.children, [ast | acc], &lower(&1, &2, location))
   end
 
   defp lower_field(%GenField{kind: :field} = field) do
@@ -940,7 +951,7 @@ defmodule TypedGql.TypeGenerator do
     end
   end
 
-  defp build_embedded_schema_ast(module_name, field_defs) do
+  defp build_embedded_schema_ast(module_name, field_defs, location) do
     field_asts = Enum.map(field_defs, &GeneratorHelpers.field_def_to_ast/1)
 
     ast =
@@ -952,7 +963,7 @@ defmodule TypedGql.TypeGenerator do
         end
       end
 
-    {module_name, ast}
+    {module_name, ast, location}
   end
 
   # Extracts the module name list from the generated tree, root-first and
