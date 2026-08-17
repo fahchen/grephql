@@ -85,11 +85,6 @@ defmodule TypedGql.MixProject do
       groups_for_extras: [
         Guides: ~r/guides\/.*/
       ],
-      skip_undefined_reference_warnings_on: [
-        "TypedGql.TypeMapper",
-        "TypedGql.TypeGenerator",
-        "TypedGql.InputTypeGenerator"
-      ],
       groups_for_modules: [
         "Core API": [
           TypedGql,

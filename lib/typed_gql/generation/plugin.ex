@@ -19,6 +19,12 @@ defmodule TypedGql.Generation.Plugin do
   ones given in the `:generation_plugins` option, in order, at each juncture.
 
   `TypedGql.TypeGenerator` describes what each step does.
+
+  A `TypedGql.Language` node reaching a callback carries the line of the *file*
+  it was written in, not its line within the document, so that the module
+  generated from it can record where it came from. A node from a document that
+  does not map onto the file carries no line at all. Validation, whose messages
+  count from the document, has already run by then.
   """
 
   alias TypedGql.Generation.Context
@@ -62,6 +68,10 @@ defmodule TypedGql.Generation.Plugin do
   Runs on the `{module, quoted_ast, create_opts}` triples produced by lowering,
   where `create_opts` is what `Module.create/3` is handed to record where the
   generated module came from.
+
+  Treat `create_opts` as opaque and per triple: each module records the location
+  of the node it came from, so rebuilding the triples with one captured value
+  would collapse every module onto a single line.
   """
   @callback after_lower([{module(), Macro.t(), module_create_opts()}], Context.t()) ::
               [{module(), Macro.t(), module_create_opts()}]
