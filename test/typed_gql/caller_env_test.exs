@@ -1,112 +1,53 @@
 defmodule TypedGql.CallerEnvTest do
   use ExUnit.Case, async: true
 
-  @compile {:no_warn_undefined,
-            [
-              TypedGql.Test.CallerEnv.Result.GetUser.Result.User,
-              TypedGql.Test.CallerEnv.Vars.GetUser.Variables,
-              TypedGql.Test.CallerEnv.Input.Inputs.CreateUserInput
-            ]}
+  alias TypedGql.Test.CallerLocationFixture, as: Fixture
 
-  alias TypedGql.InputTypeGenerator
-  alias TypedGql.Test.SchemaHelper
-  alias TypedGql.TypeGenerator
-
+  # `__info__(:compile)[:source]` carries only the file, and every module in a
+  # client shares that. The docs chunk carries the line too, which is what
+  # distinguishes one `defgql` from the next — and it is what tooling reads for
+  # "go to definition".
   describe "generated module source location" do
-    test "result module records the caller file" do
-      caller_file = __ENV__.file
-      schema = SchemaHelper.build_schema()
-      operation = parse!("query { user(id: \"1\") { name } }")
-
-      TypeGenerator.generate(operation, schema,
-        client_module: TypedGql.Test.CallerEnv.Result,
-        function_name: :get_user,
-        caller_env: __ENV__
-      )
-
-      source =
-        TypedGql.Test.CallerEnv.Result.GetUser.Result.User.__info__(:compile)[:source]
-
-      assert source == String.to_charlist(caller_file)
+    test "a result module and its nested modules point at their own defgql" do
+      assert_located(Fixture.GetUser.Result)
+      assert_located(Fixture.GetUser.Result.User)
     end
 
-    test "variables module records the caller file" do
-      caller_file = __ENV__.file
-      schema = SchemaHelper.build_schema()
-      operation = parse!("query ($id: ID!) { user(id: $id) { name } }")
-
-      InputTypeGenerator.generate_variables(operation, schema,
-        client_module: TypedGql.Test.CallerEnv.Vars,
-        function_name: :get_user,
-        caller_env: __ENV__
-      )
-
-      source = TypedGql.Test.CallerEnv.Vars.GetUser.Variables.__info__(:compile)[:source]
-      assert source == String.to_charlist(caller_file)
+    test "a variables module points at its own defgql" do
+      assert_located(Fixture.GetUser.Variables)
     end
 
-    test "input module records the caller file" do
-      caller_file = __ENV__.file
-      schema = schema_with_input()
+    # The dispatcher used to be created by Types.Union.define/2, which passed
+    # the __ENV__ of union.ex, so every union in every client pointed there.
+    test "a union dispatcher points at its own defgql" do
+      assert_located(Fixture.Search.Result.Search.Union)
+      assert_located(Fixture.Search.Result.Search.User)
+    end
 
-      operation =
-        parse!("mutation ($input: CreateUserInput!) { createUser(input: $input) { name } }")
+    test "an input object module points at its own defgql" do
+      assert_located(Fixture.Inputs.CreatePostInput)
+    end
 
-      InputTypeGenerator.generate(operation, schema,
-        client_module: TypedGql.Test.CallerEnv.Input,
-        caller_env: __ENV__
-      )
+    test "a fragment module points at its own deffragment" do
+      assert_located(Fixture.Fragments.UserFields)
+    end
 
-      source = TypedGql.Test.CallerEnv.Input.Inputs.CreateUserInput.__info__(:compile)[:source]
-      assert source == String.to_charlist(caller_file)
+    test "operations in one client are told apart by line, not just by file" do
+      lines = Fixture.lines()
+
+      assert lines[Fixture.GetUser.Result] != lines[Fixture.Search.Result.Search.Union]
+
+      assert length(Enum.uniq(Map.values(lines))) == 4
     end
   end
 
-  defp parse!(query) do
-    {:ok, %{definitions: [operation | _rest]}} = TypedGql.Parser.parse(query)
-    operation
-  end
+  # The fixture records the line each operation was declared on, so this stays
+  # correct when that file is edited.
+  defp assert_located(module) do
+    expected_line = Map.fetch!(Fixture.lines(), module)
+    {:docs_v1, line, _lang, _format, _doc, meta, _docs} = Code.fetch_docs(module)
 
-  defp schema_with_input do
-    types =
-      Map.merge(SchemaHelper.default_types(), %{
-        "Mutation" => %TypedGql.Schema.Type{
-          kind: :object,
-          name: "Mutation",
-          fields: %{
-            "createUser" => %TypedGql.Schema.Field{
-              name: "createUser",
-              type: %TypedGql.Schema.TypeRef{kind: :object, name: "User"},
-              args: %{
-                "input" => %TypedGql.Schema.InputValue{
-                  name: "input",
-                  type: %TypedGql.Schema.TypeRef{
-                    kind: :non_null,
-                    of_type: %TypedGql.Schema.TypeRef{
-                      kind: :input_object,
-                      name: "CreateUserInput"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "CreateUserInput" => %TypedGql.Schema.Type{
-          kind: :input_object,
-          name: "CreateUserInput",
-          input_fields: %{
-            "name" => %TypedGql.Schema.InputValue{
-              name: "name",
-              type: %TypedGql.Schema.TypeRef{
-                kind: :non_null,
-                of_type: %TypedGql.Schema.TypeRef{kind: :scalar, name: "String"}
-              }
-            }
-          }
-        }
-      })
-
-    SchemaHelper.build_schema(types: types, mutation_type: "Mutation")
+    assert line == expected_line
+    assert Path.basename(List.to_string(meta[:source_path])) == "caller_location_fixture.ex"
   end
 end

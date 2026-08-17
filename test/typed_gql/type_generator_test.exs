@@ -17,7 +17,6 @@ defmodule TypedGql.TypeGeneratorTest do
               TypedGql.Test.FragmentSpreadBody.Fragments.UserDetails,
               TypedGql.Test.SharedFrag.Fragments.NodeFields,
               TypedGql.Test.UnionFrag.Fragments.SearchFields.User,
-              TypedGql.Test.UnionCallerEnv.Search.Result.Search.Union,
               TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.AppSubscription,
               TypedGql.Test.InterfaceNoTypename.GetNode.Result.Node.Shop,
               TypedGql.Test.Isolation.GetUser.Result.User,
@@ -649,24 +648,6 @@ defmodule TypedGql.TypeGeneratorTest do
   end
 
   describe "union/interface with inline fragments" do
-    # The dispatcher used to be created by Types.Union.define/2, which passed
-    # its own __ENV__, so every union in every client pointed at union.ex.
-    test "the dispatcher module records the caller file, like the schemas do" do
-      caller_file = String.to_charlist(__ENV__.file)
-
-      TypeGenerator.generate(
-        parse!("query { search { __typename ... on User { email } ... on Post { title } } }"),
-        schema_with_union(),
-        client_module: TypedGql.Test.UnionCallerEnv,
-        function_name: :search,
-        caller_env: __ENV__
-      )
-
-      dispatcher = TypedGql.Test.UnionCallerEnv.Search.Result.Search.Union
-
-      assert dispatcher.__info__(:compile)[:source] == caller_file
-    end
-
     test "generates per-fragment structs with shared fields merged" do
       schema = schema_with_union()
 
