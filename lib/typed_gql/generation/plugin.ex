@@ -29,8 +29,8 @@ defmodule TypedGql.Generation.Plugin do
   What `Module.create/3` is handed to record where a generated module came
   from: the caller's `Macro.Env`, or a keyword list carrying `:file`/`:line`.
   """
-  # TODO: replace with `Module.create_opts()` once the minimum Elixir defines
-  # it — 1.17 and earlier do not, and mix.exs still allows `~> 1.15`.
+  # TODO: replace with `Module.create_opts()` once the minimum Elixir is 1.19,
+  # which is where that type was added; mix.exs still allows `~> 1.15`.
   @type module_create_opts() :: Macro.Env.t() | keyword()
 
   @type selection() ::
