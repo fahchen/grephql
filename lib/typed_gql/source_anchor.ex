@@ -35,8 +35,17 @@ defmodule TypedGql.SourceAnchor do
           }
           | nil
 
-  @typedoc "A location in the source file, once `remap/2` has rewritten it."
-  @type loc() :: %{line: pos_integer(), column: pos_integer(), file: binary() | nil}
+  @typedoc """
+  A location in the source file, once `remap/2` has rewritten it.
+
+  The column is nil for a node that had none to rewrite — one a plugin built
+  itself — and the file is nil unless the document was written in another one.
+  """
+  @type loc() :: %{
+          line: pos_integer(),
+          column: pos_integer() | nil,
+          file: binary() | nil
+        }
 
   @heredoc_delimiter ~s(""")
   @string_delimiter ~s(")
@@ -172,11 +181,15 @@ defmodule TypedGql.SourceAnchor do
 
   @doc """
   The file location a node was remapped to, or nil when it has none.
+
+  A line with no column is still a location: `remap/2` keeps the line of a node
+  that carried no column to rewrite, and `Module.create/3` reads only the line
+  anyway. Requiring both would send such a module back to the `defgql` for want
+  of a coordinate nothing asked for.
   """
   @spec loc(struct()) :: loc() | nil
-  def loc(%{loc: %{line: line, column: column} = loc})
-      when is_integer(line) and is_integer(column),
-      do: %{line: line, column: column, file: Map.get(loc, :file)}
+  def loc(%{loc: %{line: line} = loc}) when is_integer(line),
+    do: %{line: line, column: Map.get(loc, :column), file: Map.get(loc, :file)}
 
   def loc(_node), do: nil
 

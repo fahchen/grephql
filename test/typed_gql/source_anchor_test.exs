@@ -183,6 +183,17 @@ defmodule TypedGql.SourceAnchorTest do
       assert opts.module == env.module
     end
 
+    # `remap/2` keeps the line of a node that carries no column, so throwing it
+    # away here would make the two disagree and send the module back to the
+    # `defgql` for want of a coordinate nothing reads.
+    test "a line-only location still moves the caller's line" do
+      env = __ENV__
+      node = %Field{name: "id", loc: %{line: 13, column: nil, file: nil}}
+
+      assert SourceAnchor.loc(node) == %{line: 13, column: nil, file: nil}
+      assert SourceAnchor.create_opts(env, SourceAnchor.loc(node)).line == 13
+    end
+
     test "a node with no location keeps the caller's own" do
       env = __ENV__
 

@@ -21,10 +21,15 @@ defmodule TypedGql.Generation.Schema do
   `:loc` is where in the *source file* the node was written — the selection
   whose sub-selections the node models, the inline fragment that named a union
   variant, or the operation/fragment definition at the root — and is what the
-  created module records as its own location. It is nil when the document does
-  not map onto the file (a plain or interpolated string rather than a `~GQL`
-  sigil), and such a module falls back to the caller's `defgql` line. A node
-  built by hand, by a plugin, may leave it nil for the same effect.
+  created module records as its own location. `:file` names that file only when
+  it is not the one being compiled, which a spread of a fragment written
+  elsewhere makes possible, and `:column` is nil for a node nobody wrote a
+  column for.
+
+  The whole of it is nil when the document does not map onto a file (a plain or
+  interpolated string rather than a `~GQL` sigil), and such a module falls back
+  to the caller's `defgql` line. A node built by hand, by a plugin, may leave it
+  nil for the same effect.
   """
   use TypedStructor
 
@@ -40,7 +45,7 @@ defmodule TypedGql.Generation.Schema do
     field :children, [t()], default: []
     field :union_module, module()
     field :typename_to_module, %{String.t() => module()}, default: %{}
-    field :loc, %{line: pos_integer(), column: pos_integer()}
+    field :loc, %{line: pos_integer(), column: pos_integer() | nil, file: binary() | nil}
   end
 
   @doc """
