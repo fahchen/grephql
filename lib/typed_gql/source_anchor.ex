@@ -27,9 +27,10 @@ defmodule TypedGql.SourceAnchor do
   @heredoc_delimiter ~s(""")
   @string_delimiter ~s(")
 
-  # `~GQL` plus the one delimiter character after it: what sits between the
-  # column the sigil opens on and the column its content starts at.
-  @sigil_prefix_width String.length("~GQL") + 1
+  # A one-line sigil's content begins five characters past the column the sigil
+  # opens on — `~GQL` and its delimiter — and four of those are the base, since
+  # the content's own column starts at 1 rather than 0.
+  @sigil_offset String.length("~GQL")
 
   @doc """
   Where a `~GQL` sigil's document starts in the file, from the sigil's AST meta.
@@ -42,11 +43,9 @@ defmodule TypedGql.SourceAnchor do
   """
   @spec base(keyword(), keyword()) :: base()
   def base(sigil_meta, binary_meta) do
-    with {:ok, origin} <- origin(sigil_meta),
-         {:ok, delimiter} <- Keyword.fetch(sigil_meta, :delimiter) do
-      document_start(delimiter, origin, sigil_meta, binary_meta)
-    else
-      _other -> nil
+    case origin(sigil_meta) do
+      {:ok, origin} -> document_start(sigil_meta[:delimiter], origin, binary_meta)
+      :error -> nil
     end
   end
 
@@ -59,17 +58,12 @@ defmodule TypedGql.SourceAnchor do
   # what says the line and the text belong together. `quote location: :keep`
   # keeps them together too, in `:keep`, which names the file as well.
   defp origin(sigil_meta) do
-    case {Keyword.get(sigil_meta, :column), Keyword.get(sigil_meta, :keep)} do
-      {_column, {file, line}} when is_binary(file) and is_integer(line) ->
-        {:ok, %{line: line, file: file}}
+    case {sigil_meta[:keep], sigil_meta[:column], sigil_meta[:line]} do
+      {{file, line}, _column, _line} when is_binary(file) and is_integer(line) ->
+        {:ok, %{line: line, column: nil, file: file}}
 
-      {column, _keep} when is_integer(column) ->
-        with {:ok, line} <- Keyword.fetch(sigil_meta, :line),
-             true <- is_integer(line) do
-          {:ok, %{line: line, column: column, file: nil}}
-        else
-          _other -> :error
-        end
+      {nil, column, line} when is_integer(column) and is_integer(line) ->
+        {:ok, %{line: line, column: column, file: nil}}
 
       _other ->
         :error
@@ -77,27 +71,20 @@ defmodule TypedGql.SourceAnchor do
   end
 
   # A heredoc's content starts on the line after the sigil, stripped of the same
-  # indentation on every line. A one-line sigil's starts on that same line, five
-  # characters along: `~GQL` and its delimiter. Any other delimiter is not one of
-  # the two shapes the arithmetic knows, so it is refused rather than guessed at.
-  defp document_start(@heredoc_delimiter, origin, _sigil_meta, binary_meta) do
-    %{
-      line: origin.line,
-      column: Keyword.get(binary_meta, :indentation, 0),
-      file: Map.get(origin, :file)
-    }
+  # indentation on every line, so one base column serves all of them. A one-line
+  # sigil's starts on that same line, past the sigil — and needs a column to
+  # count from, which a `:keep` origin does not have. Any other delimiter is
+  # neither shape, so it is refused rather than guessed at.
+  defp document_start(@heredoc_delimiter, origin, binary_meta) do
+    %{line: origin.line, column: binary_meta[:indentation] || 0, file: origin.file}
   end
 
-  defp document_start(@string_delimiter, %{column: column} = origin, _sigil_meta, _binary_meta)
+  defp document_start(@string_delimiter, %{column: column} = origin, _binary_meta)
        when is_integer(column) do
-    %{
-      line: origin.line - 1,
-      column: column + @sigil_prefix_width - 1,
-      file: Map.get(origin, :file)
-    }
+    %{line: origin.line - 1, column: column + @sigil_offset, file: origin.file}
   end
 
-  defp document_start(_delimiter, _origin, _sigil_meta, _binary_meta), do: nil
+  defp document_start(_delimiter, _origin, _binary_meta), do: nil
 
   @doc """
   Rewrites every `loc` under `node` from a document position to a file one.

@@ -825,7 +825,7 @@ defmodule TypedGql.TypeGenerator do
         variant =
           resolve_object(merged_selections, type_name, variant_module, context,
             typename_values: typename_values,
-            loc: variant_loc(inline_fragments, type_name, context) || loc
+            loc: variant_loc(inline_fragments, type_name) || loc
           )
 
         {Map.put(type_map, type_name, variant_module), [variant | variants_acc]}
@@ -852,7 +852,7 @@ defmodule TypedGql.TypeGenerator do
   # on which condition was written first. A member no fragment names, reached
   # only through an abstract condition or not selected at all, has no node of
   # its own and stays with the field whose type is abstract.
-  defp variant_loc(inline_fragments, type_name, _context) do
+  defp variant_loc(inline_fragments, type_name) do
     case Enum.find(inline_fragments, &(&1.type_condition.name == type_name)) do
       nil -> nil
       %InlineFragment{} = fragment -> SourceAnchor.loc(fragment)
