@@ -305,27 +305,100 @@ defgql :get_account, ~GQL"""
 result.data.account.display_name  # alias becomes the field name
 ```
 
+## Mutations and Input Types
+
+`defgql` works the same for mutations. GraphQL input object types become
+shared modules under `Client.Inputs.*`:
+
+```elixir
+defgql :create_issue, ~GQL"""
+  mutation CreateIssue($input: CreateIssueInput!) {
+    createIssue(input: $input) {
+      issue {
+        number
+        title
+        state
+      }
+    }
+  }
+"""
+```
+
+```elixir
+# Plain maps are validated against the generated input schema.
+# Params use the snake_cased field names, not the GraphQL spelling.
+{:ok, result} =
+  MyApp.GitHub.create_issue(%{input: %{repository_id: "R_1", title: "Bug"}})
+
+result.data.create_issue.issue.state  #=> :open
+
+# Missing required fields fail before any request is sent
+{:error, changeset} = MyApp.GitHub.create_issue(%{input: %{}})
+Ecto.Changeset.traverse_errors(changeset.changes.input, fn {msg, _opts} -> msg end)
+#=> %{repository_id: ["can't be blank"], title: ["can't be blank"]}
+```
+
+The generated input module can also be used directly — `build/1` returns
+`{:ok, struct}` or `{:error, changeset}`, and nested input objects are
+embedded:
+
+```elixir
+{:ok, input} =
+  MyApp.GitHub.Inputs.CreateIssueInput.build(%{
+    repository_id: "R_1",
+    title: "Bug",
+    body: "Steps to reproduce...",
+    label_ids: ["L_1", "L_2"]
+  })
+
+{:ok, result} = MyApp.GitHub.create_issue(%{input: input})
+```
+
+Input modules are shared across the whole client, so two operations using
+`CreateIssueInput` refer to the same module. See
+`examples/github_client.exs` for a runnable version.
+
+## Variables
+
+Each operation with variables gets a `Client.FnName.Variables` module. Calls
+run the caller's map through it before any request is sent, and it can be used
+standalone to validate or inspect a payload:
+
+```elixir
+# Same validation the client performs on every call
+{:ok, vars} = MyApp.GitHub.GetUser.Variables.build(%{id: "U_1"})
+{:error, changeset} = MyApp.GitHub.GetUser.Variables.build(%{})
+Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
+#=> %{id: ["can't be blank"]}
+
+# Params use the snake_cased names; the GraphQL name is kept for serialization
+MyApp.GitHub.GetUser.Variables.__schema__(:fields)  #=> [:id]
+```
+
+Variables are per-operation, so two operations declaring `$id: ID!` get
+separate modules — unlike input types, which are shared.
+
 ## Generated Modules
 
 Each `defgql` generates typed Ecto embedded schema modules at compile time. Given `defgql :get_user` inside `MyApp.GitHub`:
 
 | Type | Pattern | Example |
 |------|---------|---------|
+| Fragment | `Client.Fragments.Name` | `MyApp.GitHub.Fragments.UserFields` |
 | Result | `Client.FnName.Result.Field...` | `MyApp.GitHub.GetUser.Result.User` |
 | Nested field | `...Result.Field.NestedField` | `MyApp.GitHub.GetUser.Result.User.Posts` |
-| Variables | `Client.FnName.Variables` | `MyApp.GitHub.GetUser.Variables` |
-| Input types | `Client.Inputs.TypeName` | `MyApp.GitHub.Inputs.CreateUserInput` |
-| Fragment | `Client.Fragments.Name` | `MyApp.GitHub.Fragments.UserFields` |
 | Union variant | `...Result.Field.TypeName` | `MyApp.GitHub.Search.Result.Search.User` |
+| Input types | `Client.Inputs.TypeName` | `MyApp.GitHub.Inputs.CreateIssueInput` |
+| Variables | `Client.FnName.Variables` | `MyApp.GitHub.GetUser.Variables` |
 
 ### Naming rules
 
 - Function name is CamelCased: `:get_user` -> `GetUser`
 - Struct field names are snake_cased: `userName` -> `:user_name`
 - Field aliases override both field name and module path: `author: user { ... }` -> field `:author`, module `...Result.Author`
-- Input types are shared across queries under `Client.Inputs.*`
-- Variables are per-query under `Client.FnName.Variables`
 - Fragment modules live under `Client.Fragments.*`
+- Input types are shared across operations under `Client.Inputs.*`
+- Variables are per-operation under `Client.FnName.Variables`
 
 ### Example
 
