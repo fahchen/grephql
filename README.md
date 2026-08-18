@@ -325,15 +325,16 @@ defgql :create_issue, ~GQL"""
 ```
 
 ```elixir
-# Plain maps are validated against the generated input schema
+# Plain maps are validated against the generated input schema.
+# Params use the snake_cased field names, not the GraphQL spelling.
 {:ok, result} =
-  MyApp.GitHub.create_issue(%{input: %{repositoryId: "R_1", title: "Bug"}})
+  MyApp.GitHub.create_issue(%{input: %{repository_id: "R_1", title: "Bug"}})
 
 result.data.create_issue.issue.state  #=> :open
 
 # Missing required fields fail before any request is sent
 {:error, changeset} = MyApp.GitHub.create_issue(%{input: %{}})
-errors_on(changeset.changes.input)
+Ecto.Changeset.traverse_errors(changeset.changes.input, fn {msg, _opts} -> msg end)
 #=> %{repository_id: ["can't be blank"], title: ["can't be blank"]}
 ```
 
@@ -344,10 +345,10 @@ embedded:
 ```elixir
 {:ok, input} =
   MyApp.GitHub.Inputs.CreateIssueInput.build(%{
-    repositoryId: "R_1",
+    repository_id: "R_1",
     title: "Bug",
     body: "Steps to reproduce...",
-    labelIds: ["L_1", "L_2"]
+    label_ids: ["L_1", "L_2"]
   })
 
 {:ok, result} = MyApp.GitHub.create_issue(%{input: input})
@@ -367,9 +368,10 @@ standalone to validate or inspect a payload:
 # Same validation the client performs on every call
 {:ok, vars} = MyApp.GitHub.GetUser.Variables.build(%{id: "U_1"})
 {:error, changeset} = MyApp.GitHub.GetUser.Variables.build(%{})
-errors_on(changeset)  #=> %{id: ["can't be blank"]}
+Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
+#=> %{id: ["can't be blank"]}
 
-# Variable names are snake_cased; the GraphQL name is kept for serialization
+# Params use the snake_cased names; the GraphQL name is kept for serialization
 MyApp.GitHub.GetUser.Variables.__schema__(:fields)  #=> [:id]
 ```
 
@@ -395,8 +397,8 @@ Each `defgql` generates typed Ecto embedded schema modules at compile time. Give
 - Struct field names are snake_cased: `userName` -> `:user_name`
 - Field aliases override both field name and module path: `author: user { ... }` -> field `:author`, module `...Result.Author`
 - Fragment modules live under `Client.Fragments.*`
-- Input types are shared across queries under `Client.Inputs.*`
-- Variables are per-query under `Client.FnName.Variables`
+- Input types are shared across operations under `Client.Inputs.*`
+- Variables are per-operation under `Client.FnName.Variables`
 
 ### Example
 
