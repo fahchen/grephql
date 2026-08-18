@@ -40,7 +40,7 @@ defmodule TypedGql.Generation.Schema do
     field :children, [t()], default: []
     field :union_module, module()
     field :typename_to_module, %{String.t() => module()}, default: %{}
-    field :loc, %{line: pos_integer()}
+    field :loc, %{line: pos_integer(), column: pos_integer()}
   end
 
   @doc """

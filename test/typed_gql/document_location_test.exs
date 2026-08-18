@@ -2,6 +2,7 @@ defmodule TypedGql.DocumentLocationTest do
   use ExUnit.Case, async: true
 
   alias TypedGql.Test.DocumentLocationFixture, as: Fixture
+  alias TypedGql.Test.QuotedDocumentMacro
 
   # `__info__(:compile)[:source]` carries only the file, and every module a
   # client generates shares it. The docs chunk carries the line, which is what
@@ -61,6 +62,29 @@ defmodule TypedGql.DocumentLocationTest do
       assert_located(Fixture.AbstractFirst.Result.Search.Post)
     end
 
+    # `defgql` appends a *registered* fragment's source after the query, but a
+    # fragment the query defines itself is already part of it — so this one
+    # needs no offset, and getting that wrong would push it past the query.
+    test "a fragment the query defines itself needs no offset of its own" do
+      assert_located(Fixture.LocalFragment.Result)
+      assert_located(Fixture.LocalFragment.Result.User)
+      assert_located(Fixture.LocalFragment.Result.User.Profile)
+    end
+
+    test "a defgqlp document is located like a defgql one" do
+      assert_located(Fixture.PrivateQuery.Result)
+      assert_located(Fixture.PrivateQuery.Result.Users)
+      assert_located(Fixture.PrivateQuery.Result.Users.Profile)
+    end
+
+    # Two fields aliased apart take one input type between them, and each gets
+    # its own module from the selection that named it.
+    test "aliased copies of a field are located at their own selections" do
+      assert_located(Fixture.SharedInput.Result)
+      assert_located(Fixture.SharedInput.Result.A)
+      assert_located(Fixture.SharedInput.Result.B)
+    end
+
     # A one-line sigil is the case the base line subtracts one for: getting it
     # wrong puts the document a line off, on the `defgql` itself.
     test "a one-line document lands on the line it was written on" do
@@ -68,6 +92,20 @@ defmodule TypedGql.DocumentLocationTest do
       assert_located(Fixture.OneLine.Result.Users)
     end
 
+    # The document was written in the macro's file and carried here by a
+    # `quote location: :keep`, which keeps the file and line it came from. Every
+    # other quoted form falls back — see TypedGql.CallerEnvTest.
+    test "a document quoted with location: :keep points into the file it was written in" do
+      for {module, line} <- QuotedDocumentMacro.kept_lines(Fixture) do
+        assert docs_line(module) == line
+
+        assert module.__info__(:compile)[:source] |> List.to_string() |> Path.basename() ==
+                 "quoted_document_macro.ex"
+      end
+    end
+  end
+
+  describe "reading the generated modules rather than the fixture" do
     # Read off the generated modules, not off the fixture's own map: comparing
     # two entries of `lines/0` compares two literals and would pass however the
     # mapping behaved.

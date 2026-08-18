@@ -20,11 +20,12 @@ defmodule TypedGql.Generation.Plugin do
 
   `TypedGql.TypeGenerator` describes what each step does.
 
-  A `TypedGql.Language` node reaching a callback carries the line of the *file*
-  it was written in, not its line within the document, so that the module
-  generated from it can record where it came from. A node from a document that
-  does not map onto the file carries no line at all. Validation, whose messages
-  count from the document, has already run by then.
+  A `TypedGql.Language` node reaching a callback carries the line and column of
+  the *file* it was written in, not its position within the document, so that
+  the module generated from it can record where it came from. A node from a
+  document that does not map onto the file — anything but a `~GQL` sigil written
+  at the call site — carries neither. Validation, whose messages count from the
+  document, has already run by then.
   """
 
   alias TypedGql.Generation.Context

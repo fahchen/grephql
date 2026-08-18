@@ -173,18 +173,18 @@ defmodule TypedGql.CompilerTest do
       assert result_module == TypedGql.Test.CompilerFragment.Fragments.UserFields
     end
 
-    test "the entry carries no key beyond source, fragment, result_module and base_line" do
+    test "the entry carries no key beyond source, fragment, result_module and base" do
       entry = compile_fragment!(TypedGql.Test.CompilerFragKeys, "fragment F on User { name }")
 
-      assert Enum.sort(Map.keys(entry)) == [:base_line, :fragment, :result_module, :source]
+      assert Enum.sort(Map.keys(entry)) == [:base, :fragment, :result_module, :source]
     end
 
     # Only a `~GQL` sigil has one, and this fragment string is not one — a later
     # `defgql` spreading it maps nothing and falls back to its own location.
-    test "the entry records no base line for a document that does not map onto the file" do
+    test "the entry records no base for a document that does not map onto the file" do
       entry = compile_fragment!(TypedGql.Test.CompilerFragBase, "fragment F on User { name }")
 
-      assert entry.base_line == nil
+      assert entry.base == nil
     end
 
     test "the recorded source is trimmed" do

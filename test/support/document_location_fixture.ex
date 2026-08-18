@@ -92,6 +92,57 @@ defmodule TypedGql.Test.DocumentLocationFixture do
   }
   """)
 
+  # A fragment the query defines itself is not appended by `defgql`, so its
+  # nodes are already in this document's coordinates and need no offset of
+  # their own — unlike one a `deffragment` registered.
+  @local_fragment __ENV__.line + 1
+  defgql(:local_fragment, ~GQL"""
+  query LocalFragment($id: ID!) {
+    user(id: $id) {
+      ...Bits
+    }
+  }
+
+  fragment Bits on User {
+    profile {
+      bio
+    }
+  }
+  """)
+
+  @private __ENV__.line + 1
+  defgqlp(:private_query, ~GQL"""
+  query PrivateQuery {
+    users {
+      profile {
+        bio
+      }
+    }
+  }
+  """)
+
+  # Two variables of one input type generate one module. Its location comes
+  # from the first of them — but this whole `defgql` runs after :create_post,
+  # which names the same type, and the later run overwrites the module.
+  @shared_input __ENV__.line + 1
+  defgql(:shared_input, ~GQL"""
+  mutation SharedInput($first: CreatePostInput!, $second: CreatePostInput!) {
+    a: createPost(input: $first) {
+      id
+    }
+    b: createPost(input: $second) {
+      id
+    }
+  }
+  """)
+
+  # Written in TypedGql.Test.QuotedDocumentMacro and carried here with
+  # `location: :keep`, which keeps the file and line it was written at — so its
+  # modules point there, not at this call. That file records the lines.
+  require TypedGql.Test.QuotedDocumentMacro
+
+  TypedGql.Test.QuotedDocumentMacro.define_kept_query(:kept_query)
+
   @doc """
   The file line each generated module should record.
 
@@ -120,11 +171,12 @@ defmodule TypedGql.Test.DocumentLocationFixture do
       __MODULE__.AbstractFirst.Result.Search.User => @abstract_first + 7,
       __MODULE__.AbstractFirst.Result.Search.Post => @abstract_first + 10,
       # The input type is anchored to the variable definition that names it,
-      # which the printer keeps on the signature line.
+      # which the printer keeps on the signature line. `CreatePostInput` is
+      # named by :shared_input below as well, and that one runs last: the module
+      # it creates overwrites this one, location and all.
       __MODULE__.CreatePost.Result => @create_post + 1,
       __MODULE__.CreatePost.Variables => @create_post + 1,
-      __MODULE__.Inputs.CreatePostInput => @create_post + 1,
-      __MODULE__.CreatePost.Result.Post => @create_post + 2,
+      __MODULE__.CreatePost.Result.CreatePost => @create_post + 2,
       __MODULE__.OneLine.Result => @one_line,
       __MODULE__.OneLine.Result.Users => @one_line,
       __MODULE__.Fragments.UserFields => @user_fields + 1,
@@ -133,7 +185,20 @@ defmodule TypedGql.Test.DocumentLocationFixture do
       # selection *inside* the fragment belongs to the `deffragment` above.
       __MODULE__.UserWithFields.Result => @spread + 1,
       __MODULE__.UserWithFields.Result.User => @spread + 2,
-      __MODULE__.UserWithFields.Result.User.Profile => @user_fields + 3
+      __MODULE__.UserWithFields.Result.User.Profile => @user_fields + 3,
+      # A fragment the query defines itself needs no offset: `defgql` appends
+      # nothing for it, so `profile {` inside it is already a line of this
+      # document.
+      __MODULE__.LocalFragment.Result => @local_fragment + 1,
+      __MODULE__.LocalFragment.Result.User => @local_fragment + 2,
+      __MODULE__.LocalFragment.Result.User.Profile => @local_fragment + 8,
+      __MODULE__.PrivateQuery.Result => @private + 1,
+      __MODULE__.PrivateQuery.Result.Users => @private + 2,
+      __MODULE__.PrivateQuery.Result.Users.Profile => @private + 3,
+      __MODULE__.SharedInput.Result => @shared_input + 1,
+      __MODULE__.SharedInput.Result.A => @shared_input + 2,
+      __MODULE__.SharedInput.Result.B => @shared_input + 5,
+      __MODULE__.Inputs.CreatePostInput => @shared_input + 1
     }
   end
 end
