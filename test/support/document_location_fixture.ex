@@ -11,7 +11,8 @@ defmodule TypedGql.Test.DocumentLocationFixture do
   use TypedGql,
     otp_app: :typed_gql,
     source: "schemas/integration.json",
-    endpoint: "https://api.example.com/graphql"
+    endpoint: "https://api.example.com/graphql",
+    generation_plugins: [TypedGql.Test.NodeLocationPlugin]
 
   @get_user __ENV__.line + 1
   defgql(:get_user, ~GQL"""
@@ -156,6 +157,81 @@ defmodule TypedGql.Test.DocumentLocationFixture do
   }
   """)
 
+  # A `~GQL"..."` sigil holds a string, and a string may span lines. Only the
+  # first starts past the sigil; the rest begin at the margin.
+  @multiline __ENV__.line + 1
+  defgql(:multiline, ~GQL"query Multiline($id: ID!) {
+  user(id: $id) {
+    profile {
+      bio
+    }
+  }
+}")
+
+  # A fragment spreading a fragment: the innermost selection belongs to the
+  # `deffragment` that wrote it, however many spreads deep it is reached.
+  @inner_bits __ENV__.line + 1
+  deffragment(~GQL"""
+  fragment InnerBits on User {
+    profile {
+      bio
+    }
+  }
+  """)
+
+  @outer_bits __ENV__.line + 1
+  deffragment(~GQL"""
+  fragment OuterBits on User {
+    name
+    ...InnerBits
+  }
+  """)
+
+  @nested_spread __ENV__.line + 1
+  defgql(:nested_spread, ~GQL"""
+  query NestedSpread($id: ID!) {
+    user(id: $id) {
+      ...OuterBits
+    }
+  }
+  """)
+
+  # A mappable query spreading an unmappable fragment. The fragment's own
+  # modules keep its `deffragment` line, and the module the spread produces
+  # falls back to the `defgql` that pulled it in — the nearest location either
+  # document can offer for a selection neither of them can place.
+  @plain_bits __ENV__.line + 1
+  deffragment("""
+  fragment PlainBits on User {
+    profile {
+      bio
+    }
+  }
+  """)
+
+  @spreads_plain __ENV__.line + 1
+  defgql(:spreads_plain, ~GQL"""
+  query SpreadsPlain($id: ID!) {
+    user(id: $id) {
+      ...PlainBits
+    }
+  }
+  """)
+
+  # The plugin recorded these while this module was being compiled, and reading
+  # them into an attribute now is what carries them past that compilation — a
+  # test runs in another VM, where nothing the compiler put in memory survives.
+  @captured_locations TypedGql.Test.NodeLocationPlugin.captured()
+
+  @doc """
+  Every node position a generation plugin was handed, by root module and field.
+
+  A generated module records a line and no column, so this is the only place the
+  column half of the mapping can be read back.
+  """
+  @spec captured_locations() :: %{module() => %{atom() => map()}}
+  def captured_locations, do: @captured_locations
+
   @doc """
   The file line each generated module should record.
 
@@ -215,7 +291,21 @@ defmodule TypedGql.Test.DocumentLocationFixture do
       __MODULE__.SharedInput.Result.B => @shared_input + 5,
       __MODULE__.Inputs.CreatePostInput => @create_post + 1,
       __MODULE__.CrossFile.Result => @cross_file + 1,
-      __MODULE__.CrossFile.Result.User => @cross_file + 2
+      __MODULE__.CrossFile.Result.User => @cross_file + 2,
+      __MODULE__.Multiline.Result => @multiline,
+      __MODULE__.Multiline.Result.User => @multiline + 1,
+      __MODULE__.Multiline.Result.User.Profile => @multiline + 2,
+      __MODULE__.Fragments.InnerBits.Profile => @inner_bits + 2,
+      __MODULE__.Fragments.OuterBits.Profile => @inner_bits + 2,
+      __MODULE__.NestedSpread.Result.User.Profile => @inner_bits + 2,
+      # Both spreads' own modules stay with the query that spread them.
+      __MODULE__.NestedSpread.Result => @nested_spread + 1,
+      __MODULE__.NestedSpread.Result.User => @nested_spread + 2,
+      __MODULE__.Fragments.OuterBits => @outer_bits + 1,
+      __MODULE__.Fragments.PlainBits => @plain_bits,
+      __MODULE__.Fragments.PlainBits.Profile => @plain_bits,
+      __MODULE__.SpreadsPlain.Result => @spreads_plain + 1,
+      __MODULE__.SpreadsPlain.Result.User.Profile => @spreads_plain
     }
   end
 end

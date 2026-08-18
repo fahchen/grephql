@@ -91,6 +91,36 @@ defmodule TypedGql.DocumentLocationTest do
       assert_located(Fixture.SharedInput.Result.B)
     end
 
+    # A `~GQL"..."` sigil holds a string and a string may span lines, so the
+    # column its first line starts at cannot be added to the others.
+    test "a sigil whose string spans lines offsets only its first line" do
+      assert_located(Fixture.Multiline.Result)
+      assert_located(Fixture.Multiline.Result.User)
+      assert_located(Fixture.Multiline.Result.User.Profile)
+    end
+
+    # Anchoring is by fragment name, one entry at a time, so it does not matter
+    # how many spreads deep a selection is reached from.
+    test "a selection reached through two spreads lands where it was written" do
+      assert_located(Fixture.Fragments.InnerBits.Profile)
+      assert_located(Fixture.Fragments.OuterBits)
+      assert_located(Fixture.Fragments.OuterBits.Profile)
+      assert_located(Fixture.NestedSpread.Result)
+      assert_located(Fixture.NestedSpread.Result.User)
+      assert_located(Fixture.NestedSpread.Result.User.Profile)
+    end
+
+    # The fragment is a plain string, so its own lines are unknown; the query
+    # spreading it is a `~GQL` sigil, so its own are not. Each keeps what it
+    # knows, and the module the spread produces — placed by a document that
+    # cannot say where — falls back to the `defgql` that pulled it in.
+    test "a mappable query spreading an unmappable fragment falls back per document" do
+      assert_located(Fixture.SpreadsPlain.Result)
+      assert_located(Fixture.Fragments.PlainBits)
+      assert_located(Fixture.Fragments.PlainBits.Profile)
+      assert_located(Fixture.SpreadsPlain.Result.User.Profile)
+    end
+
     # A one-line sigil is the case the base line subtracts one for: getting it
     # wrong puts the document a line off, on the `defgql` itself.
     test "a one-line document lands on the line it was written on" do
@@ -132,6 +162,31 @@ defmodule TypedGql.DocumentLocationTest do
     end
   end
 
+  # A generated module records a line and no column, because that is all
+  # `Module.create/3` takes. The column is for whoever reads the node, which is
+  # a generation plugin — so the only way to prove that half is to be one, and
+  # to check the position against the text actually sitting there.
+  describe "the position a plugin is handed" do
+    test "names the text it was written at, in a heredoc" do
+      assert_reads(Fixture.GetUser.Result, %{
+        user: "user(id: $id) {",
+        id: "id",
+        profile: "profile {",
+        bio: "bio"
+      })
+    end
+
+    # Every line but the first begins at the margin, so a base column added to
+    # all of them would push these past their text.
+    test "names the text it was written at, in a sigil whose string spans lines" do
+      assert_reads(Fixture.Multiline.Result, %{
+        user: "user(id: $id) {",
+        profile: "profile {",
+        bio: "bio"
+      })
+    end
+  end
+
   describe "reading the generated modules rather than the fixture" do
     # Read off the generated modules, not off the fixture's own map: comparing
     # two entries of `lines/0` compares two literals and would pass however the
@@ -150,6 +205,20 @@ defmodule TypedGql.DocumentLocationTest do
   defp assert_located(module) do
     assert docs_line(module) == Map.fetch!(Fixture.lines(), module)
     assert source_file(module) == "document_location_fixture.ex"
+  end
+
+  # Slices the fixture at the position the plugin was handed and asserts the
+  # text found there, so a column that drifts has nowhere to hide.
+  defp assert_reads(module, expected) do
+    lines = String.split(File.read!("test/support/document_location_fixture.ex"), "\n")
+    located = Map.fetch!(Fixture.captured_locations(), module)
+
+    for {field, text} <- expected do
+      loc = Map.fetch!(located, field)
+      found = lines |> Enum.at(loc.line - 1) |> String.slice(loc.column - 1, String.length(text))
+
+      assert found == text, "#{field} at #{loc.line}:#{loc.column} reads #{inspect(found)}"
+    end
   end
 
   defp source_file(module) do
