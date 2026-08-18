@@ -1,6 +1,12 @@
 defmodule TypedGql.DocumentLocationTest do
   use ExUnit.Case, async: true
 
+  # Elixir 1.15 does not record the sigil meta the mapping reads, so a document
+  # falls back there and every module keeps the `defgql` line. That fallback is
+  # asserted by TypedGql.CallerEnvTest, which runs on every version; these
+  # expectations are for the mapping firing.
+  @moduletag skip: not Version.match?(System.version(), ">= 1.16.0")
+
   alias TypedGql.Test.DocumentLocationFixture, as: Fixture
   alias TypedGql.Test.QuotedDocumentMacro
 

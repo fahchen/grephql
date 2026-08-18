@@ -4,6 +4,10 @@ defmodule TypedGql.SourceAnchor do
   # Elixir file that wrote it, so a generated module points at the selection
   # that produced it rather than at the whole `defgql`.
   #
+  # Requires Elixir 1.16 or later: 1.15 does not record the sigil meta the
+  # arithmetic reads, so every document falls back there and each module keeps
+  # the `defgql` line, which is what all of them had before this existed.
+  #
   # A `~GQL` sigil is the only document form whose lines are known to be the
   # file's: the sigil's AST meta says where it opens, and its delimiter says
   # whether the document starts on the next line (`~GQL"""`) or on that very
