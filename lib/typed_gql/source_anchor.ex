@@ -14,15 +14,25 @@ defmodule TypedGql.SourceAnchor do
   # line a dropped one falls back to.
 
   @typedoc """
-  What the document's line 1, column 1 sits at, or nil when the document does
-  not map onto a file. `:file` is set only when that is not the caller's own —
-  a macro that emitted the `defgql` with `quote location: :keep`.
+  Where the document sits in the file, or nil when it does not map onto one.
+
+  `:column` is what document line 1 starts at and `:continuation_column` what
+  every line after it does — the same for a heredoc, which is indented alike
+  throughout, but not for a sigil whose first line starts past `~GQL"`. `:file`
+  is set only when the document was not written in the caller's own file: a
+  macro that emitted the `defgql` with `quote location: :keep`.
   """
   @type base() ::
-          %{line: non_neg_integer(), column: non_neg_integer(), file: binary() | nil} | nil
+          %{
+            line: non_neg_integer(),
+            column: non_neg_integer(),
+            continuation_column: non_neg_integer(),
+            file: binary() | nil
+          }
+          | nil
 
   @typedoc "A location in the source file, once `remap/2` has rewritten it."
-  @type loc() :: %{line: pos_integer(), column: pos_integer()}
+  @type loc() :: %{line: pos_integer(), column: pos_integer(), file: binary() | nil}
 
   @heredoc_delimiter ~s(""")
   @string_delimiter ~s(")
@@ -76,12 +86,28 @@ defmodule TypedGql.SourceAnchor do
   # count from, which a `:keep` origin does not have. Any other delimiter is
   # neither shape, so it is refused rather than guessed at.
   defp document_start(@heredoc_delimiter, origin, binary_meta) do
-    %{line: origin.line, column: binary_meta[:indentation] || 0, file: origin.file}
+    # Elixir records `:indentation` for every heredoc, `0` included when the
+    # content sits at the margin, so the fallback below stands for a heredoc
+    # whose meta a future version stopped writing — and `0` is what an
+    # unindented one would have said anyway.
+    indentation = binary_meta[:indentation] || 0
+
+    %{
+      line: origin.line,
+      column: indentation,
+      continuation_column: indentation,
+      file: origin.file
+    }
   end
 
   defp document_start(@string_delimiter, %{column: column} = origin, _binary_meta)
        when is_integer(column) do
-    %{line: origin.line - 1, column: column + @sigil_offset, file: origin.file}
+    %{
+      line: origin.line - 1,
+      column: column + @sigil_offset,
+      continuation_column: 0,
+      file: origin.file
+    }
   end
 
   defp document_start(_delimiter, _origin, _binary_meta), do: nil
@@ -115,7 +141,13 @@ defmodule TypedGql.SourceAnchor do
   # Only a node that carries a line is rewritten: `TypedGql.Language.Argument`
   # defaults its `loc` to a tuple, and every other node defaults the line to nil.
   defp remap_loc(%{loc: %{line: line} = loc} = node, base) when is_integer(line) do
-    %{node | loc: %{loc | line: file_line(line, base), column: file_column(loc, base)}}
+    remapped =
+      loc
+      |> Map.put(:line, file_line(line, base))
+      |> Map.put(:column, file_column(loc, base))
+      |> Map.put(:file, base && base.file)
+
+    %{node | loc: remapped}
   end
 
   defp remap_loc(node, _base), do: node
@@ -124,16 +156,23 @@ defmodule TypedGql.SourceAnchor do
   defp file_line(line, %{line: base_line}), do: base_line + line
 
   defp file_column(_loc, nil), do: nil
-  defp file_column(%{column: column}, %{column: base}) when is_integer(column), do: base + column
+
+  # Document line 1 is the only one a sigil's own prefix stands in front of.
+  defp file_column(%{line: 1, column: column}, %{column: base}) when is_integer(column),
+    do: base + column
+
+  defp file_column(%{column: column}, %{continuation_column: base}) when is_integer(column),
+    do: base + column
+
   defp file_column(_loc, _base), do: nil
 
   @doc """
   The file location a node was remapped to, or nil when it has none.
   """
   @spec loc(struct()) :: loc() | nil
-  def loc(%{loc: %{line: line, column: column}})
-      when is_integer(line) and line > 0 and is_integer(column),
-      do: %{line: line, column: column}
+  def loc(%{loc: %{line: line, column: column} = loc})
+      when is_integer(line) and is_integer(column),
+      do: %{line: line, column: column, file: Map.get(loc, :file)}
 
   def loc(_node), do: nil
 
@@ -142,26 +181,17 @@ defmodule TypedGql.SourceAnchor do
 
   Keeps the caller's `Macro.Env` — its aliases and tracers are what make the
   generated module compile the way the caller's own code would — and moves the
-  line onto the node's. `Module.create/3` records no column, so the column a
-  `loc` carries is for whoever reads the node itself, a generation plugin above
-  all. A node with no location keeps the caller's line, which is the
+  line, and the file when the node names one. A spread mixes two documents into
+  one tree and they may come from two files, so the file belongs to the node
+  rather than to the compilation. `Module.create/3` records no column, so the
+  column a `loc` carries is for whoever reads the node itself, a generation
+  plugin above all. A node with no location keeps the caller's own, which is the
   `defgql`/`deffragment` itself.
   """
   @spec create_opts(Macro.Env.t(), loc() | nil) :: Macro.Env.t()
+  def create_opts(%Macro.Env{} = caller_env, %{line: line, file: file}) when is_binary(file),
+    do: %{caller_env | line: line, file: file}
+
   def create_opts(%Macro.Env{} = caller_env, %{line: line}), do: %{caller_env | line: line}
   def create_opts(%Macro.Env{} = caller_env, nil), do: caller_env
-
-  @doc """
-  The caller env the whole document's modules are created from.
-
-  A document a macro emitted with `quote location: :keep` was written in that
-  macro's file, not in the one calling it, and its node lines count from there —
-  so the env every module is built on has to name that file, once, rather than
-  each `loc` carrying it.
-  """
-  @spec document_env(Macro.Env.t(), base()) :: Macro.Env.t()
-  def document_env(%Macro.Env{} = caller_env, %{file: file}) when is_binary(file),
-    do: %{caller_env | file: file}
-
-  def document_env(%Macro.Env{} = caller_env, _base), do: caller_env
 end

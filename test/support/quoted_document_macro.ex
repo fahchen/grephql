@@ -41,6 +41,32 @@ defmodule TypedGql.Test.QuotedDocumentMacro do
     end
   end
 
+  # A fragment written here and spread by a query in another file: the modules
+  # its selections name belong to this file, while the query's own belong to the
+  # caller's. One compilation, two files.
+  @kept_fragment __ENV__.line + 4
+
+  defmacro define_kept_fragment do
+    quote location: :keep do
+      deffragment(~GQL"""
+      fragment KeptBits on User {
+        profile {
+          bio
+        }
+      }
+      """)
+    end
+  end
+
+  @doc "Where in this file the kept fragment's modules should say they come from."
+  @spec kept_fragment_lines(module()) :: %{module() => pos_integer()}
+  def kept_fragment_lines(client) do
+    %{
+      Module.safe_concat([client, Fragments, KeptBits]) => @kept_fragment + 1,
+      Module.safe_concat([client, Fragments, KeptBits, Profile]) => @kept_fragment + 2
+    }
+  end
+
   @doc "Where in this file the kept query's modules should say they come from."
   @spec kept_lines(module()) :: %{module() => pos_integer()}
   def kept_lines(client) do

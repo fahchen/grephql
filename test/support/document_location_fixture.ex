@@ -143,6 +143,19 @@ defmodule TypedGql.Test.DocumentLocationFixture do
 
   TypedGql.Test.QuotedDocumentMacro.define_kept_query(:kept_query)
 
+  TypedGql.Test.QuotedDocumentMacro.define_kept_fragment()
+
+  # Spreads a fragment written in another file. The modules its selections name
+  # belong there; this query's own belong here.
+  @cross_file __ENV__.line + 1
+  defgql(:cross_file, ~GQL"""
+  query CrossFile($id: ID!) {
+    user(id: $id) {
+      ...KeptBits
+    }
+  }
+  """)
+
   @doc """
   The file line each generated module should record.
 
@@ -198,7 +211,9 @@ defmodule TypedGql.Test.DocumentLocationFixture do
       __MODULE__.SharedInput.Result => @shared_input + 1,
       __MODULE__.SharedInput.Result.A => @shared_input + 2,
       __MODULE__.SharedInput.Result.B => @shared_input + 5,
-      __MODULE__.Inputs.CreatePostInput => @shared_input + 1
+      __MODULE__.Inputs.CreatePostInput => @shared_input + 1,
+      __MODULE__.CrossFile.Result => @cross_file + 1,
+      __MODULE__.CrossFile.Result.User => @cross_file + 2
     }
   end
 end

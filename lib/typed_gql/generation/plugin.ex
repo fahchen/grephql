@@ -21,11 +21,17 @@ defmodule TypedGql.Generation.Plugin do
   `TypedGql.TypeGenerator` describes what each step does.
 
   A `TypedGql.Language` node reaching a callback carries the line and column of
-  the *file* it was written in, not its position within the document, so that
-  the module generated from it can record where it came from. A node from a
-  document that does not map onto the file — anything but a `~GQL` sigil written
-  at the call site — carries neither. Validation, whose messages count from the
-  document, has already run by then.
+  the *file* it was written in, not its position within the document, and names
+  that file when it is not the one being compiled — a spread pulls in nodes
+  written elsewhere. A node carries none of that when its document does not map
+  onto a file: anything but a `~GQL` sigil the compiler read where it stands, or
+  one a `quote location: :keep` carried here with its origin intact.
+
+  Normalization also builds nodes of its own — the inline fragment it
+  synthesizes for a spread onto a union member has no position, since nobody
+  wrote it — so a callback sees locationless nodes inside a document that maps
+  perfectly well. Validation, whose messages count from the document, has
+  already run by then.
   """
 
   alias TypedGql.Generation.Context

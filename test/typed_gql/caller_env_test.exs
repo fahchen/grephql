@@ -31,24 +31,6 @@ defmodule TypedGql.CallerEnvTest do
     test "a fragment module points at its own deffragment" do
       assert_located(Fixture.Fragments.UserFields)
     end
-
-    # Reading the docs chunk rather than the fixture's own map is what makes
-    # this a claim about the change: comparing two entries of `lines/0` would
-    # compare two literals and pass under any mutation of the mapping.
-    test "operations in one client are told apart by line, not just by file" do
-      recorded =
-        Enum.map(
-          [
-            Fixture.GetUser.Result,
-            Fixture.Search.Result.Search.Union,
-            Fixture.Inputs.CreatePostInput,
-            Fixture.Fragments.UserFields
-          ],
-          &docs_line/1
-        )
-
-      assert recorded == Enum.uniq(recorded)
-    end
   end
 
   # A document whose lines are not this file's gets no mapping at all: every

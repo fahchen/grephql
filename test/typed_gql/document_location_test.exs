@@ -103,6 +103,27 @@ defmodule TypedGql.DocumentLocationTest do
                  "quoted_document_macro.ex"
       end
     end
+
+    # The fragment is written in the macro's file and spread by a query in this
+    # one. Its own modules belong there, and so does the module the spread
+    # produces under the query's namespace — a file per node, not per document.
+    test "a spread of a fragment from another file lands in that file" do
+      for {module, line} <- QuotedDocumentMacro.kept_fragment_lines(Fixture) do
+        assert {docs_line(module), source_file(module)} == {line, "quoted_document_macro.ex"}
+      end
+
+      spread_product = Fixture.CrossFile.Result.User.Profile
+
+      assert {docs_line(spread_product), source_file(spread_product)} ==
+               {QuotedDocumentMacro.kept_fragment_lines(Fixture)[
+                  Module.safe_concat([Fixture, Fragments, KeptBits, Profile])
+                ], "quoted_document_macro.ex"}
+    end
+
+    test "the query's own modules stay in the file the query was written in" do
+      assert_located(Fixture.CrossFile.Result)
+      assert_located(Fixture.CrossFile.Result.User)
+    end
   end
 
   describe "reading the generated modules rather than the fixture" do
@@ -121,10 +142,12 @@ defmodule TypedGql.DocumentLocationTest do
   end
 
   defp assert_located(module) do
-    file = List.to_string(module.__info__(:compile)[:source])
-
     assert docs_line(module) == Map.fetch!(Fixture.lines(), module)
-    assert Path.basename(file) == "document_location_fixture.ex"
+    assert source_file(module) == "document_location_fixture.ex"
+  end
+
+  defp source_file(module) do
+    module.__info__(:compile)[:source] |> List.to_string() |> Path.basename()
   end
 
   defp docs_line(module) do

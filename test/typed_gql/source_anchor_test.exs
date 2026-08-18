@@ -14,19 +14,19 @@ defmodule TypedGql.SourceAnchorTest do
     # its columns count from there.
     test "a heredoc's document starts on the line after the sigil" do
       assert SourceAnchor.base([delimiter: ~s("""), line: 22, column: 21], indentation: 2) ==
-               %{line: 22, column: 2, file: nil}
+               %{line: 22, column: 2, continuation_column: 2, file: nil}
     end
 
     test "a heredoc with no indentation recorded starts at the margin" do
       assert SourceAnchor.base([delimiter: ~s("""), line: 22, column: 21], []) ==
-               %{line: 22, column: 0, file: nil}
+               %{line: 22, column: 0, continuation_column: 0, file: nil}
     end
 
     # The content of `~GQL"..."` starts five characters past the `~`: the sigil
     # name and the delimiter.
     test "a one-line sigil's document starts on the sigil's own line, past the sigil" do
       assert SourceAnchor.base([delimiter: ~s("), line: 28, column: 21], []) ==
-               %{line: 27, column: 25, file: nil}
+               %{line: 27, column: 25, continuation_column: 0, file: nil}
     end
 
     test "any other delimiter is not mappable" do
@@ -38,6 +38,23 @@ defmodule TypedGql.SourceAnchorTest do
       assert SourceAnchor.base([column: 21], []) == nil
       assert SourceAnchor.base([delimiter: ~s("""), column: 21], []) == nil
       assert SourceAnchor.base([delimiter: ~s("""), line: nil, column: 21], []) == nil
+    end
+
+    # A `~GQL"..."` sigil may span lines — a string literal is not required to
+    # be one line — and only its first line starts past the sigil. The rest
+    # begin at the margin, so one base column cannot serve both.
+    test "a one-line sigil's later lines start at the margin, not past the sigil" do
+      base = SourceAnchor.base([delimiter: ~s("), line: 9, column: 14], [])
+
+      assert base.column == 18
+      assert base.continuation_column == 0
+    end
+
+    test "a heredoc indents every line alike" do
+      base = SourceAnchor.base([delimiter: ~s("""), line: 22, column: 21], indentation: 2)
+
+      assert base.column == 2
+      assert base.continuation_column == 2
     end
 
     # `quote` rewrites the line of everything it carries to the line of the
@@ -56,13 +73,14 @@ defmodule TypedGql.SourceAnchorTest do
       assert SourceAnchor.base(
                [line: 30, keep: {"lib/other.ex", 17}, delimiter: ~s(""")],
                indentation: 6
-             ) == %{line: 17, column: 6, file: "lib/other.ex"}
+             ) == %{line: 17, column: 6, continuation_column: 6, file: "lib/other.ex"}
     end
   end
 
   describe "remap/2" do
     test "rewrites every line under the node to a file line" do
-      remapped = SourceAnchor.remap(operation(), %{line: 10, column: 2})
+      remapped =
+        SourceAnchor.remap(operation(), %{line: 10, column: 2, continuation_column: 2, file: nil})
 
       assert remapped.loc.line == 11
       assert hd(remapped.variable_definitions).loc.line == 11
@@ -72,10 +90,22 @@ defmodule TypedGql.SourceAnchorTest do
     # A column left counting from the document would name a position in neither
     # coordinate system once the line beside it counts from the file.
     test "rewrites the columns with the lines" do
-      remapped = SourceAnchor.remap(operation(), %{line: 10, column: 2})
+      remapped =
+        SourceAnchor.remap(operation(), %{line: 10, column: 2, continuation_column: 2, file: nil})
 
       assert remapped.loc.column == 3
       assert hd(remapped.selection_set.selections).loc.column == 5
+    end
+
+    # Only document line 1 sits past a one-line sigil's prefix.
+    test "offsets only the first line of a document that starts mid-line" do
+      base = %{line: 8, column: 18, continuation_column: 0, file: nil}
+      remapped = SourceAnchor.remap(operation(), base)
+
+      assert {remapped.loc.line, remapped.loc.column} == {9, 19}
+
+      assert {hd(remapped.selection_set.selections).loc.line,
+              hd(remapped.selection_set.selections).loc.column} == {10, 3}
     end
 
     test "drops the positions of a document that does not map onto the file" do
@@ -90,34 +120,54 @@ defmodule TypedGql.SourceAnchorTest do
     # The line still maps; the column stays absent rather than being invented.
     test "maps the line of a node that carries no column" do
       remapped =
-        SourceAnchor.remap(%Field{name: "id", loc: %{line: 3, column: nil}}, %{
-          line: 10,
-          column: 2
-        })
+        SourceAnchor.remap(
+          %Field{name: "id", loc: %{line: 3, column: nil}},
+          %{line: 10, column: 2, continuation_column: 2, file: nil}
+        )
 
-      assert remapped.loc == %{line: 13, column: nil}
+      assert remapped.loc == %{line: 13, column: nil, file: nil}
     end
 
     test "leaves a node that carries no line alone" do
-      assert SourceAnchor.remap(%Field{name: "id"}, %{line: 10, column: 2}).loc == %{line: nil}
+      assert SourceAnchor.remap(%Field{name: "id"}, %{
+               line: 10,
+               column: 2,
+               continuation_column: 2,
+               file: nil
+             }).loc == %{line: nil}
     end
   end
 
-  # The file is a property of the document, not of any one node, so it is set
-  # once on the env every module is built from rather than carried in each loc.
-  describe "document_env/2" do
-    test "a document written in another file names that file" do
-      env = __ENV__
-      base = %{line: 17, column: 6, file: "lib/other.ex"}
+  # A spread mixes two documents into one tree, and they may come from two
+  # files, so the file travels with each node rather than being set once for
+  # the whole document.
+  describe "the file a node came from" do
+    test "remap stamps the base's file onto every node under it" do
+      base = %{line: 17, column: 6, continuation_column: 6, file: "lib/other.ex"}
+      remapped = SourceAnchor.remap(operation(), base)
 
-      assert SourceAnchor.document_env(env, base).file == "lib/other.ex"
+      assert SourceAnchor.loc(remapped).file == "lib/other.ex"
+      assert SourceAnchor.loc(hd(remapped.selection_set.selections)).file == "lib/other.ex"
     end
 
-    test "a document written here keeps the caller's own file" do
+    test "a document written in the caller's own file stamps no file" do
+      base = %{line: 17, column: 2, continuation_column: 2, file: nil}
+
+      assert SourceAnchor.loc(SourceAnchor.remap(operation(), base)).file == nil
+    end
+
+    test "create_opts moves the caller onto the file the node came from" do
+      env = __ENV__
+      loc = %{line: 7, column: 3, file: "lib/other.ex"}
+
+      assert SourceAnchor.create_opts(env, loc).file == "lib/other.ex"
+      assert SourceAnchor.create_opts(env, loc).line == 7
+    end
+
+    test "create_opts keeps the caller's own file when the node names none" do
       env = __ENV__
 
-      assert SourceAnchor.document_env(env, %{line: 17, column: 2, file: nil}) == env
-      assert SourceAnchor.document_env(env, nil) == env
+      assert SourceAnchor.create_opts(env, %{line: 7, column: 3, file: nil}).file == env.file
     end
   end
 
@@ -127,7 +177,7 @@ defmodule TypedGql.SourceAnchorTest do
       node = %Field{name: "id", loc: %{line: 7, column: 3}}
       opts = SourceAnchor.create_opts(env, SourceAnchor.loc(node))
 
-      assert SourceAnchor.loc(node) == %{line: 7, column: 3}
+      assert SourceAnchor.loc(node) == %{line: 7, column: 3, file: nil}
       assert opts.line == 7
       assert opts.file == env.file
       assert opts.module == env.module

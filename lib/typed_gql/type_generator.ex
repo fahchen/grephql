@@ -37,7 +37,14 @@ defmodule TypedGql.TypeGenerator do
   the `Result` module at the operation, a nested module at the field whose
   sub-selection named it, a union dispatcher at that same field, and a variant
   at the inline fragment that selects that member. A module generated from a
-  fragment spread lands in the fragment's own `deffragment`.
+  fragment spread lands in the fragment's own `deffragment`, in that file if it
+  is not this one.
+
+  One exception, from normalization rather than from the mapping: a spread onto
+  a union member is expanded into an inline fragment this module synthesizes,
+  which nobody wrote and which therefore has no position. That variant's module
+  stays with the field, while the modules its selections name do land in the
+  `deffragment` — so the two disagree about where they came from.
 
   Selecting a field twice merges the copies into the first one, so a module
   behind a merged selection maps to that first occurrence. A document that does

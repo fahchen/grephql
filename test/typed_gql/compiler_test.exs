@@ -179,10 +179,21 @@ defmodule TypedGql.CompilerTest do
       assert Enum.sort(Map.keys(entry)) == [:base, :fragment, :result_module, :source]
     end
 
-    # Only a `~GQL` sigil has one, and this fragment string is not one — a later
-    # `defgql` spreading it maps nothing and falls back to its own location.
-    test "the entry records no base for a document that does not map onto the file" do
-      entry = compile_fragment!(TypedGql.Test.CompilerFragBase, "fragment F on User { name }")
+    # The entry is what a later `defgql` spreading this fragment reads to place
+    # the modules it generates, so the base has to survive the round trip.
+    test "the entry records the base it was compiled with" do
+      base = %{line: 12, column: 2, continuation_column: 2, file: nil}
+
+      entry =
+        compile_fragment!(TypedGql.Test.CompilerFragBase, "fragment F on User { name }",
+          document_base: base
+        )
+
+      assert entry.base == base
+    end
+
+    test "the entry records no base for a document that was given none" do
+      entry = compile_fragment!(TypedGql.Test.CompilerFragNoBase, "fragment F on User { name }")
 
       assert entry.base == nil
     end
@@ -235,10 +246,11 @@ defmodule TypedGql.CompilerTest do
     )
   end
 
-  defp compile_fragment!(client_module, fragment_string) do
-    Compiler.compile_fragment!(fragment_string, SchemaHelper.build_schema(),
-      client_module: client_module,
-      caller_env: __ENV__
+  defp compile_fragment!(client_module, fragment_string, opts \\ []) do
+    Compiler.compile_fragment!(
+      fragment_string,
+      SchemaHelper.build_schema(),
+      [client_module: client_module, caller_env: __ENV__] ++ opts
     )
   end
 end

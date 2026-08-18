@@ -88,7 +88,7 @@ defmodule TypedGql.Compiler do
       scalar_types: Keyword.get(opts, :scalar_types, %{}),
       fragments: generation_fragments(opts, document, base),
       generation_plugins: Keyword.get(opts, :generation_plugins, []),
-      caller_env: SourceAnchor.document_env(caller_env, base)
+      caller_env: caller_env
     ]
 
     # Generation reads node locations to place the modules it creates, so it
@@ -158,7 +158,7 @@ defmodule TypedGql.Compiler do
 
   Parses the fragment, validates it, and generates its result modules under
   `ClientModule.Fragments.FragmentName`. Returns a map with `:source`,
-  `:fragment`, and `:result_module` keys — see
+  `:fragment`, `:result_module` and `:base` keys — see
   `TypedGql.TypeGenerator.generate_fragment/4` for which module
   `:result_module` names.
 
@@ -196,7 +196,7 @@ defmodule TypedGql.Compiler do
       # Nothing is appended here either, so a spread's nodes stay in their own
       # `deffragment`'s coordinates and are anchored by name, one entry at a time.
       fragments: anchored_fragments(opts),
-      caller_env: SourceAnchor.document_env(caller_env, base)
+      caller_env: caller_env
     ]
 
     result_module =
