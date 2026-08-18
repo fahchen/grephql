@@ -30,6 +30,27 @@ defmodule TypedGql.TypeGenerator do
 
   Field aliases override both struct field names and module path segments.
 
+  ## Source locations
+
+  A generated module records where in the GraphQL document it came from, so
+  "go to definition" lands on the selection rather than on the `defgql` line:
+  the `Result` module at the operation, a nested module at the field whose
+  sub-selection named it, a union dispatcher at that same field, and a variant
+  at the inline fragment that selects that member. A module generated from a
+  fragment spread lands in the fragment's own `deffragment`, in that file if it
+  is not this one.
+
+  One exception, from normalization rather than from the mapping: a spread onto
+  a union member is expanded into an inline fragment this module synthesizes,
+  which nobody wrote and which therefore has no position. That variant's module
+  stays with the field, while the modules its selections name do land in the
+  `deffragment` — so the two disagree about where they came from.
+
+  Selecting a field twice merges the copies into the first one, so a module
+  behind a merged selection maps to that first occurrence. A document that does
+  not map onto the file — a plain or interpolated string rather than a `~GQL`
+  sigil — keeps the caller's `defgql` line throughout.
+
   ## Lists of objects
 
   Only `[T!]!` becomes `embeds_many`: Ecto loads a null many-embed as `[]` and
@@ -65,6 +86,7 @@ defmodule TypedGql.TypeGenerator do
   alias TypedGql.Language.InlineFragment
   alias TypedGql.Language.ObjectValue
   alias TypedGql.Schema
+  alias TypedGql.SourceAnchor
   alias TypedGql.TypeMapper
   alias TypedGql.Types
   alias TypedGql.Validator.Helpers
@@ -97,6 +119,11 @@ defmodule TypedGql.TypeGenerator do
       appended after the built-in plugins (default: `[]`)
     - `:caller_env` — the macro caller's `Macro.Env`, used to set generated
       modules' source location for editor "go to definition" support
+
+  Each module is located at the selection that produced it, taken from the
+  node's `loc`. A document whose lines are not the caller's own — one built by
+  interpolation, or carried here by a `quote` — has no such location, and its
+  modules fall back to the caller's env.
   """
   @spec generate(TypedGql.Language.OperationDefinition.t(), Schema.t(), [option()]) :: [module()]
   def generate(operation, schema, opts) do
@@ -115,7 +142,10 @@ defmodule TypedGql.TypeGenerator do
       base_module,
       build_context(schema, opts),
       plugins(opts),
-      Keyword.fetch!(opts, :caller_env)
+      Keyword.fetch!(opts, :caller_env),
+      # The `Result` module belongs at the operation itself — for a shorthand
+      # document, at its opening brace — since no selection produced it.
+      SourceAnchor.loc(operation)
     )
     |> unwrap_module_names()
   end
@@ -157,7 +187,8 @@ defmodule TypedGql.TypeGenerator do
         base_module,
         build_context(schema, opts),
         plugins(opts),
-        Keyword.fetch!(opts, :caller_env)
+        Keyword.fetch!(opts, :caller_env),
+        SourceAnchor.loc(fragment)
       )
 
     # base_module is the naming root the pipeline was given, not necessarily a
@@ -182,7 +213,8 @@ defmodule TypedGql.TypeGenerator do
   end
 
   # Runs the full generation pipeline and returns the tree's module result.
-  defp run_pipeline(selections, parent_type_name, parent_module, context, plugins, create_opts) do
+  # `loc` is where the root module belongs; every node below it carries its own.
+  defp run_pipeline(selections, parent_type_name, parent_module, context, plugins, env, loc) do
     canonical =
       selections
       |> run_after(plugins, :before_normalize, context)
@@ -191,7 +223,7 @@ defmodule TypedGql.TypeGenerator do
 
     tree =
       canonical
-      |> resolve(parent_type_name, parent_module, context)
+      |> resolve(parent_type_name, parent_module, context, loc)
       |> run_after(plugins, :after_resolve, context)
 
     # Union dispatchers are their own batch, and go first: an embedded schema
@@ -199,11 +231,11 @@ defmodule TypedGql.TypeGenerator do
     # cannot wait for a module a sibling task in the same batch has not created
     # yet — the parallel compiler only waits for modules it knows are coming.
     tree
-    |> union_asts(create_opts)
+    |> union_asts(env)
     |> GeneratorHelpers.create_modules()
 
     tree
-    |> lower(create_opts)
+    |> lower(env)
     |> run_after(plugins, :after_lower, context)
     |> GeneratorHelpers.create_modules()
 
@@ -443,35 +475,45 @@ defmodule TypedGql.TypeGenerator do
 
   # ── resolve ────────────────────────────────────────────────────────────
 
-  # Builds the generated-schema tree from canonical selections.
-  defp resolve(selections, parent_type_name, parent_module, context) do
+  # Builds the generated-schema tree from canonical selections. `loc` is where
+  # the node being resolved was written: the field whose sub-selections these
+  # are, or the operation/fragment definition at the root.
+  defp resolve(selections, parent_type_name, parent_module, context, loc) do
     if Schema.abstract?(context.schema, parent_type_name) do
       {shared_fields, inline_fragments} =
         Enum.split_with(selections, &match?(%QueryField{}, &1))
 
       case inline_fragments do
         [] ->
-          resolve_abstract_fields(shared_fields, parent_type_name, parent_module, context)
+          resolve_abstract_fields(shared_fields, parent_type_name, parent_module, context, loc)
 
         _fragments ->
-          resolve_union(shared_fields, inline_fragments, parent_type_name, parent_module, context)
+          resolve_union(
+            shared_fields,
+            inline_fragments,
+            parent_type_name,
+            parent_module,
+            context,
+            loc
+          )
       end
     else
-      resolve_object(selections, parent_type_name, parent_module, context)
+      resolve_object(selections, parent_type_name, parent_module, context, loc: loc)
     end
   end
 
   # Only fields common to every possible type were selected, so no per-variant
   # struct is needed — but `__typename` can still be any of the possible types.
-  defp resolve_abstract_fields(fields, parent_type_name, parent_module, context) do
+  defp resolve_abstract_fields(fields, parent_type_name, parent_module, context, loc) do
     {:ok, parent} = Schema.get_type(context.schema, parent_type_name)
 
     resolve_object(fields, parent_type_name, parent_module, context,
-      typename_values: parent.possible_types
+      typename_values: parent.possible_types,
+      loc: loc
     )
   end
 
-  defp resolve_object(fields, parent_type_name, parent_module, context, opts \\ []) do
+  defp resolve_object(fields, parent_type_name, parent_module, context, opts) do
     # On a concrete object type `__typename` can only ever be that type's name;
     # abstract parents override this with their possible types.
     opts = Keyword.put_new(opts, :typename_values, [parent_type_name])
@@ -499,7 +541,8 @@ defmodule TypedGql.TypeGenerator do
       module: parent_module,
       parent_type: parent_type_name,
       fields: gen_fields |> :lists.reverse() |> reject_colliding_names(),
-      children: :lists.reverse(children)
+      children: :lists.reverse(children),
+      loc: Keyword.get(opts, :loc)
     }
   end
 
@@ -699,7 +742,17 @@ defmodule TypedGql.TypeGenerator do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     nested_module = Module.concat(parent_module, GeneratorHelpers.camelize(base.original_name))
 
-    child = resolve(base.query_field.selection_set.selections, type_name, nested_module, context)
+    # The selection whose sub-selections these are is what named the module, so
+    # it is where the module belongs — and, for a union, where its dispatcher
+    # belongs too.
+    child =
+      resolve(
+        base.query_field.selection_set.selections,
+        type_name,
+        nested_module,
+        context,
+        SourceAnchor.loc(base.query_field)
+      )
 
     gen_field =
       case child do
@@ -756,7 +809,14 @@ defmodule TypedGql.TypeGenerator do
   # answers with a concrete typename even when the fragment condition was itself
   # abstract (`... on Node`). Members without a matching fragment still decode,
   # carrying the shared fields alone.
-  defp resolve_union(shared_fields, inline_fragments, parent_type_name, parent_module, context) do
+  defp resolve_union(
+         shared_fields,
+         inline_fragments,
+         parent_type_name,
+         parent_module,
+         context,
+         loc
+       ) do
     {:ok, parent} = Schema.get_type(context.schema, parent_type_name)
     typename_values = parent.possible_types
 
@@ -771,7 +831,8 @@ defmodule TypedGql.TypeGenerator do
 
         variant =
           resolve_object(merged_selections, type_name, variant_module, context,
-            typename_values: typename_values
+            typename_values: typename_values,
+            loc: variant_loc(inline_fragments, type_name) || loc
           )
 
         {Map.put(type_map, type_name, variant_module), [variant | variants_acc]}
@@ -787,8 +848,22 @@ defmodule TypedGql.TypeGenerator do
       module: parent_module,
       union_module: union_module,
       typename_to_module: typename_to_module,
-      children: :lists.reverse(variants)
+      children: :lists.reverse(variants),
+      loc: loc
     }
+  end
+
+  # A variant module belongs at the inline fragment that names that member.
+  # Matching on `applies_to?` instead would let `... on Node` — which applies to
+  # every member implementing it — claim all of them, so the answer would depend
+  # on which condition was written first. A member no fragment names, reached
+  # only through an abstract condition or not selected at all, has no node of
+  # its own and stays with the field whose type is abstract.
+  defp variant_loc(inline_fragments, type_name) do
+    case Enum.find(inline_fragments, &(&1.type_condition.name == type_name)) do
+      nil -> nil
+      %InlineFragment{} = fragment -> SourceAnchor.loc(fragment)
+    end
   end
 
   # Every variant gets a module named after its camelized typename, and the
@@ -882,32 +957,37 @@ defmodule TypedGql.TypeGenerator do
   # Collects the union/interface dispatcher modules anywhere in the tree.
   # They depend on nothing that is generated — the variant modules reach them
   # as escaped atoms — so one batch holds all of them.
-  defp union_asts(node, create_opts, acc \\ [])
+  defp union_asts(node, env, acc \\ [])
 
-  defp union_asts(%GenSchema{kind: :union} = node, create_opts, acc) do
+  defp union_asts(%GenSchema{kind: :union} = node, env, acc) do
+    create_opts = SourceAnchor.create_opts(env, node.loc)
     ast = {node.union_module, Types.Union.module_ast(node.typename_to_module), create_opts}
-    Enum.reduce(node.children, [ast | acc], &union_asts(&1, create_opts, &2))
+    Enum.reduce(node.children, [ast | acc], &union_asts(&1, env, &2))
   end
 
-  defp union_asts(%GenSchema{kind: :object} = node, create_opts, acc) do
-    Enum.reduce(node.children, acc, &union_asts(&1, create_opts, &2))
+  defp union_asts(%GenSchema{kind: :object} = node, env, acc) do
+    Enum.reduce(node.children, acc, &union_asts(&1, env, &2))
   end
 
   # ── lower ──────────────────────────────────────────────────────────────
 
   # Lowers the tree into {module, quoted_ast, create_opts} triples, rebuilding
   # each field's tuple/AST from its Generation.Field, so plugin nullability
-  # changes flow through naturally.
-  defp lower(%GenSchema{} = tree, create_opts), do: lower(tree, [], create_opts)
+  # changes flow through naturally. The triples differ in their create opts: a
+  # module records the location of the node it came from, not one shared line.
+  defp lower(%GenSchema{} = tree, env), do: lower(tree, [], env)
 
-  defp lower(%GenSchema{kind: :union} = node, acc, create_opts) do
-    Enum.reduce(node.children, acc, &lower(&1, &2, create_opts))
+  defp lower(%GenSchema{kind: :union} = node, acc, env) do
+    Enum.reduce(node.children, acc, &lower(&1, &2, env))
   end
 
-  defp lower(%GenSchema{kind: :object} = node, acc, create_opts) do
+  defp lower(%GenSchema{kind: :object} = node, acc, env) do
     field_defs = Enum.map(node.fields, &lower_field/1)
-    ast = build_embedded_schema_ast(node.module, field_defs, create_opts)
-    Enum.reduce(node.children, [ast | acc], &lower(&1, &2, create_opts))
+
+    ast =
+      build_embedded_schema_ast(node.module, field_defs, SourceAnchor.create_opts(env, node.loc))
+
+    Enum.reduce(node.children, [ast | acc], &lower(&1, &2, env))
   end
 
   defp lower_field(%GenField{kind: :field} = field) do

@@ -272,19 +272,25 @@ defmodule TypedGql.Macros do
   end
 
   # ~GQL sigil doesn't expand before deffragment receives it — extract the binary
-  defp define_fragment({:sigil_GQL, _meta, [{:<<>>, _bin_meta, [frag_str]}, _modifiers]})
+  # and, with it, where the fragment body starts in this file.
+  defp define_fragment({:sigil_GQL, meta, [{:<<>>, binary_meta, [frag_str]}, _modifiers]})
        when is_binary(frag_str) do
-    define_fragment(frag_str)
+    build_fragment_ast(frag_str, TypedGql.SourceAnchor.base(meta, binary_meta))
   end
 
   defp define_fragment(frag_str_ast) do
-    quote bind_quoted: [frag_str: frag_str_ast] do
+    build_fragment_ast(frag_str_ast, nil)
+  end
+
+  defp build_fragment_ast(frag_str_ast, base) do
+    quote bind_quoted: [frag_str: frag_str_ast, base: Macro.escape(base)] do
       @typed_gql_fragments TypedGql.Compiler.compile_fragment!(
                              frag_str,
                              @typed_gql_schema,
                              client_module: __MODULE__,
                              scalar_types: @typed_gql_scalars,
                              caller_env: __ENV__,
+                             document_base: base,
                              fragments: TypedGql.Macros.__fragment_map__(@typed_gql_fragments)
                            )
     end
@@ -324,31 +330,36 @@ defmodule TypedGql.Macros do
   end
 
   # Handle ~GQL sigil AST — the sigil doesn't expand before defgql receives it,
-  # so we pattern-match the AST node and extract the binary string.
+  # so we pattern-match the AST node and extract the binary string. Its meta is
+  # what puts the document's own lines in this file.
   defp define_query_function(
          kind,
          func_name,
-         {:sigil_GQL, _meta, [{:<<>>, _bin_meta, [query_str]}, _modifiers]}
+         {:sigil_GQL, meta, [{:<<>>, binary_meta, [query_str]}, _modifiers]}
        )
        when is_atom(func_name) and is_binary(query_str) do
-    define_query_function(kind, func_name, query_str)
+    build_query_ast(kind, func_name, query_str, TypedGql.SourceAnchor.base(meta, binary_meta))
   end
 
-  # Handle interpolated strings — bind_quoted evaluates at compile time.
+  # Handle interpolated strings — bind_quoted evaluates at compile time. An
+  # interpolated value may itself contain newlines, so no document line maps
+  # back to a line of this file: the modules keep the caller's own location.
   defp define_query_function(kind, func_name, {:<<>>, _meta, _parts} = query_str_ast)
        when is_atom(func_name) do
-    build_query_ast(kind, func_name, query_str_ast)
+    build_query_ast(kind, func_name, query_str_ast, nil)
   end
 
+  # A plain string is anchorless for the same reason: a lowercase sigil or a
+  # heredoc written without `~GQL` arrives here already interpolated.
   defp define_query_function(kind, func_name, query_str)
        when is_atom(func_name) and is_binary(query_str) do
-    build_query_ast(kind, func_name, query_str)
+    build_query_ast(kind, func_name, query_str, nil)
   end
 
-  defp build_query_ast(kind, func_name, query_str_ast) do
+  defp build_query_ast(kind, func_name, query_str_ast, base) do
     function_ast = build_function_ast(kind, func_name)
 
-    quote bind_quoted: [func_name: func_name, query_str: query_str_ast],
+    quote bind_quoted: [func_name: func_name, query_str: query_str_ast, base: Macro.escape(base)],
           unquote: true do
       {typed_gql_full_query, typed_gql_fragments} =
         TypedGql.Macros.__resolve_fragments__(query_str, @typed_gql_fragments)
@@ -360,6 +371,7 @@ defmodule TypedGql.Macros do
                          function_name: func_name,
                          scalar_types: @typed_gql_scalars,
                          caller_env: __ENV__,
+                         document_base: base,
                          fragments: typed_gql_fragments,
                          generation_plugins: @typed_gql_generation_plugins
                        )

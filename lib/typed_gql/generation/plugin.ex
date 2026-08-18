@@ -19,6 +19,19 @@ defmodule TypedGql.Generation.Plugin do
   ones given in the `:generation_plugins` option, in order, at each juncture.
 
   `TypedGql.TypeGenerator` describes what each step does.
+
+  A `TypedGql.Language` node reaching a callback carries the line and column of
+  the *file* it was written in, not its position within the document, and names
+  that file when it is not the one being compiled — a spread pulls in nodes
+  written elsewhere. A node carries none of that when its document does not map
+  onto a file: anything but a `~GQL` sigil the compiler read where it stands, or
+  one a `quote location: :keep` carried here with its origin intact.
+
+  Normalization also builds nodes of its own — the inline fragment it
+  synthesizes for a spread onto a union member has no position, since nobody
+  wrote it — so a callback sees locationless nodes inside a document that maps
+  perfectly well. Validation, whose messages count from the document, has
+  already run by then.
   """
 
   alias TypedGql.Generation.Context
@@ -62,6 +75,10 @@ defmodule TypedGql.Generation.Plugin do
   Runs on the `{module, quoted_ast, create_opts}` triples produced by lowering,
   where `create_opts` is what `Module.create/3` is handed to record where the
   generated module came from.
+
+  Treat `create_opts` as opaque and per triple: each module records the location
+  of the node it came from, so rebuilding the triples with one captured value
+  would collapse every module onto a single line.
   """
   @callback after_lower([{module(), Macro.t(), module_create_opts()}], Context.t()) ::
               [{module(), Macro.t(), module_create_opts()}]

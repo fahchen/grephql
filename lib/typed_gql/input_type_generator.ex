@@ -9,6 +9,18 @@ defmodule TypedGql.InputTypeGenerator do
   Generated modules include a `build/1` function that validates
   parameters via Ecto changeset and returns `{:ok, struct}` or
   `{:error, changeset}`.
+
+  ## Source locations
+
+  An input type has no location of its own — it comes from the schema, not from
+  the document — so its module records the variable definition that referenced
+  it, and a nested input object records the variable that pulled it in.
+
+  A type two `defgql`s share is generated once, by the first of them, and keeps
+  that one's location: the second skips a module this compilation has already
+  created. Asking whether the module is *loadable* instead would hand the answer
+  to the parallel compiler's schedule, which changed in Elixir 1.19 — the same
+  document would then be located differently on either side of that.
   """
 
   alias TypedGql.GeneratorHelpers
@@ -16,6 +28,7 @@ defmodule TypedGql.InputTypeGenerator do
   alias TypedGql.Language.NamedType
   alias TypedGql.Language.NonNullType
   alias TypedGql.Schema
+  alias TypedGql.SourceAnchor
   alias TypedGql.TypeMapper
   alias TypedGql.Validator.Helpers
 
@@ -44,22 +57,25 @@ defmodule TypedGql.InputTypeGenerator do
   def generate(operation, schema, opts) do
     client_module = Keyword.fetch!(opts, :client_module)
     scalar_types = Keyword.get(opts, :scalar_types, %{})
+    caller_env = Keyword.fetch!(opts, :caller_env)
 
     # Input module names derived from schema at compile time
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     inputs_module = Module.concat(client_module, "Inputs")
-    context = {schema, scalar_types, inputs_module}
 
+    # These modules exist so that the Variables schema can name them: Ecto
+    # validates an embed's module at schema-compile time. This is where they are
+    # created, so this is where they are located — at the variable definition
+    # that named the type, since the type itself comes from the schema.
     {modules, module_asts, _seen} =
       operation.variable_definitions
       |> collect_input_type_names(schema)
-      |> Enum.reduce({[], [], MapSet.new()}, fn type_name, collect_acc ->
+      |> Enum.reduce({[], [], MapSet.new()}, fn {type_name, loc}, collect_acc ->
+        context =
+          {schema, scalar_types, inputs_module, SourceAnchor.create_opts(caller_env, loc)}
+
         collect_input_type(type_name, context, collect_acc)
       end)
-
-    create_opts = Keyword.fetch!(opts, :caller_env)
-
-    module_asts = Enum.map(module_asts, fn {module, ast} -> {module, ast, create_opts} end)
 
     GeneratorHelpers.create_modules(module_asts)
 
@@ -94,6 +110,7 @@ defmodule TypedGql.InputTypeGenerator do
     client_module = Keyword.fetch!(opts, :client_module)
     function_name = Keyword.fetch!(opts, :function_name)
     scalar_types = Keyword.get(opts, :scalar_types, %{})
+    caller_env = Keyword.fetch!(opts, :caller_env)
 
     # Module names derived from schema at compile time
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
@@ -103,13 +120,17 @@ defmodule TypedGql.InputTypeGenerator do
     variables_module =
       Module.concat([client_module, GeneratorHelpers.camelize(function_name), Variables])
 
-    context = {schema, scalar_types, inputs_module}
-
     {field_defs, embed_names, required_names, {_mods, nested_asts, _seen}} =
       Enum.reduce(
         operation.variable_definitions,
         {[], [], [], {[], [], MapSet.new()}},
         fn var_def, {defs, embeds, reqs, collect_acc} ->
+          # An input object this variable pulls in belongs at the variable, so
+          # the context each definition is resolved under carries its location.
+          context =
+            {schema, scalar_types, inputs_module,
+             SourceAnchor.create_opts(caller_env, SourceAnchor.loc(var_def))}
+
           var_name = var_def.variable.name
           type_ref = language_type_to_type_ref(var_def.type, schema)
           resolved = TypeMapper.resolve(type_ref, schema, scalar_types)
@@ -145,22 +166,15 @@ defmodule TypedGql.InputTypeGenerator do
       GeneratorHelpers.prepare_schema_fields(field_defs, embed_names, required_names)
 
     variables_ast =
-      build_input_schema_ast(
-        variables_module,
-        field_defs,
-        cast_fields,
-        embed_names,
-        required_names
-      )
+      build_input_schema_ast(field_defs, cast_fields, embed_names, required_names)
 
-    create_opts = Keyword.fetch!(opts, :caller_env)
+    # The signature is where the variables were declared, so that is where their
+    # struct belongs.
+    variables_opts = SourceAnchor.create_opts(caller_env, SourceAnchor.loc(operation))
 
-    module_asts =
-      Enum.map([variables_ast | nested_asts], fn {module, ast} ->
-        {module, ast, create_opts}
-      end)
-
-    GeneratorHelpers.create_modules(module_asts)
+    GeneratorHelpers.create_modules([
+      {variables_module, variables_ast, variables_opts} | nested_asts
+    ])
 
     variables_module
   end
@@ -223,7 +237,7 @@ defmodule TypedGql.InputTypeGenerator do
          collect_acc
        ) do
     collect_acc = collect_input_type(nested_type_name, context, collect_acc)
-    {_schema, _scalar_types, inputs_module} = context
+    {_schema, _scalar_types, inputs_module, _create_opts} = context
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     nested_module = Module.concat(inputs_module, Macro.camelize(nested_type_name))
     typed_opts = GeneratorHelpers.embed_typed_opts(kind, resolved)
@@ -246,11 +260,14 @@ defmodule TypedGql.InputTypeGenerator do
     end
   end
 
+  # Paired with the variable definition that named the type, since the type
+  # itself comes from the schema and has no location. Two variables of one type
+  # generate one module, located at the first of them.
   defp collect_input_type_names(variable_definitions, schema) do
     variable_definitions
-    |> Enum.map(fn var_def -> unwrap_language_type(var_def.type) end)
-    |> Enum.uniq()
-    |> Enum.filter(fn name ->
+    |> Enum.map(fn var_def -> {unwrap_language_type(var_def.type), SourceAnchor.loc(var_def)} end)
+    |> Enum.uniq_by(fn {name, _loc} -> name end)
+    |> Enum.filter(fn {name, _loc} ->
       case Schema.get_type(schema, name) do
         {:ok, %{kind: :input_object}} -> true
         _other -> false
@@ -264,13 +281,13 @@ defmodule TypedGql.InputTypeGenerator do
 
   defp collect_input_type(
          type_name,
-         {schema, _scalar_types, inputs_module} = context,
+         {schema, _scalar_types, inputs_module, _create_opts} = context,
          {mods, asts, seen}
        ) do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     module = Module.concat(inputs_module, Macro.camelize(type_name))
 
-    if MapSet.member?(seen, module) or Code.ensure_loaded?(module) do
+    if MapSet.member?(seen, module) or GeneratorHelpers.created?(module) do
       {mods, asts, seen}
     else
       seen = MapSet.put(seen, module)
@@ -282,7 +299,7 @@ defmodule TypedGql.InputTypeGenerator do
   defp collect_module(
          module,
          type,
-         {schema, scalar_types, _inputs_module} = context,
+         {schema, scalar_types, _inputs_module, create_opts} = context,
          collect_acc
        ) do
     {field_defs, embed_names, required_names, collect_acc} =
@@ -300,11 +317,10 @@ defmodule TypedGql.InputTypeGenerator do
     {field_defs, cast_fields, embed_names, required_names} =
       GeneratorHelpers.prepare_schema_fields(field_defs, embed_names, required_names)
 
-    module_ast =
-      build_input_schema_ast(module, field_defs, cast_fields, embed_names, required_names)
+    module_ast = build_input_schema_ast(field_defs, cast_fields, embed_names, required_names)
 
     {mods, asts, seen} = collect_acc
-    {[module | mods], [module_ast | asts], seen}
+    {[module | mods], [{module, module_ast, create_opts} | asts], seen}
   end
 
   defp collect_input_field(
@@ -328,7 +344,7 @@ defmodule TypedGql.InputTypeGenerator do
     )
   end
 
-  defp build_input_schema_ast(module_name, field_defs, cast_fields, embed_names, required_names) do
+  defp build_input_schema_ast(field_defs, cast_fields, embed_names, required_names) do
     field_asts = Enum.map(field_defs, &GeneratorHelpers.field_def_to_ast/1)
     params_type_ast = GeneratorHelpers.build_params_type_ast(field_defs, required_names)
     changeset_body = changeset_body_ast(cast_fields, embed_names, required_names)
@@ -363,7 +379,7 @@ defmodule TypedGql.InputTypeGenerator do
         end
       end
 
-    {module_name, ast}
+    ast
   end
 
   defp changeset_body_ast(cast_fields, embed_names, required_names) do
