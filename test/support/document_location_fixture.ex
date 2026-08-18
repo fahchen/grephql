@@ -121,9 +121,9 @@ defmodule TypedGql.Test.DocumentLocationFixture do
   }
   """)
 
-  # Two variables of one input type generate one module. Its location comes
-  # from the first of them — but this whole `defgql` runs after :create_post,
-  # which names the same type, and the later run overwrites the module.
+  # Two variables of one input type generate one module, and :create_post above
+  # already generated it — so this `defgql` reuses that one rather than
+  # rebuilding it at its own variable definition.
   @shared_input __ENV__.line + 1
   defgql(:shared_input, ~GQL"""
   mutation SharedInput($first: CreatePostInput!, $second: CreatePostInput!) {
@@ -185,8 +185,10 @@ defmodule TypedGql.Test.DocumentLocationFixture do
       __MODULE__.AbstractFirst.Result.Search.Post => @abstract_first + 10,
       # The input type is anchored to the variable definition that names it,
       # which the printer keeps on the signature line. `CreatePostInput` is
-      # named by :shared_input below as well, and that one runs last: the module
-      # it creates overwrites this one, location and all.
+      # named by :shared_input below as well, but the first `defgql` to generate
+      # a module keeps it — otherwise the answer would depend on when the
+      # compiler makes a module loadable, which is not the same on every
+      # Elixir.
       __MODULE__.CreatePost.Result => @create_post + 1,
       __MODULE__.CreatePost.Variables => @create_post + 1,
       __MODULE__.CreatePost.Result.CreatePost => @create_post + 2,
@@ -211,7 +213,7 @@ defmodule TypedGql.Test.DocumentLocationFixture do
       __MODULE__.SharedInput.Result => @shared_input + 1,
       __MODULE__.SharedInput.Result.A => @shared_input + 2,
       __MODULE__.SharedInput.Result.B => @shared_input + 5,
-      __MODULE__.Inputs.CreatePostInput => @shared_input + 1,
+      __MODULE__.Inputs.CreatePostInput => @create_post + 1,
       __MODULE__.CrossFile.Result => @cross_file + 1,
       __MODULE__.CrossFile.Result.User => @cross_file + 2
     }
